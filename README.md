@@ -1,6 +1,6 @@
-# portfolio
+# security
 
-Workspace for the portfolio projects. Each sub-directory is an **independent git
+Workspace for the security projects. Each sub-directory is an **independent git
 repository** with its own history and remote; this repo only ties them together
 for convenience:
 

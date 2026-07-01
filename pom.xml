@@ -5,13 +5,13 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.jrobertgardzinski</groupId>
-    <artifactId>portfolio</artifactId>
+    <artifactId>security</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>portfolio</name>
+    <name>security</name>
     <description>
-        Aggregator for the portfolio projects. Each module is an independent git
+        Aggregator for the security projects. Each module is an independent git
         repository; this pom only ties them into a single Maven reactor so the
         whole thing builds in one command and imports as one project in the IDE.
         It is a pure aggregator — it is NOT the parent of the modules, so the
@@ -24,6 +24,8 @@
         here is only a hint, not a guarantee.
     -->
     <modules>
+        <module>adjustable-clock</module>
+        <module>infrastructure-micronaut-clock</module>
         <module>test-starter</module>
         <module>constraint</module>
         <module>config</module>
