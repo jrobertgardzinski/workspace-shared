@@ -8,8 +8,10 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
   (warstwa application) pilnuje, żeby null nie dotarł do domeny. Czytelny kod
   kosztem wrażliwości domeny na null. Spisane jako
   [ADR 0001](docs/adr/0001-no-null-guards-in-value-objects.md) (2026-07-01).
-  - Follow-up (drobny): `IpAddress` (security-domain) ma dziś `requireNonNull` —
-    niezgodne z ADR, do usunięcia przy okazji. Sprawdzić też inne VO.
+  - Follow-up (drobny) — ZROBIONE (2026-07-01): audyt VO w `security-domain`.
+    `IpAddress` już nie miał `requireNonNull`; usunięto guardy `null` z
+    `AbstractToken` (blank check zostaje) i `AbstractTokenExpiration`. Reszta VO
+    czysta. `security-{domain,config,system}` build zielony, 24 testy jedn. OK.
 - **Ujednolicenie testów w Allure** — ZAMKNIĘTE jako przedawnione; format
   dopieszczony na tyle, na ile się dało (password policy jako wzorzec).
 - **Topologia gita (C1)** — OSOBNE REPA PER LIB. Workspace `security` = tylko
