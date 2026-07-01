@@ -11,6 +11,8 @@ target/
 /microservice-security/
 /password/
 /test-starter/
+/adjustable-clock/
+/infrastructure-micronaut-clock/
 
 # Compiled class file
 *.class
