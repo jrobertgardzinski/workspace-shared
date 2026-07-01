@@ -2,7 +2,7 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-98 classes · 9 feature files tagged.
+100 classes · 10 feature files tagged.
 
 ## Domain (48)
 
@@ -50,7 +50,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **SessionTokens** — An active session represented by a pair of tokens. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/SessionTokens.java`
 - **SessionTokensConfig** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/SessionTokensConfig.java`
 - **StoredSession** — The stored essentials of a session, found by its refresh token: who it belongs to, when its refresh token expires, which lineage it belongs to (SessionFamily) and whether it is still active or already rotated. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/StoredSession.java`
-- **User** — A registered participant in the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, logout, refresh-session, register, reset-password, reuse-detection, revoke-all-sessions, verify-email
+- **User** — A registered participant in the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, change-password, logout, refresh-session, register, reset-password, reuse-detection, revoke-all-sessions, verify-email
 - **UserRegistration** — A prospective user's request to join the system, with the password already hashed. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/UserRegistration.java`
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
@@ -82,9 +82,9 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RequiresUppercase** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/RequiresUppercase.java`
 - **SpecialChars** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/SpecialChars.java`
 
-## System (26)
+## System (28)
 
-- **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, reset-password
+- **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, change-password, reset-password
 - **AuthenticationFactory** — Public assembly seam for Authentication. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/AuthenticationFactory.java`
 - **AuthenticationResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/AuthenticationResult.java`
 - **AuthorizationResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authorization/AuthorizationResult.java`
@@ -92,6 +92,8 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **BlockDurationPolicy** — Decides how long a brute-force block lasts, in minutes. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/BlockDurationPolicy.java`
 - **CanRegister** — _(no Javadoc yet)_ `email/email-security/email-security-system/src/main/java/com/jrobertgardzinski/email/policy/CanRegister.java`
 - **CanResetPassword** — _(no Javadoc yet)_ `email/email-security/email-security-system/src/main/java/com/jrobertgardzinski/email/policy/CanResetPassword.java`
+- **ChangePassword** — Changes a signed-in user's password: the current password must match, and the new password must meet the policy. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ChangePassword.java` · _used in_ change-password
+- **ChangePasswordResult** — Outcome of ChangePassword: the password was changed, the current password was wrong, or the new password did not meet the policy. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ChangePasswordResult.java`
 - **CreatePasswordHash** — _(no Javadoc yet)_ `password/password-security/password-security-system/src/main/java/com/jrobertgardzinski/password/policy/CreatePasswordHash.java`
 - **EmailErrorCodes** — The email error codes of a registration attempt — a type deliberately distinct from PasswordErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/EmailErrorCodes.java`
 - **Logout** — Ends a session: the refresh token names the session, and removing it invalidates the whole session at once — its refresh token can no longer be refreshed and its access token (whose hash lived on the same record) no longer authorizes. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/Logout.java` · _used in_ logout
@@ -115,6 +117,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 
 - `microservice-security/specs/authenticate.feature` — `Authentication` `Credentials` `User`
 - `microservice-security/specs/authorize.feature` — `AccessToken` `User`
+- `microservice-security/specs/change-password.feature` — `Authentication` `ChangePassword` `User`
 - `microservice-security/specs/logout.feature` — `AccessToken` `Logout` `RefreshSession` `RefreshToken` `User`
 - `microservice-security/specs/refresh-session.feature` — `RefreshSession` `User`
 - `microservice-security/specs/register.feature` — `Email` `Register` `User`
