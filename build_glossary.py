@@ -130,51 +130,45 @@ def parse_java(path: Path):
     return types
 
 
+def _layer(parts):
+    if any(p.endswith("-system") for p in parts):
+        return "system"
+    if "config" in parts:
+        return "config"
+    return "domain"
+
+
 def collect_terms():
+    """Every public type (class/record/interface/enum) from the domain, config
+    and *-system layers is a glossary term. Noun/verb is a role a word plays in a
+    Gherkin sentence, not a property of a class, so it is NOT recorded here."""
     terms = []
     for java in ROOT.glob("**/src/main/java/**/*.java"):
         if "/target/" in str(java):
             continue
         parts = java.parts
-        is_system = "security-system" in parts
-        is_domain_config = "domain" in parts or "config" in parts
-        if not (is_system or is_domain_config):
+        if not ("domain" in parts or "config" in parts
+                or any(p.endswith("-system") for p in parts)):
             continue
+        layer = _layer(parts)
         for ty in parse_java(java):
-            has_execute = any(m["name"] == "execute" for m in ty["methods"])
-            if is_system:
-                # Use-cases are command classes named as verbs; execute() is plumbing.
-                if has_execute:
-                    terms.append(dict(kind="verb", name=ty["name"], owner=ty["name"],
-                                      java_kind="command", package=ty["package"],
-                                      path=ty["path"], doc=ty["doc"]))
-            elif is_domain_config:
-                terms.append(dict(kind="noun", name=ty["name"], owner=ty["name"],
-                                  java_kind=ty["java_kind"], package=ty["package"],
-                                  path=ty["path"], doc=ty["doc"]))
-                for m in ty["methods"]:
-                    if PREDICATE_RE.match(m["name"]):
-                        terms.append(dict(kind="verb", name=m["name"], owner=ty["name"],
-                                          java_kind="method", package=ty["package"],
-                                          path=ty["path"], doc=m["doc"]))
-    # de-dup by (kind, owner, name), preferring an entry that has a definition
+            terms.append(dict(name=ty["name"], owner=ty["name"], layer=layer,
+                              java_kind=ty["java_kind"], package=ty["package"],
+                              path=ty["path"], doc=ty["doc"]))
+    # de-dup by (name, package), preferring an entry that has a definition
     seen = {}
     for t in terms:
-        key = (t["kind"], t["owner"], t["name"])
+        key = (t["name"], t["package"])
         if key not in seen or (not seen[key]["doc"] and t["doc"]):
             seen[key] = t
-    return sorted(seen.values(), key=lambda t: (t["kind"], t["owner"].lower(), t["name"].lower()))
+    return sorted(seen.values(), key=lambda t: t["name"].lower())
 
 
 def build_index(terms):
-    """Java identifier -> term. Types/commands by simple name; methods also by Owner.method."""
+    """Simple class name -> term (first wins on collision)."""
     by_id = {}
     for t in terms:
-        if t["kind"] == "noun" or t["java_kind"] == "command":
-            by_id.setdefault(t["name"], t)
-        else:  # predicate verb
-            by_id[f"{t['owner']}.{t['name']}"] = t
-            by_id.setdefault(t["name"], t)
+        by_id.setdefault(t["name"], t)
     return by_id
 
 
@@ -319,16 +313,13 @@ def scan_features(terms):
             term = by_id.get(e["identifier"])
             if term is None:
                 errors.append(f"{rel(feat)}: legend '{e['raw']} -> {e['identifier']}' "
-                              f"names no term in the code")
+                              f"names no class in the code")
                 continue
-            if term["kind"] != e["kind"]:
-                errors.append(f"{rel(feat)}: '{e['identifier']}' is a {term['kind']} "
-                              f"but declared under {e['kind'].capitalize()}s")
             if not any(entry_matches(e, tok) for tok in tokens):
                 errors.append(f"{rel(feat)}: legend form '{e['raw']}' never appears "
                               f"in the steps (dead entry?)")
                 continue
-            used[(term["kind"], term["owner"], term["name"])] = term
+            used[(term["name"], term["package"])] = term
             term.setdefault("used_in", set()).add(feat)
         if used:
             usage[feat] = list(used.values())
@@ -340,7 +331,7 @@ def rel(path: Path) -> str:
 
 
 def term_anchor(t):
-    return f"{t['kind']}-{t['owner']}-{t['name']}"
+    return "c-" + re.sub(r"\W+", "-", f"{t['package']}.{t['name']}")
 
 
 def feat_anchor(feat):
@@ -351,27 +342,22 @@ def feat_anchor(feat):
 
 def render_markdown(terms, usage):
     lines = ["# Ubiquitous-Language glossary", "",
-             "_Generated from `domain`/`config`/`security-system` code by "
+             "_Generated from the domain, config and *-system layers by "
              "`build_glossary.py` — do not edit by hand._", "",
-             f"{sum(t['kind']=='noun' for t in terms)} nouns · "
-             f"{sum(t['kind']=='verb' for t in terms)} verbs · "
-             f"{len(usage)} feature files tagged.", ""]
-    for kind, title in (("noun", "Nouns (types)"), ("verb", "Verbs (operations)")):
-        lines += [f"## {title}", ""]
-        for t in (x for x in terms if x["kind"] == kind and x.get("used_in")):
-            head = f"### {t['name']}" + (f" · `{t['owner']}`" if kind == "verb" else "")
-            lines.append(head)
-            lines.append(f"*CAPS:* `{spaced_caps(t['name'])}`  ·  *source:* `{rel(t['path'])}`")
-            lines.append("")
-            lines.append(first_sentence(t["doc"]) or "_(no Javadoc yet)_")
-            lines.append("")
-            lines.append("*Cucumber:* " + ", ".join(
-                f"`{u}`" for u in sorted(rel(p) for p in t["used_in"])))
-            if t.get("allure"):
-                mods = sorted({a["module"] for a in t["allure"]})
-                lines.append(f"*Allure:* {len(t['allure'])} test(s) in {', '.join(mods)}")
-            lines.append("")
-    lines += ["## Features → tags", ""]
+             f"{len(terms)} classes · {len(usage)} feature files tagged.", ""]
+    for layer in ("domain", "config", "system"):
+        group = [t for t in terms if t["layer"] == layer]
+        if not group:
+            continue
+        lines += [f"## {layer.capitalize()} ({len(group)})", ""]
+        for t in group:
+            defn = first_sentence(t["doc"]) or "_(no Javadoc yet)_"
+            used = ""
+            if t.get("used_in"):
+                used = " · _used in_ " + ", ".join(sorted(f.stem for f in t["used_in"]))
+            lines.append(f"- **{t['name']}** — {defn} `{rel(t['path'])}`{used}")
+        lines.append("")
+    lines += ["## Features → terms", ""]
     for feat, ts in sorted(usage.items(), key=lambda kv: str(kv[0])):
         tags = " ".join(f"`{t['name']}`" for t in sorted(ts, key=lambda x: x["name"]))
         lines.append(f"- `{rel(feat)}` — {tags}")
@@ -477,7 +463,7 @@ a{color:#0a58ca;text-decoration:none}a:hover{text-decoration:underline}
 .term{margin:.8rem 0;padding:.6rem .9rem;border:1px solid #e6ebf3;border-left:4px solid #0a58ca;border-radius:5px;background:#fbfcff}
 .term .hd b{font-size:1.08em}
 .kindtag{font-size:.68em;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:#8250df;border-radius:3px;padding:0 .35rem;margin-left:.45rem;vertical-align:middle}
-.kindtag.noun{background:#0a7c4a}
+.kindtag.domain{background:#0a7c4a}.kindtag.config{background:#0a6b7c}.kindtag.system{background:#8250df}
 .caps{color:#0a58ca;font-weight:600;margin-left:.4rem}
 .pkg{color:#999;font-size:.82em}
 .def{margin:.35rem 0}
@@ -547,33 +533,29 @@ def render_glossary_page(terms, usage, reports, feature_pages):
     slug_of = {f: sl for sl, _, f in feature_pages}
     title_of = {f: t for _, t, f in feature_pages}
     body = ["<h1>Ubiquitous-Language glossary</h1>",
-            "<p>Terms come from the code. Each links to the Cucumber features that use "
-            "it and the Allure unit tests that cover it.</p>"]
-    for kind, heading in (("noun", "Nouns — types (domain / config)"),
-                          ("verb", "Verbs — operations (use-cases &amp; predicates)")):
-        body.append(f"<h2>{heading}</h2>")
-        rows = [t for t in terms if t["kind"] == kind and t.get("used_in")]
-        if not rows:
-            body.append("<p class=empty>none in play yet</p>")
-        for t in rows:
-            owner = f" <span class=pkg>({html.escape(t['owner'])})</span>" if kind == "verb" else ""
-            doc = html.escape(first_sentence(t["doc"]) or "") \
-                or "<span class=empty>(no Javadoc yet)</span>"
-            src = f"{SITE_TO_ROOT}/{rel(t['path'])}"
+            f"<p>All {len(terms)} classes from the domain, config and *-system layers, "
+            "alphabetical. A class used in a feature or covered by unit tests links out.</p>"]
+    for t in terms:                                    # already sorted by name
+        badge = f"<span class='kindtag {t['layer']}'>{t['layer']}</span>"
+        doc = html.escape(first_sentence(t["doc"]) or "") \
+            or "<span class=empty>(no Javadoc yet)</span>"
+        src = f"{SITE_TO_ROOT}/{rel(t['path'])}"
+        legs = ""
+        if t.get("used_in"):
             cuke = "".join(
                 f"<a class=tag href='feature-{slug_of[p]}.html'>{html.escape(title_of[p])}</a>"
                 for p in sorted(t["used_in"], key=str) if p in slug_of)
-            body.append(
-                f"<div class=term id={term_anchor(t)}>"
-                f"<div class=hd><b>{html.escape(t['name'])}</b>{owner}"
-                f"<span class='kindtag {kind}'>{kind}</span>"
-                f"<span class=caps>{html.escape(spaced_caps(t['name']))}</span></div>"
-                f"<div class=pkg>{html.escape(t['package'])}</div>"
-                f"<div class=def>{doc}</div>"
-                f"<a class=src href='{src}'>{html.escape(rel(t['path']))}</a>"
-                f"<div class=legs><span class=k>Used in</span> "
-                f"{cuke or '<span class=empty>—</span>'}</div>"
-                f"{allure_leg(t, reports)}</div>")
+            legs += f"<div class=legs><span class=k>Used in</span> {cuke}</div>"
+        if t.get("allure"):
+            legs += allure_leg(t, reports)
+        body.append(
+            f"<div class=term id={term_anchor(t)}>"
+            f"<div class=hd><b>{html.escape(t['name'])}</b>{badge}"
+            f"<span class=caps>{html.escape(spaced_caps(t['name']))}</span></div>"
+            f"<div class=pkg>{html.escape(t['package'])}</div>"
+            f"<div class=def>{doc}</div>"
+            f"<a class=src href='{src}'>{html.escape(rel(t['path']))}</a>"
+            f"{legs}</div>")
     return page("UL glossary", nav_html(feature_pages, "glossary"), "\n".join(body))
 
 
@@ -622,12 +604,12 @@ def main():
     OUT_MD.write_text(render_markdown(terms, usage), encoding="utf-8")
     pages = build_site(terms, usage, reports)
     tagged = [t for t in terms if t.get("used_in")]
-    print(f"terms: {len(terms)} "
-          f"({sum(t['kind']=='noun' for t in terms)} nouns, "
-          f"{sum(t['kind']=='verb' for t in terms)} verbs)")
-    print(f"pages: index + {len(pages)} feature page(s); terms in play: {len(tagged)}; "
+    by_layer = {la: sum(t["layer"] == la for t in terms) for la in ("domain", "config", "system")}
+    print(f"classes: {len(terms)} "
+          f"(domain {by_layer['domain']}, config {by_layer['config']}, system {by_layer['system']})")
+    print(f"pages: index + {len(pages)} feature page(s); classes in play: {len(tagged)}; "
           f"Allure reports: {len(reports)}; "
-          f"terms with Allure: {sum(1 for t in tagged if t.get('allure'))}")
+          f"classes with Allure: {sum(1 for t in tagged if t.get('allure'))}")
     for e in errors:
         print(f"  WARN {e}")
     print(f"wrote {rel(OUT_MD)} and {rel(SITE)}/")
