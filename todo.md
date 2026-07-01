@@ -1,46 +1,33 @@
-# Null safety w warstwie domain (invariants)
+# Workspace TODO
 
-❯ Pytam o JSpecify bo zamyśliłem sobie, że każda pojedyncza klasa w vo musi być odporna na przekazanie null, i chciałbym to mieć na papierze tj. raport allure. Chyba jednak najprościej załatwić to przez Objects.requireNonNull.
+Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
-● Tak, dla tego celu (papier + Allure) Objects.requireNonNull jest praktycznie najlepszy — daje runtime'ową, testowalną ścieżkę, którą można pokryć jednym *NullSafetyRulesTest per VO i wyrenderować jako osobną feature w raporcie.
+## Rozstrzygnięte
 
-Trzy rzeczy do zapamiętania przy wprowadzaniu:
+- **Null safety w domenie** — DECYZJA: domena NIE broni się przed `null`, infra
+  (warstwa application) pilnuje, żeby null nie dotarł do domeny. Czytelny kod
+  kosztem wrażliwości domeny na null. Spisane jako
+  [ADR 0001](docs/adr/0001-no-null-guards-in-value-objects.md) (2026-07-01).
+  - Follow-up (drobny): `IpAddress` (security-domain) ma dziś `requireNonNull` —
+    niezgodne z ADR, do usunięcia przy okazji. Sprawdzić też inne VO.
+- **Ujednolicenie testów w Allure** — ZAMKNIĘTE jako przedawnione; format
+  dopieszczony na tyle, na ile się dało (password policy jako wzorzec).
+- **Topologia gita (C1)** — OSOBNE REPA PER LIB. Workspace `security` = tylko
+  agregator (pom + skrypty, dzieci gitignorowane). Do rozważenia kiedyś: monorepo
+  tylko dla common libs (test-starter, adjustable-clock itp.), nie dla całości.
 
-1. Kolejność w fabryce — requireNonNull najpierw, dopiero potem reszta walidacji. Wtedy null → NPE, "puste"/"źle sformatowane" → IAE. Czyste rozdzielenie i zgodne z konwencją JDK. U ciebie dziś if (value == null || value.isBlank()) rzuca IAE dla obu przypadków — przy okazji to się zmieni, więc trzeba dotknąć      
-   istniejących testów *RulesTest (jeśli sprawdzają typ wyjątku dla nulla).
-2. Konstruktory pakietowe/prywatne też — np. Email(LocalPart local, DomainPart domain) przyjmuje VO i też powinien mieć requireNonNull, jeśli reguła jest "każda klasa odporna". Dziś tylko Email.of(String) jest chronione, a paczkowy ctor leci na ślepo.
-3. Allure — dla regularności poszedłbym w @Feature("Null safety") + @ParameterizedTest(name = "{0} rejects null") z source listującym fabryki VO, jeden taki test na moduł domain. Wtedy w raporcie widać jednym rzutem oka, że pokrycie jest kompletne, zamiast szukać po *RulesTest-ach.                                 
-```
-# ADR-00X: No null guards in Value Objects
+## Aktywne — priorytet
 
-## Context
-System has 3 use cases. Input validation happens
-at application layer boundary. Null cannot reach
-domain if application layer works correctly.
+- **Ujednolicić autora commitów (C2) — WYSOKI PRIORYTET.** Dryf
+  „Robert Gardziński" vs „jrobertgardzinski" w historii. Kanon:
+  `Robert Gardziński <jrobertgardzinski@gmail.com>`. Global config już OK (nowe
+  commity dobre); zostaje REWRITE historii per-repo + `git push --force`.
+  ⚠️ nieodwracalne/wychodzące — potwierdzić przed force-push.
 
-## Decision
-No Objects.requireNonNull() in Value Objects.
-Null prevention is responsibility of application
-layer, not domain layer.
+## Kolejność większych tematów
 
-## Consequences
-+ Less boilerplate in domain
-+ Cleaner VO constructors
-- Domain assumes application layer is correct
-- If boundary validation fails, NPE in domain
-  (acceptable — it's a programming error, not
-  business error)
-
-## Review trigger
-Revisit if use cases grow beyond 10
-or if external systems start pushing data
-directly to domain.
-```                                                        
-# Ujednolicenie testów w allure
-
-Zanim zaczniesz, porównaj wygenerowaną dokumentację do formatu dokumentacji.
-
-Porównaj sobie email z passwordem, wybierz najlepsze formatowanie i jazda dalej. 
-
-password-security-system
-[OK] Password policy
+- **Glosariusz UL (skeleton) PRZED dodawaniem use case'ów.** Decyzja: nie dokładać
+  nowych use case'ów (Verify email, Reset hasła itd.) zanim nie powstanie cienki
+  walking-skeleton glosariusza + konwencja tagów — wtedy use case'y zasilają
+  gotowy pipeline zamiast rosnąć jako materiał do retrofitu.
+  (Backlog use case'ów: microservice-security/todo.md.)
