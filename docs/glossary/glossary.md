@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-86 classes · 7 feature files tagged.
+92 classes · 8 feature files tagged.
 
-## Domain (42)
+## Domain (45)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -22,8 +22,10 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **BruteForceProtectionEvent** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/event/BruteForceProtectionEvent.java`
 - **Credentials** — Proof of identity presented by a user during authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/Credentials.java` · _used in_ authenticate
 - **DomainPart** — The mail server portion of an Email, following the '@' symbol. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/DomainPart.java`
-- **Email** — An email address, composed of a LocalPart and a DomainPart. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/Email.java` · _used in_ register
+- **Email** — An email address, composed of a LocalPart and a DomainPart. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/Email.java` · _used in_ register, verify-email
 - **EmailAlreadyTakenException** — Thrown by UserRepository#save when persistence rejects a user because the (normalized) email is already taken — the storage-level uniqueness guarantee, which closes the check-then-act race that a prior existsBy check alone cannot. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/EmailAlreadyTakenException.java`
+- **EmailVerificationNotifier** — Outbound port that delivers a verification link — carrying the single-use token — to a user's e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/port/EmailVerificationNotifier.java`
+- **EmailVerificationRepository** — Tracks pending e-mail verifications and their outcome. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/EmailVerificationRepository.java`
 - **FailuresCount** — Consecutive failed authentication count for a given IpAddress. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/FailuresCount.java`
 - **HashAlgorithmPort** — _(no Javadoc yet)_ `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/HashAlgorithmPort.java`
 - **HashedPassword** — A password transformed by a hashing algorithm, safe for storage. `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/HashedPassword.java`
@@ -45,9 +47,10 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **SessionTokens** — An active session represented by a pair of tokens. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/SessionTokens.java`
 - **SessionTokensConfig** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/SessionTokensConfig.java`
 - **StoredSession** — The stored essentials of a session, found by its refresh token: who it belongs to, when its refresh token expires, which lineage it belongs to (SessionFamily) and whether it is still active or already rotated. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/StoredSession.java`
-- **User** — A registered participant in the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, logout, refresh-session, register, reuse-detection, revoke-all-sessions
+- **User** — A registered participant in the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, logout, refresh-session, register, reuse-detection, revoke-all-sessions, verify-email
 - **UserRegistration** — A prospective user's request to join the system, with the password already hashed. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/UserRegistration.java`
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
+- **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
 
 ## Config (24)
 
@@ -76,7 +79,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RequiresUppercase** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/RequiresUppercase.java`
 - **SpecialChars** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/SpecialChars.java`
 
-## System (20)
+## System (23)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate
 - **AuthenticationFactory** — Public assembly seam for Authentication. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/AuthenticationFactory.java`
@@ -97,7 +100,10 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RefreshSessionResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RefreshSessionResult.java`
 - **Register** — Registers a new user from an email and a plaintext password: the email must be allowed to register and not already taken, and the password is hashed before the user is stored. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/Register.java` · _used in_ register
 - **RegisterResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/RegisterResult.java`
+- **RequestEmailVerification** — Starts e-mail verification: mints a single-use token, remembers it against the address, and e-mails the verification link. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/RequestEmailVerification.java`
 - **RevokeAllSessions** — Logs a user out everywhere: revokes every session the user holds, across all lineages, so no refresh token can be refreshed and no access token authorizes any longer. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RevokeAllSessions.java` · _used in_ revoke-all-sessions
+- **VerifyEmail** — Completes e-mail verification: a matching, unused token marks the address verified; an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmail.java` · _used in_ verify-email
+- **VerifyEmailResult** — Outcome of VerifyEmail: the address was verified, or the token was rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmailResult.java`
 
 ## Features → terms
 
@@ -108,3 +114,4 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - `microservice-security/specs/register.feature` — `Email` `Register` `User`
 - `microservice-security/specs/reuse-detection.feature` — `RefreshSession` `RefreshToken` `SessionFamily` `User`
 - `microservice-security/specs/revoke-all-sessions.feature` — `AccessToken` `RefreshSession` `RefreshToken` `RevokeAllSessions` `User`
+- `microservice-security/specs/verify-email.feature` — `Email` `User` `VerificationToken` `VerifyEmail`
