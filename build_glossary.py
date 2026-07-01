@@ -480,6 +480,8 @@ a{color:#0a58ca;text-decoration:none}a:hover{text-decoration:underline}
 .egt{border-collapse:collapse;margin:.2rem 0 .6rem 1rem;font-size:.88em}
 .egt td,.egt th{border:1px solid #ddd;padding:1px 8px}.egt th{background:#f1f3f7}
 .empty{color:#aaa}
+.filter{width:100%;box-sizing:border-box;padding:.45rem .6rem;margin:.4rem 0 1rem;
+ border:1px solid #ccd;border-radius:5px;font:inherit}
 """
 
 
@@ -534,7 +536,8 @@ def render_glossary_page(terms, usage, reports, feature_pages):
     title_of = {f: t for _, t, f in feature_pages}
     body = ["<h1>Ubiquitous-Language glossary</h1>",
             f"<p>All {len(terms)} classes from the domain, config and *-system layers, "
-            "alphabetical. A class used in a feature or covered by unit tests links out.</p>"]
+            "alphabetical. A class used in a feature or covered by unit tests links out.</p>",
+            '<input id=q class=filter placeholder="Filter classes…" autocomplete=off>']
     for t in terms:                                    # already sorted by name
         badge = f"<span class='kindtag {t['layer']}'>{t['layer']}</span>"
         doc = html.escape(first_sentence(t["doc"]) or "") \
@@ -556,6 +559,10 @@ def render_glossary_page(terms, usage, reports, feature_pages):
             f"<div class=def>{doc}</div>"
             f"<a class=src href='{src}'>{html.escape(rel(t['path']))}</a>"
             f"{legs}</div>")
+    body.append("<script>const q=document.getElementById('q');"
+                "q.addEventListener('input',()=>{const v=q.value.toLowerCase();"
+                "document.querySelectorAll('.term').forEach(t=>{"
+                "t.style.display=t.textContent.toLowerCase().includes(v)?'':'none';});});</script>")
     return page("UL glossary", nav_html(feature_pages, "glossary"), "\n".join(body))
 
 
