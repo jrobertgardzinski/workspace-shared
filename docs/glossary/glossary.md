@@ -2,7 +2,7 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-109 classes · 13 feature files tagged.
+114 classes · 13 feature files tagged.
 
 ## Domain (51)
 
@@ -121,6 +121,20 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RevokeAllSessions** — Logs a user out everywhere: revokes every session the user holds, across all lineages, so no refresh token can be refreshed and no access token authorizes any longer. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RevokeAllSessions.java` · _used in_ revoke-all-sessions
 - **VerifyEmail** — Completes e-mail verification: a matching, unused token marks the address verified; an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmail.java` · _used in_ verify-email
 - **VerifyEmailResult** — Outcome of VerifyEmail: the address was verified, or the token was rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmailResult.java`
+
+## Boundary (2)
+
+- **ApiKeyFilter** — Boundary guard: only trusted callers presenting the shared secret in the X-Api-Key header may send mail. `microservice-email/src/main/java/com/jrobertgardzinski/mail/boundary/ApiKeyFilter.java`
+- **MailResource** — Boundary (BCE): the REST entry point other services send mail commands to. `microservice-email/src/main/java/com/jrobertgardzinski/mail/boundary/MailResource.java`
+
+## Control (1)
+
+- **MailDispatcher** — Control (BCE): turns entities into actual sends via Quarkus' Mailer. `microservice-email/src/main/java/com/jrobertgardzinski/mail/control/MailDispatcher.java`
+
+## Entity (2)
+
+- **LinkMail** — Entity (BCE): a mail that carries a single action link to a recipient (used by the verification and password-reset templated sends). `microservice-email/src/main/java/com/jrobertgardzinski/mail/entity/LinkMail.java`
+- **Mail** — Entity (BCE): the message to send — recipient, subject and plain-text body. `microservice-email/src/main/java/com/jrobertgardzinski/mail/entity/Mail.java`
 
 ## Features → terms
 

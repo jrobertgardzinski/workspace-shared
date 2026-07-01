@@ -131,10 +131,20 @@ def parse_java(path: Path):
 
 
 def _layer(parts):
+    # hexagonal layers (security & libs) win first, so a DDD domain/entity package is not
+    # mistaken for a BCE entity; BCE layers (email) are matched only when none of those apply.
     if any(p.endswith("-system") for p in parts):
         return "system"
     if "config" in parts:
         return "config"
+    if "domain" in parts:
+        return "domain"
+    if "boundary" in parts:
+        return "boundary"
+    if "control" in parts:
+        return "control"
+    if "entity" in parts:
+        return "entity"
     return "domain"
 
 
@@ -147,7 +157,8 @@ def collect_terms():
         if "/target/" in str(java):
             continue
         parts = java.parts
-        if not ("domain" in parts or "config" in parts
+        if not ("domain" in parts or "config" in parts or "boundary" in parts
+                or "control" in parts or "entity" in parts
                 or any(p.endswith("-system") for p in parts)):
             continue
         layer = _layer(parts)
@@ -345,7 +356,7 @@ def render_markdown(terms, usage):
              "_Generated from the domain, config and *-system layers by "
              "`build_glossary.py` — do not edit by hand._", "",
              f"{len(terms)} classes · {len(usage)} feature files tagged.", ""]
-    for layer in ("domain", "config", "system"):
+    for layer in ("domain", "config", "system", "boundary", "control", "entity"):
         group = [t for t in terms if t["layer"] == layer]
         if not group:
             continue
@@ -464,6 +475,7 @@ a{color:#0a58ca;text-decoration:none}a:hover{text-decoration:underline}
 .term .hd b{font-size:1.08em}
 .kindtag{font-size:.68em;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:#8250df;border-radius:3px;padding:0 .35rem;margin-left:.45rem;vertical-align:middle}
 .kindtag.domain{background:#0a7c4a}.kindtag.config{background:#0a6b7c}.kindtag.system{background:#8250df}
+.kindtag.boundary{background:#b5480a}.kindtag.control{background:#7c6a0a}.kindtag.entity{background:#0a4a7c}
 .caps{color:#0a58ca;font-weight:600;margin-left:.4rem}
 .pkg{color:#999;font-size:.82em}
 .def{margin:.35rem 0}
@@ -611,9 +623,9 @@ def main():
     OUT_MD.write_text(render_markdown(terms, usage), encoding="utf-8")
     pages = build_site(terms, usage, reports)
     tagged = [t for t in terms if t.get("used_in")]
-    by_layer = {la: sum(t["layer"] == la for t in terms) for la in ("domain", "config", "system")}
-    print(f"classes: {len(terms)} "
-          f"(domain {by_layer['domain']}, config {by_layer['config']}, system {by_layer['system']})")
+    layers = ("domain", "config", "system", "boundary", "control", "entity")
+    by_layer = {la: sum(t["layer"] == la for t in terms) for la in layers}
+    print(f"classes: {len(terms)} (" + ", ".join(f"{la} {by_layer[la]}" for la in layers if by_layer[la]) + ")")
     print(f"pages: index + {len(pages)} feature page(s); classes in play: {len(tagged)}; "
           f"Allure reports: {len(reports)}; "
           f"classes with Allure: {sum(1 for t in tagged if t.get('allure'))}")
