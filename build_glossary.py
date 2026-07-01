@@ -31,11 +31,13 @@ Outputs:
 import html
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 OUT_MD = ROOT / "docs" / "glossary" / "glossary.md"
-OUT_HTML = ROOT / "docs" / "glossary" / "site" / "index.html"
+SITE = ROOT / "docs" / "glossary" / "site"
 SITE_TO_ROOT = "../../.."          # docs/glossary/site -> repo root
 STATUS_EMOJI = {"passed": "✅", "failed": "❌", "broken": "⚠️",
                 "skipped": "⏭️", "unknown": "❓"}
@@ -186,10 +188,11 @@ def _label(data, name):
 
 
 def load_allure():
-    tests, seen = [], set()
+    tests, seen, mod_dirs = [], set(), {}
     for rd in ROOT.glob("**/allure-results"):
         module = str(rd.relative_to(ROOT)).replace("/target/allure-results", "") \
                                           .replace("/allure-results", "")
+        mod_dirs.setdefault(module, rd)
         for f in rd.glob("*.json"):
             if not f.name.endswith("-result.json") and "result" not in f.name:
                 continue
@@ -207,7 +210,27 @@ def load_allure():
             seen.add(key)
             tests.append(dict(name=d["name"], cls=cls, simple=simple, module=module,
                               status=d.get("status", "unknown")))
-    return tests
+    return tests, mod_dirs
+
+
+def generate_allure_reports(mod_dirs, needed):
+    """Generate a single-file Allure report per needed module; return module -> site-relative path."""
+    reports = {}
+    if not shutil.which("allure"):
+        return reports
+    for mod in sorted(needed):
+        rd = mod_dirs.get(mod)
+        if not rd or not any(Path(rd).glob("*.json")):
+            continue
+        safe = re.sub(r"[^A-Za-z0-9]+", "-", mod).strip("-")
+        outdir = SITE / "allure" / safe
+        try:
+            subprocess.run(["allure", "generate", str(rd), "--single-file", "--clean",
+                            "-o", str(outdir)], check=True, capture_output=True, timeout=180)
+            reports[mod] = f"allure/{safe}/index.html"
+        except Exception:
+            continue
+    return reports
 
 
 def attach_allure(terms, tests):
@@ -364,27 +387,30 @@ def _worst_emoji(tests):
     return STATUS_EMOJI["unknown"]
 
 
-def link_terms(text, matchers):
-    """Escape a step/description line and hyperlink its CAPS terms to the glossary."""
+def link_terms(text, matchers, base):
+    """Escape a step/description line and hyperlink its CAPS terms to the glossary page."""
     esc = html.escape(text)
+
+    def href(term):
+        return f'{base}#{term_anchor(term)}'
 
     def link_word(w):
         for e, term in matchers:
             if entry_matches(e, w):
-                return f'<a href="#{term_anchor(term)}">{w}</a>'
+                return f'<a href="{href(term)}">{w}</a>'
         return w
 
     def repl(m):
         run = m.group(0)
         for e, term in matchers:                     # whole multi-word form, e.g. SESSION FAMILY
             if entry_matches(e, run):
-                return f'<a href="#{term_anchor(term)}">{run}</a>'
+                return f'<a href="{href(term)}">{run}</a>'
         return " ".join(link_word(w) for w in run.split())  # else link each CAPS word
 
     return CAPS_RUN.sub(repl, esc)
 
 
-def render_feature(feat, by_id):
+def render_feature(feat, by_id, base="index.html"):
     text = feat.read_text(encoding="utf-8", errors="replace")
     matchers = [(e, by_id[e["identifier"]]) for e in parse_legend(text)
                 if e["identifier"] in by_id]
@@ -432,91 +458,179 @@ def render_feature(feat, by_id):
         elif any(s.startswith(k + " ") for k in STEP_KW):
             kw, _, rest = s.partition(" ")
             out.append(f"<div class=step><span class=kw>{html.escape(kw)}</span> "
-                       f"{link_terms(rest, matchers)}</div>")
+                       f"{link_terms(rest, matchers, base)}</div>")
         elif in_desc:
-            out.append(f"<p class=fdesc>{link_terms(s, matchers)}</p>")
+            out.append(f"<p class=fdesc>{link_terms(s, matchers, base)}</p>")
     flush_table()
     out.append("</div>")
     return "\n".join(out)
 
 
 CSS = """
-body{font:15px/1.6 system-ui,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#222}
-h1{border-bottom:2px solid #444}h2{margin-top:2rem;border-bottom:1px solid #ddd}
+body{font:15px/1.6 system-ui,sans-serif;max-width:940px;margin:0 auto 3rem;padding:0 1rem;color:#222}
+.nav{background:#0d1b2a;margin:0 -1rem 1.4rem;padding:.7rem 1rem}
+.nav a{color:#cfe1ff;margin-right:1.1rem;font-weight:600}.nav a.here{color:#fff;text-decoration:underline}
+.nav select{font:inherit;background:#1b2a3d;color:#fff;border:1px solid #33506f;border-radius:4px;padding:.15rem .4rem}
+h1{margin:.2rem 0 .8rem}h2{margin-top:2rem;border-bottom:1px solid #ddd;padding-bottom:.2rem}
 code{background:#f4f4f4;padding:1px 4px;border-radius:3px}
 a{color:#0a58ca;text-decoration:none}a:hover{text-decoration:underline}
-.term{margin:.6rem 0;padding:.5rem .7rem;border-left:3px solid #0a58ca;background:#fbfcff}
-.term b{font-size:1.05em}.caps{color:#0a58ca;font-weight:600;margin-left:.3rem}
-.src{color:#888;font-size:.85em}
-.legs{margin-top:.3rem;font-size:.9em}.legs .k{color:#555;font-weight:600}
-.tag{display:inline-block;background:#eef;border:1px solid #cce;border-radius:12px;
- padding:0 .5rem;margin:1px;font-size:.85em}
-.feature{border:1px solid #e3e3e3;border-radius:6px;padding:.4rem 1rem;margin:1rem 0;background:#fff}
-.feature h3{margin:.3rem 0;color:#333}.feature h4{margin:.8rem 0 .2rem;color:#555}
+.term{margin:.8rem 0;padding:.6rem .9rem;border:1px solid #e6ebf3;border-left:4px solid #0a58ca;border-radius:5px;background:#fbfcff}
+.term .hd b{font-size:1.08em}
+.kindtag{font-size:.68em;text-transform:uppercase;letter-spacing:.05em;color:#fff;background:#8250df;border-radius:3px;padding:0 .35rem;margin-left:.45rem;vertical-align:middle}
+.kindtag.noun{background:#0a7c4a}
+.caps{color:#0a58ca;font-weight:600;margin-left:.4rem}
+.pkg{color:#999;font-size:.82em}
+.def{margin:.35rem 0}
+.legs{margin-top:.3rem;font-size:.9em}.legs .k{color:#555;font-weight:600;display:inline-block;min-width:6em}
+.tag{display:inline-block;background:#eef;border:1px solid #cce;border-radius:12px;padding:0 .55rem;margin:1px;font-size:.85em}
+.src{color:#888;font-size:.82em}
+.ctx{background:#f6f8fb;border:1px solid #e3e9f2;border-radius:6px;padding:.5rem .8rem;margin:1rem 0}
+.ctx .k{color:#555;font-weight:600;display:inline-block;min-width:5em}
+.feature h3{margin:.3rem 0;color:#222}.feature h4{margin:1rem 0 .2rem;color:#555;font-size:1em}
 .fdesc{color:#666;margin:.2rem 0}
-.scen{margin:.6rem 0 .2rem;color:#111}
-.step{margin:.1rem 0 .1rem 1rem}.step .kw{color:#8250df;font-weight:600;display:inline-block;min-width:3.2em}
+.scen{margin:.8rem 0 .2rem;color:#111;font-weight:600}
+.step{margin:.12rem 0 .12rem 1rem}.step .kw{color:#8250df;font-weight:600;display:inline-block;min-width:3.4em}
 .exlabel{margin:.3rem 0 0 1rem;color:#777;font-size:.9em}
 .egt{border-collapse:collapse;margin:.2rem 0 .6rem 1rem;font-size:.88em}
-.egt td,.egt th{border:1px solid #ddd;padding:1px 8px}.egt th{background:#f4f4f7}
+.egt td,.egt th{border:1px solid #ddd;padding:1px 8px}.egt th{background:#f1f3f7}
+.empty{color:#aaa}
 """
 
 
-def render_html(terms, usage):
-    by_id = build_index(terms)
-    out = [f"<!doctype html><meta charset=utf-8><title>UL glossary</title><style>{CSS}</style>",
-           "<h1>Ubiquitous-Language glossary</h1>",
-           "<p>Jump: <b>Cucumber ↔ glossary ↔ Allure</b>. Terms in features "
-           "link to the glossary; each term links back to its features and unit tests.</p>"]
+def slug(feat):
+    return re.sub(r"[^a-z0-9]+", "-", feat.stem.lower()).strip("-")
 
-    for kind, title in (("noun", "Nouns (types)"), ("verb", "Verbs (operations)")):
-        out.append(f"<h2>{title}</h2>")
-        for t in (x for x in terms if x["kind"] == kind and x.get("used_in")):
-            owner = f" · <code>{html.escape(t['owner'])}</code>" if kind == "verb" else ""
-            doc = html.escape(first_sentence(t["doc"]) or "(no Javadoc yet)")
+
+def feature_title(text):
+    for ln in text.splitlines():
+        if ln.strip().startswith("Feature:"):
+            return ln.split(":", 1)[1].strip()
+    return "(feature)"
+
+
+def nav_html(feature_pages, current):
+    gl = "here" if current == "glossary" else ""
+    opts = ['<option value="">Use cases ▾</option>']
+    for sl, title, _ in feature_pages:
+        sel = " selected" if current == sl else ""
+        opts.append(f'<option value="feature-{sl}.html"{sel}>{html.escape(title)}</option>')
+    select = ('<select onchange="if(this.value)location.href=this.value">'
+              + "".join(opts) + "</select>")
+    return f'<div class=nav><a href="index.html" class="{gl}">Glossary</a>{select}</div>'
+
+
+def page(title, nav, body):
+    return (f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title>"
+            f"<style>{CSS}</style>{nav}{body}\n")
+
+
+def allure_leg(term, reports):
+    if not term.get("allure"):
+        return '<div class=legs><span class=k>Tested by</span> <span class=empty>—</span></div>'
+    bymod = {}
+    for a in term["allure"]:
+        bymod.setdefault(a["module"], []).append(a)
+    parts = []
+    for mod, tests in sorted(bymod.items()):
+        byc = {}
+        for a in tests:
+            byc.setdefault(a["simple"] or mod, []).append(a)
+        chips = " ".join(f"<span class=tag>{_worst_emoji(v)} {html.escape(cls)} ({len(v)})</span>"
+                         for cls, v in sorted(byc.items()))
+        rep = reports.get(mod)
+        link = f" <a href='{rep}'>open report ↗</a>" if rep else ""
+        parts.append(f"{chips} <span class=pkg>{html.escape(mod)}</span>{link}")
+    return "<div class=legs><span class=k>Tested by</span> " + " · ".join(parts) + "</div>"
+
+
+def render_glossary_page(terms, usage, reports, feature_pages):
+    slug_of = {f: sl for sl, _, f in feature_pages}
+    title_of = {f: t for _, t, f in feature_pages}
+    body = ["<h1>Ubiquitous-Language glossary</h1>",
+            "<p>Terms come from the code. Each links to the Cucumber features that use "
+            "it and the Allure unit tests that cover it.</p>"]
+    for kind, heading in (("noun", "Nouns — types (domain / config)"),
+                          ("verb", "Verbs — operations (use-cases &amp; predicates)")):
+        body.append(f"<h2>{heading}</h2>")
+        rows = [t for t in terms if t["kind"] == kind and t.get("used_in")]
+        if not rows:
+            body.append("<p class=empty>none in play yet</p>")
+        for t in rows:
+            owner = f" <span class=pkg>({html.escape(t['owner'])})</span>" if kind == "verb" else ""
+            doc = html.escape(first_sentence(t["doc"]) or "") \
+                or "<span class=empty>(no Javadoc yet)</span>"
             src = f"{SITE_TO_ROOT}/{rel(t['path'])}"
             cuke = "".join(
-                f"<a class=tag href='#{feat_anchor(p)}'>{html.escape(rel(p))}</a>"
-                for p in sorted(t["used_in"], key=str))
-            legs = [f"<div class=legs><span class=k>Cucumber:</span> {cuke}</div>"]
-            if t.get("allure"):
-                groups = {}
-                for a in t["allure"]:
-                    groups.setdefault(a["simple"] or a["module"], []).append(a)
-                al = " ".join(
-                    f"<span class=tag>{_worst_emoji(v)} {html.escape(cls)} ({len(v)})</span>"
-                    for cls, v in sorted(groups.items()))
-                legs.append(f"<div class=legs><span class=k>Allure:</span> {al} "
-                            f"<a href='{SITE_TO_ROOT}/allure-summary.md'>(report)</a></div>")
-            out.append(
-                f"<div class=term id={term_anchor(t)}><b>{html.escape(t['name'])}</b>{owner}"
-                f"<span class=caps>{html.escape(spaced_caps(t['name']))}</span><br>{doc}<br>"
+                f"<a class=tag href='feature-{slug_of[p]}.html'>{html.escape(title_of[p])}</a>"
+                for p in sorted(t["used_in"], key=str) if p in slug_of)
+            body.append(
+                f"<div class=term id={term_anchor(t)}>"
+                f"<div class=hd><b>{html.escape(t['name'])}</b>{owner}"
+                f"<span class='kindtag {kind}'>{kind}</span>"
+                f"<span class=caps>{html.escape(spaced_caps(t['name']))}</span></div>"
+                f"<div class=pkg>{html.escape(t['package'])}</div>"
+                f"<div class=def>{doc}</div>"
                 f"<a class=src href='{src}'>{html.escape(rel(t['path']))}</a>"
-                + "".join(legs) + "</div>")
+                f"<div class=legs><span class=k>Used in</span> "
+                f"{cuke or '<span class=empty>—</span>'}</div>"
+                f"{allure_leg(t, reports)}</div>")
+    return page("UL glossary", nav_html(feature_pages, "glossary"), "\n".join(body))
 
-    out.append("<h2>Features (Cucumber)</h2>")
-    for feat in sorted(usage, key=str):
-        out.append(render_feature(feat, by_id))
-    return "\n".join(out) + "\n"
+
+def render_feature_page(feat, terms_used, by_id, reports, feature_pages):
+    title = next(t for _, t, f in feature_pages if f == feat)
+    chips = "".join(
+        f"<a class=tag href='index.html#{term_anchor(t)}'>{html.escape(t['name'])}</a>"
+        for t in sorted(terms_used, key=lambda x: x["name"]))
+    rep_links = []
+    for t in sorted(terms_used, key=lambda x: x["name"]):
+        mods = sorted({a["module"] for a in t.get("allure", []) if reports.get(a["module"])})
+        for mod in mods:
+            rep_links.append(f"<a href='{reports[mod]}'>{html.escape(t['name'])} ↗</a>")
+    ctx = ("<div class=ctx>"
+           f"<div><span class=k>Terms</span> {chips or '—'}</div>"
+           f"<div><span class=k>Source</span> "
+           f"<a class=src href='{SITE_TO_ROOT}/{rel(feat)}'>{html.escape(rel(feat))}</a></div>"
+           + (f"<div><span class=k>Allure</span> {' · '.join(rep_links)}</div>" if rep_links else "")
+           + "</div>")
+    body = f"<h1>{html.escape(title)}</h1>{ctx}{render_feature(feat, by_id, base='index.html')}"
+    return page(f"Feature: {title}", nav_html(feature_pages, slug(feat)), body)
+
+
+def build_site(terms, usage, reports):
+    feature_pages = sorted(
+        ((slug(f), feature_title(f.read_text(encoding="utf-8", errors="replace")), f)
+         for f in usage), key=lambda x: x[0])
+    by_id = build_index(terms)
+    SITE.mkdir(parents=True, exist_ok=True)
+    (SITE / "index.html").write_text(
+        render_glossary_page(terms, usage, reports, feature_pages), encoding="utf-8")
+    for sl, _, feat in feature_pages:
+        (SITE / f"feature-{sl}.html").write_text(
+            render_feature_page(feat, usage[feat], by_id, reports, feature_pages), encoding="utf-8")
+    return feature_pages
 
 
 def main():
     terms = collect_terms()
     usage, errors = scan_features(terms)
-    attach_allure(terms, load_allure())
+    tests, mod_dirs = load_allure()
+    attach_allure(terms, tests)
+    needed = {a["module"] for t in terms if t.get("used_in") for a in t.get("allure", [])}
+    reports = generate_allure_reports(mod_dirs, needed)
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
-    OUT_HTML.parent.mkdir(parents=True, exist_ok=True)
     OUT_MD.write_text(render_markdown(terms, usage), encoding="utf-8")
-    OUT_HTML.write_text(render_html(terms, usage), encoding="utf-8")
-    tagged_terms = [t for t in terms if t.get("used_in")]
+    pages = build_site(terms, usage, reports)
+    tagged = [t for t in terms if t.get("used_in")]
     print(f"terms: {len(terms)} "
           f"({sum(t['kind']=='noun' for t in terms)} nouns, "
           f"{sum(t['kind']=='verb' for t in terms)} verbs)")
-    print(f"features tagged: {len(usage)}  terms in play: {len(tagged_terms)}  "
-          f"with Allure evidence: {sum(1 for t in tagged_terms if t.get('allure'))}")
+    print(f"pages: index + {len(pages)} feature page(s); terms in play: {len(tagged)}; "
+          f"Allure reports: {len(reports)}; "
+          f"terms with Allure: {sum(1 for t in tagged if t.get('allure'))}")
     for e in errors:
         print(f"  WARN {e}")
-    print(f"wrote {rel(OUT_MD)} and {rel(OUT_HTML)}")
+    print(f"wrote {rel(OUT_MD)} and {rel(SITE)}/")
 
 
 if __name__ == "__main__":
