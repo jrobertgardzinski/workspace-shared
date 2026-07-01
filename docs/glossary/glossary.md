@@ -2,7 +2,7 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-85 classes · 6 feature files tagged.
+86 classes · 7 feature files tagged.
 
 ## Domain (42)
 
@@ -11,7 +11,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **AbstractTokenExpiration** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/AbstractTokenExpiration.java`
 - **AbstractTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractTokenValidityInHours.java`
 - **AccessGrant** — What a valid access token grants: whose session it is and when it expires. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/AccessGrant.java`
-- **AccessToken** — Short-lived access token issued after successful authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AccessToken.java` · _used in_ authorize, logout
+- **AccessToken** — Short-lived access token issued after successful authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AccessToken.java` · _used in_ authorize, logout, revoke-all-sessions
 - **AccessTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/AccessTokenValidityInHours.java`
 - **AuthenticationBlock** — A temporary suspension of authentication attempts from a given IpAddress. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/AuthenticationBlock.java`
 - **AuthenticationBlockRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/AuthenticationBlockRepository.java`
@@ -31,7 +31,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **LocalPart** — The recipient-specific portion of an Email, preceding the '@' symbol. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/LocalPart.java`
 - **NormalizedEmail** — An Email with provider-specific normalization applied, used for deduplication. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/NormalizedEmail.java`
 - **PlaintextPassword** — A password as entered by the user, before hashing. `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/PlaintextPassword.java`
-- **RefreshToken** — Long-lived refresh token used to obtain a new access token without re-authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/RefreshToken.java` · _used in_ logout, reuse-detection
+- **RefreshToken** — Long-lived refresh token used to obtain a new access token without re-authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/RefreshToken.java` · _used in_ logout, reuse-detection, revoke-all-sessions
 - **RefreshTokenExpiration** — Expiration of a refresh token. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/RefreshTokenExpiration.java`
 - **RefreshTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/RefreshTokenValidityInHours.java`
 - **RejectedAuthentication** — A recorded instance of a rejected authentication attempt. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/RejectedAuthentication.java`
@@ -45,7 +45,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **SessionTokens** — An active session represented by a pair of tokens. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/SessionTokens.java`
 - **SessionTokensConfig** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/SessionTokensConfig.java`
 - **StoredSession** — The stored essentials of a session, found by its refresh token: who it belongs to, when its refresh token expires, which lineage it belongs to (SessionFamily) and whether it is still active or already rotated. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/StoredSession.java`
-- **User** — A registered participant in the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, logout, refresh-session, register, reuse-detection
+- **User** — A registered participant in the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, logout, refresh-session, register, reuse-detection, revoke-all-sessions
 - **UserRegistration** — A prospective user's request to join the system, with the password already hashed. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/UserRegistration.java`
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 
@@ -76,7 +76,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RequiresUppercase** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/RequiresUppercase.java`
 - **SpecialChars** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/SpecialChars.java`
 
-## System (19)
+## System (20)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate
 - **AuthenticationFactory** — Public assembly seam for Authentication. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/AuthenticationFactory.java`
@@ -93,10 +93,11 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **PasswordErrorCodes** — The password error codes of a registration attempt — a type deliberately distinct from EmailErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/PasswordErrorCodes.java`
 - **PasswordPolicy** — _(no Javadoc yet)_ `password/password-security/password-security-system/src/main/java/com/jrobertgardzinski/password/policy/PasswordPolicy.java`
 - **RandomBlockDurationPolicy** — Production BlockDurationPolicy: a random duration within the configured [minBlockMinutes, maxBlockMinutes] range, so block lengths are not predictable. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/RandomBlockDurationPolicy.java`
-- **RefreshSession** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RefreshSession.java` · _used in_ logout, refresh-session, reuse-detection
+- **RefreshSession** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RefreshSession.java` · _used in_ logout, refresh-session, reuse-detection, revoke-all-sessions
 - **RefreshSessionResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RefreshSessionResult.java`
 - **Register** — Registers a new user from an email and a plaintext password: the email must be allowed to register and not already taken, and the password is hashed before the user is stored. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/Register.java` · _used in_ register
 - **RegisterResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/RegisterResult.java`
+- **RevokeAllSessions** — Logs a user out everywhere: revokes every session the user holds, across all lineages, so no refresh token can be refreshed and no access token authorizes any longer. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RevokeAllSessions.java` · _used in_ revoke-all-sessions
 
 ## Features → terms
 
@@ -106,3 +107,4 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - `microservice-security/specs/refresh-session.feature` — `RefreshSession` `User`
 - `microservice-security/specs/register.feature` — `Email` `Register` `User`
 - `microservice-security/specs/reuse-detection.feature` — `RefreshSession` `RefreshToken` `SessionFamily` `User`
+- `microservice-security/specs/revoke-all-sessions.feature` — `AccessToken` `RefreshSession` `RefreshToken` `RevokeAllSessions` `User`
