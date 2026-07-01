@@ -3,6 +3,9 @@ target/
 .allure/
 .jqwik-database
 
+# Generated UL glossary site (the versioned source is docs/glossary/glossary.md)
+docs/glossary/site/
+
 # Independent sub-repositories — each keeps its own git history.
 # The workspace versions shared scripts/tooling only, not their contents.
 /config/
