@@ -18,13 +18,18 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
   agregator (pom + skrypty, dzieci gitignorowane). Do rozważenia kiedyś: monorepo
   tylko dla common libs (test-starter, adjustable-clock itp.), nie dla całości.
 
-## Aktywne — priorytet
+## Rozstrzygnięte (cd.)
 
-- **Ujednolicić autora commitów (C2) — WYSOKI PRIORYTET.** Dryf
-  „Robert Gardziński" vs „jrobertgardzinski" w historii. Kanon:
-  `Robert Gardziński <jrobertgardzinski@gmail.com>`. Global config już OK (nowe
-  commity dobre); zostaje REWRITE historii per-repo + `git push --force`.
-  ⚠️ nieodwracalne/wychodzące — potwierdzić przed force-push.
+- **Ujednolicić autora commitów (C2)** — ZROBIONE (2026-07-01). Rewrite historii
+  (`git filter-branch`, autor+committer → kanon `Robert Gardziński
+  <jrobertgardzinski@gmail.com>`, w tym web-UI committer `GitHub`) + force-push
+  we wszystkich 6 sub-repo. Zweryfikowane na remote: wszystkie **lokalne**
+  gałęzie kanoniczne i w sync (main + feature/mfa wszędzie; ms-security też
+  development/interactive-documentation/restructure/simplify-modules/smarter-factory).
+  Global `git config user.*` OK. Zapas starych SHA w scratchpadzie sesji.
+  - Follow-up (opcjonalny): gałęzie **tylko-remote** poza rewritem —
+    `password:gemini-refactor`, `microservice-security:overnight/todo-cleanup`
+    oraz omyłkowa gałąź `origin` na kilku remote (kandydat do skasowania).
 
 ## Kolejność większych tematów
 
