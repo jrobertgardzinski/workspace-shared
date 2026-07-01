@@ -9,25 +9,27 @@ _Generated from `domain`/`config`/`security-system` code by `build_glossary.py` 
 ### Email
 *CAPS:* `EMAIL`  ·  *source:* `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/Email.java`
 
-An email address, composed of a {@link LocalPart} and a {@link DomainPart}.
+An email address, composed of a LocalPart and a DomainPart.
 
-*Tagged in:* `microservice-security/specs/register.feature`
+*Cucumber:* `microservice-security/specs/register.feature`
+*Allure:* 4 test(s) in email/email-domain
 
 ### User
 *CAPS:* `USER`  ·  *source:* `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java`
 
 A registered participant in the system.
 
-*Tagged in:* `microservice-security/specs/register.feature`
+*Cucumber:* `microservice-security/specs/register.feature`
 
 ## Verbs (operations)
 
 ### Register · `Register`
 *CAPS:* `REGISTER`  ·  *source:* `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/Register.java`
 
-_(no Javadoc yet)_
+Registers a new user from an email and a plaintext password: the email must be allowed to register and not already taken, and the password is hashed before the user is stored.
 
-*Tagged in:* `microservice-security/specs/register.feature`
+*Cucumber:* `microservice-security/specs/register.feature`
+*Allure:* 3 test(s) in microservice-security/security-system
 
 ## Features → tags
 
