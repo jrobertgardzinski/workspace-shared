@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.jrobertgardzinski</groupId>
+    <artifactId>portfolio</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <name>portfolio</name>
+    <description>
+        Aggregator for the portfolio projects. Each module is an independent git
+        repository; this pom only ties them into a single Maven reactor so the
+        whole thing builds in one command and imports as one project in the IDE.
+        It is a pure aggregator — it is NOT the parent of the modules, so the
+        sub-projects keep their own parents and remain buildable standalone.
+    </description>
+
+    <!--
+        Listed in natural dependency order for readability. Maven's reactor
+        topologically sorts modules by their inter-dependencies, so the order
+        here is only a hint, not a guarantee.
+    -->
+    <modules>
+        <module>test-starter</module>
+        <module>constraint</module>
+        <module>config</module>
+        <module>email</module>
+        <module>password</module>
+        <module>microservice-security</module>
+    </modules>
+
+</project>

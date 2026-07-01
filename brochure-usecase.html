@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>One use case, end to end — Register</title>
+<style>
+  /* ---- A5 print setup ---- */
+  @page { size: 148mm 210mm; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+
+  :root{
+    --ink:#1b1f24;
+    --muted:#5b6470;
+    --faint:#8a93a0;
+    --line:#e4e8ee;
+    --accent:#2f6df0;
+    --accent-soft:#eaf1ff;
+    --green:#1f8a4c;
+    --paper:#ffffff;
+    --code-bg:#fbfcfe;
+    /* token colours — calm, print-friendly */
+    --kw:#9b2f8e;      /* keywords */
+    --type:#1f6feb;    /* types */
+    --str:#1f8a4c;     /* strings */
+    --com:#9aa4b1;     /* comments */
+    --num:#b25f00;     /* numbers / literals */
+  }
+
+  body{
+    font-family: "Inter","Segoe UI",-apple-system,system-ui,"Helvetica Neue",Arial,sans-serif;
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+  }
+
+  .page{
+    position:relative;
+    width:148mm; height:210mm;
+    padding:11mm 11mm 9mm 11mm;
+    background:var(--paper);
+    overflow:hidden;
+    display:flex; flex-direction:column;
+  }
+  .page + .page{ page-break-before: always; }
+
+  /* ---- shared type ---- */
+  .kicker{
+    font-size:7pt; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--accent); font-weight:700;
+  }
+  h1{
+    font-size:19pt; line-height:1.05; margin:2mm 0 1.5mm; font-weight:800;
+    letter-spacing:-.01em;
+  }
+  h2{
+    font-size:10.5pt; margin:0 0 1mm; font-weight:800; letter-spacing:-.01em;
+  }
+  .lead{
+    font-size:8.6pt; line-height:1.45; color:var(--muted); margin:0 0 3mm;
+    max-width:52ch;
+  }
+  .rule{ height:1px; background:var(--line); border:0; margin:0; }
+
+  /* ---- code block ---- */
+  .code{
+    background:var(--code-bg);
+    border:1px solid var(--line);
+    border-radius:3px;
+    padding:3mm 3.5mm;
+    font-family:"JetBrains Mono","SF Mono","Cascadia Code",Consolas,"Liberation Mono",monospace;
+    font-size:6.5pt; line-height:1.55;
+    white-space:pre;
+    overflow:hidden;
+    position:relative;
+  }
+  .code .ln{ color:var(--faint); }
+  .kw{ color:var(--kw); }
+  .ty{ color:var(--type); }
+  .st{ color:var(--str); }
+  .co{ color:var(--com); font-style:italic; }
+  .nu{ color:var(--num); }
+  .mark{ background:var(--accent-soft); border-radius:2px; padding:0 1px; }
+
+  .filetab{
+    display:inline-block;
+    font-family:"JetBrains Mono",monospace;
+    font-size:6.4pt; color:var(--muted);
+    background:#f1f4f9; border:1px solid var(--line); border-bottom:0;
+    border-radius:3px 3px 0 0; padding:1mm 2.5mm; margin-bottom:-1px;
+  }
+
+  /* ---- annotation callouts ---- */
+  .notes{ display:flex; flex-direction:column; gap:2mm; margin-top:3.5mm; }
+  .note{ display:flex; gap:2.5mm; align-items:flex-start; }
+  .badge{
+    flex:0 0 auto;
+    width:5mm; height:5mm; border-radius:50%;
+    background:var(--accent); color:#fff;
+    font-size:7pt; font-weight:800;
+    display:flex; align-items:center; justify-content:center;
+    margin-top:.3mm;
+  }
+  .note .txt{ font-size:8pt; line-height:1.38; }
+  .note .txt b{ color:var(--ink); }
+  .note .txt span{ color:var(--muted); }
+
+  /* ---- generic two-col + cards ---- */
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:3mm; }
+  .card{
+    border:1px solid var(--line); border-radius:3px; padding:2.6mm 3mm;
+  }
+  .card h3{
+    margin:0 0 1mm; font-size:8pt; font-weight:800;
+    display:flex; align-items:center; gap:1.5mm;
+  }
+  .card p{ margin:0; font-size:7.4pt; line-height:1.4; color:var(--muted); }
+  .dot{ width:1.6mm; height:1.6mm; border-radius:50%; background:var(--accent); display:inline-block; }
+
+  .pill{
+    display:inline-block; font-size:6.6pt; font-weight:700; letter-spacing:.04em;
+    color:var(--green); background:#e8f6ee; border-radius:20px;
+    padding:.6mm 2mm; text-transform:uppercase;
+  }
+
+  /* selling bullets */
+  .sell{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1.8mm; }
+  .sell li{ font-size:8pt; line-height:1.38; padding-left:5mm; position:relative; color:var(--muted); }
+  .sell li b{ color:var(--ink); }
+  .sell li::before{
+    content:""; position:absolute; left:0; top:1.4mm;
+    width:2.2mm; height:2.2mm; border:1.4px solid var(--accent); border-radius:50%;
+  }
+
+  /* footer */
+  .foot{
+    margin-top:auto; padding-top:3mm; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:6.8pt; color:var(--faint);
+  }
+  .foot .nav{ color:var(--accent); font-weight:700; }
+
+  .flow{
+    display:flex; align-items:center; gap:1.5mm; flex-wrap:wrap;
+    font-family:"JetBrains Mono",monospace; font-size:7pt; color:var(--muted);
+    margin:0 0 1mm;
+  }
+  .flow .node{ background:#f1f4f9; border:1px solid var(--line); border-radius:3px; padding:.6mm 2mm; color:var(--ink); }
+  .flow .arr{ color:var(--accent); font-weight:700; }
+</style>
+</head>
+<body>
+
+<!-- ========================= PAGE 1 ========================= -->
+<section class="page">
+  <div class="kicker">A walkthrough of one use case</div>
+  <h1>Register, end&nbsp;to&nbsp;end</h1>
+  <p class="lead">
+    The whole use case is one method. No framework noise, no service-of-services —
+    just orchestration you can read aloud. Everything it needs arrives as an interface;
+    everything it returns is a value the caller is forced to handle.
+  </p>
+
+  <span class="filetab">security/system/registration/Register.java</span>
+  <div class="code"><span class="kw">public class</span> <span class="ty">Register</span> {
+    <span class="kw">private final</span> <span class="ty">UserRepository</span> userRepository;       <span class="co">// ← ports, not classes</span>
+    <span class="kw">private final</span> <span class="ty">CanRegister</span> canRegister;             <span class="co">// ← email policy</span>
+    <span class="kw">private final</span> <span class="ty">CreatePasswordHash</span> createPasswordHash; <span class="co">// ← password policy</span>
+
+    <span class="co">// constructor omitted — plain dependency injection</span>
+
+    <span class="kw">public</span> <span class="ty">RegisterResult</span> <span class="mark">execute</span>(<span class="ty">Email</span> email, <span class="ty">PlaintextPassword</span> password) {
+<span class="co">/*1*/</span>  <span class="ty">Decision</span>&lt;<span class="ty">Email</span>&gt; emailDecision = canRegister.evaluate(email);
+        <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; emailErrors = emailDecision.errorCodes();
+
+<span class="co">/*1*/</span>  <span class="ty">Outcome</span>&lt;<span class="ty">HashedPassword</span>&gt; passwordOutcome = createPasswordHash.create(password);
+        <span class="ty">List</span>&lt;<span class="ty">String</span>&gt; passwordErrors = passwordOutcome.errorCodes();
+
+<span class="co">/*2*/</span>  <span class="kw">return</span> !emailErrors.isEmpty() || !passwordErrors.isEmpty() ?
+            <span class="kw">new</span> <span class="ty">RegisterResult.Invalid</span>(emailErrors, passwordErrors) :
+<span class="co">/*3*/</span>      passwordOutcome.findValue()
+                .map(hash -> {
+                    <span class="ty">User</span> userToSave = <span class="kw">new</span> <span class="ty">User</span>(email, hash);
+<span class="co">/*4*/</span>          <span class="ty">User</span> savedUser = userRepository.save(userToSave);
+                    <span class="kw">return</span> <span class="kw">new</span> <span class="ty">RegisterResult.Valid</span>(savedUser);
+                })
+                .orElseThrow();
+    }
+}</div>
+
+  <div class="notes">
+    <div class="note"><div class="badge">1</div><div class="txt">
+      <b>Validate both, independently.</b> <span>Email and password are checked in full before anything is decided — the user gets every error at once, not one round-trip per mistake.</span>
+    </div></div>
+    <div class="note"><div class="badge">2</div><div class="txt">
+      <b>Errors are values, not exceptions.</b> <span>Failure is a returned <code>Invalid</code>, carrying the exact error codes. Nothing is thrown for the expected unhappy path.</span>
+    </div></div>
+    <div class="note"><div class="badge">3</div><div class="txt">
+      <b>The happy path can't run on bad data.</b> <span>Hashing &amp; persistence live behind the success branch — structurally unreachable when validation failed.</span>
+    </div></div>
+    <div class="note"><div class="badge">4</div><div class="txt">
+      <b>Persistence is the last step, through a port.</b> <span><code>UserRepository</code> is an interface; the use case never knows whether it's JPA, in-memory, or a mock.</span>
+    </div></div>
+  </div>
+
+  <div class="foot">
+    <span class="nav">⤺ &nbsp;Architecture overview</span>
+    <span>Robert Gardziński · microservice-security</span>
+    <span class="nav">The supporting cast &nbsp;→</span>
+  </div>
+</section>
+
+<!-- ========================= PAGE 2 ========================= -->
+<section class="page">
+  <div class="kicker">Why it reads that cleanly</div>
+  <h1>The supporting cast</h1>
+  <p class="lead">
+    The use case stays short because the hard parts are named types that live elsewhere.
+    Each one does a single job and has a single reason to change.
+  </p>
+
+  <div class="grid2" style="margin-bottom:3.5mm;">
+    <div class="card">
+      <h3><span class="dot"></span> Decision&lt;T&gt; / Outcome&lt;T&gt;</h3>
+      <p>Sealed three-state results — <code>Allowed</code>, <code>AllowedWithWarning</code>, <code>Rejected</code>. The compiler forces the caller to handle every branch; no result is ever silently dropped.</p>
+    </div>
+    <div class="card">
+      <h3><span class="dot"></span> Constraints&lt;T&gt;</h3>
+      <p>Replaces the recurring <code>stream().filter().map(code)</code> sprawl with one named operation: <code>decide(candidate)</code>. Rules become a list you compose, not code you rewrite.</p>
+    </div>
+  </div>
+
+  <span class="filetab">email/policy/CanRegister.java — rules composed, not hard-coded</span>
+  <div class="code"><span class="ty">CanRegister</span>.builder()
+    .blockingDomains(blocked)            <span class="co">// reject corporate blocklist</span>
+    .blockingDisposable(disposable)      <span class="co">// reject throw-away inboxes</span>
+    .requiringCompanyEmployee(company)   <span class="co">// only @acme.com may register</span>
+    .warningOnMissingMx(mxRecordPort)    <span class="co">// allow, but flag undeliverable</span>
+    .build();
+<span class="co">// RFC-format check is always on. Each rule is an isolated ErrorConstraint.</span></div>
+
+  <p class="lead" style="margin-top:3mm;">
+    <span class="pill">Same domain, different strictness</span><br>
+    A security microservice composes the strict set above. A newsletter service reuses the
+    <i>identical</i> <code>Email</code> domain with a looser policy — by changing config, never the rules.
+  </p>
+
+  <hr class="rule" style="margin:1mm 0 3mm;">
+
+  <h2>The test is the documentation</h2>
+  <div class="flow">
+    <span class="node">jqwik property</span><span class="arr">→</span>
+    <span class="node">runs every input combo</span><span class="arr">→</span>
+    <span class="node">Allure report</span><span class="arr">→</span>
+    <span class="node">living spec</span>
+  </div>
+  <div class="code" style="margin-top:1.5mm;"><span class="nu">@Property</span>
+<span class="nu">@Label</span>(<span class="st">"Invalid when email, password, or both fail validation"</span>)
+<span class="kw">void</span> invalid_when_any_validation_fails(<span class="nu">@ForAll</span> <span class="kw">boolean</span> emailFails,
+                                     <span class="nu">@ForAll</span> <span class="kw">boolean</span> passwordFails) {
+    <span class="ty">Assume</span>.that(emailFails || passwordFails);
+    <span class="co">// … arrange the two policies to fail/pass …</span>
+    <span class="ty">RegisterResult</span> result = register.execute(email, password);
+
+    <span class="kw">var</span> invalid = assertInstanceOf(<span class="ty">RegisterResult.Invalid</span>.class, result);
+    assertAll(
+        () -> assertEquals(emailErrors, invalid.emailErrors()),
+        () -> assertEquals(passwordErrors, invalid.passwordErrors()),
+        () -> verify(userRepository, <span class="mark">never()</span>).save(any())   <span class="co">// nothing persisted</span>
+    );
+}</div>
+
+  <ul class="sell" style="margin-top:3.5mm;">
+    <li><b>Property-based, not example-based.</b> jqwik enumerates the input space — the email-fails, password-fails and both-fail cases are proven, not hand-picked.</li>
+    <li><b>One assertion proves the safety rule:</b> on any failure, <code>save()</code> is never called.</li>
+    <li><b>The spec can't drift from the code, because it <i>is</i> the code</b> — and Allure publishes it as readable documentation.</li>
+  </ul>
+
+  <div class="foot">
+    <span class="nav">⤺ &nbsp;The use case</span>
+    <span>github.com/jrobertgardzinski · jrobertgardzinski@gmail.com</span>
+    <span class="nav">Architecture &nbsp;→</span>
+  </div>
+</section>
+
+</body>
+</html>
