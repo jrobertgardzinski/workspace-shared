@@ -234,9 +234,26 @@ for i in $(seq 1 45); do
 done
 [ -n "$FOUND" ] || { echo "FAIL: outbox event did not reach the mail service after restart"; exit 1; }
 
+step "formula: the Python race module simulates, the backend streams state over SSE"
+FORMULA=http://localhost:8084
+for i in $(seq 1 30); do curl -sf "$FORMULA/drivers" >/dev/null && break; sleep 2; done
+DRIVERS=$(curl -sf "$FORMULA/drivers" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+if [ "$DRIVERS" -lt 2 ]; then
+    curl -sf -X POST "$FORMULA/drivers" -H 'Content-Type: application/json' \
+        -d '{"name":"SmokeAce","pace":95,"aggression":40,"consistency":92}' >/dev/null
+    curl -sf -X POST "$FORMULA/drivers" -H 'Content-Type: application/json' \
+        -d '{"name":"SmokeRival","pace":90,"aggression":85,"consistency":60}' >/dev/null
+fi
+RACE=$(curl -sf -X POST "$FORMULA/broadcast/races" -H 'Content-Type: application/json' -d '{"laps":5}' \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["raceId"])')
+STREAM=$(curl -sN --max-time 20 "$FORMULA/broadcast/races/$RACE/stream")
+echo "$STREAM" | grep -q "event: frame"  || { echo "FAIL: no frames on the race stream"; exit 1; }
+echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not finish with a result"; exit 1; }
+
 echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
 echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"
-echo "            wizard override honoured: popular meme kept anonymised, chosen comments deleted"
+echo "            wizard override honoured: popular meme kept anonymised, chosen comments deleted,"
+echo "            formula race simulated in Python and streamed as SSE state"

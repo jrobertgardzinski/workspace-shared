@@ -10,6 +10,8 @@
 #   8082  microservice-email     (POST /mails*, X-Api-Key required)
 #   8083  microservice-memes     (gallery UI at /; uploads/votes need signing in)
 #   8085  microservice-comments  (comment threads + comment votes)
+#   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
+#   8090  race-sim               (Python race module — the simulation prototype)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
 services:
   security:
@@ -104,6 +106,22 @@ services:
       interval: 3s
       timeout: 3s
       retries: 15
+
+  formula:
+    build:
+      context: formula-simulator
+    ports:
+      - "8084:8084"
+    environment:
+      RACE_SIM_URL: http://race-sim:8090
+    depends_on:
+      - race-sim
+
+  race-sim:
+    build:
+      context: formula-simulator/sim/race
+    ports:
+      - "8090:8090"
 
   kafka:
     # single-node KRaft — the event backbone (mail requests, the deletion saga, thread cascades)
