@@ -86,14 +86,27 @@ step "browsing is public; comment is signed by the security identity"
 curl -sf "$MEMES/memes/$MEME_ID" | head -c 4 | grep -q PNG \
     || { echo "FAIL: meme was not served back as PNG"; exit 1; }
 curl -sf "$MEMES/memes" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from the public gallery"; exit 1; }
-curl -sf -X POST "$MEMES/memes/$MEME_ID/comments" -H "Authorization: Bearer $ACCESS" \
-    -H 'Content-Type: application/json' -d '{"text":"smoke says hi"}' >/dev/null
+COMMENT_ID=$(curl -sf -X POST "$MEMES/memes/$MEME_ID/comments" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"text":"smoke says hi"}' | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["id"])')
 curl -sf "$MEMES/memes/$MEME_ID/comments" | grep -q "$USER_MAIL" \
     || { echo "FAIL: comment not signed by $USER_MAIL"; exit 1; }
+
+step "one vote per user: voting twice does not stack (memes and comments)"
 curl -sf -X POST "$MEMES/memes/$MEME_ID/votes" -H "Authorization: Bearer $ACCESS" \
     -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null
+SCORE=$(curl -sf -X POST "$MEMES/memes/$MEME_ID/votes" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"direction":"UP"}' | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["score"])')
+[ "$SCORE" = 1 ] || { echo "FAIL: meme score after double up-vote expected 1, got $SCORE"; exit 1; }
+curl -sf -X POST "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null
+CSCORE=$(curl -sf -X POST "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"direction":"UP"}' | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["score"])')
+[ "$CSCORE" = 1 ] || { echo "FAIL: comment score after double up-vote expected 1, got $CSCORE"; exit 1; }
 curl -sf "$MEMES/memes/hot" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from /memes/hot"; exit 1; }
 
 echo
 echo "SMOKE PASS: register -> mail(Mailpit) -> verify -> sign-in -> /me, mail auth,"
-echo "            memes gated by security (401 anon; upload/comment/vote with the token; public reads)"
+echo "            memes gated by security (401 anon; public reads; one vote per user on memes and comments)"
