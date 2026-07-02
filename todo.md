@@ -33,8 +33,8 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
 ## Kolejność większych tematów
 
-- **Glosariusz UL (skeleton) PRZED dodawaniem use case'ów.** Decyzja: nie dokładać
-  nowych use case'ów (Verify email, Reset hasła itd.) zanim nie powstanie cienki
-  walking-skeleton glosariusza + konwencja tagów — wtedy use case'y zasilają
-  gotowy pipeline zamiast rosnąć jako materiał do retrofitu.
-  (Backlog use case'ów: microservice-security/todo.md.)
+- **Glosariusz UL (skeleton) PRZED dodawaniem use case'ów** — SKONSUMOWANE
+  (2026-07-01/02): glosariusz stoi (`build_glossary.py` + `docs/glossary`,
+  skanuje też warstwy BCE i memes), a nowe use case'y (verify-email, reset
+  hasła, change password/email, delete account, list/revoke sessions) weszły
+  już w gotowy pipeline. (Backlog use case'ów: microservice-security/todo.md.)
