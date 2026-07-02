@@ -27,7 +27,9 @@ dependency order is:
 | `adjustable-clock` / `infrastructure-micronaut-clock` | Steerable test clock + its Micronaut adapter |
 | `microservice-security` | Auth microservice, hexagonal on Micronaut (13 use cases: register, authenticate, sessions, verify-email, resets, …) |
 | `microservice-email` | Mail microservice, BCE on Quarkus (`POST /mails*`, Qute templates) |
-| `microservice-memes` | Meme microservice, layered modules on Spring Boot (upload/thumbnails/comments/votes) |
+| `voting` | Voting bounded context as a library (toggle + tally over the Ballots port) |
+| `microservice-memes` | Meme microservice, layered modules on Spring Boot (upload/thumbnails/votes, gallery UI) |
+| `microservice-comments` | Comment threads + comment votes; Spring Boot with its own Postgres |
 | `formula-simulator` | F1 simulator with autonomous drivers, no framework (JDK HTTP server) |
 
 ## Build
@@ -63,7 +65,7 @@ users upload, comment and vote).
 ./infra-down.sh    # stop (add -v to drop the database volume)
 ```
 
-Ports: security 8080, email 8082, memes 8083, Mailpit UI 8025.
+Ports: security 8080, email 8082, memes 8083 (gallery UI), comments 8085, Mailpit UI 8025.
 
 ## Tooling
 

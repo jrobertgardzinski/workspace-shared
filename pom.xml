@@ -26,6 +26,7 @@
     <modules>
         <module>adjustable-clock</module>
         <module>infrastructure-micronaut-clock</module>
+        <module>voting</module>
         <module>test-starter</module>
         <module>constraint</module>
         <module>config</module>
@@ -35,6 +36,7 @@
         <!-- standalone services (own frameworks, no reactor inter-dependencies) -->
         <module>microservice-email</module>
         <module>microservice-memes</module>
+        <module>microservice-comments</module>
         <module>formula-simulator</module>
     </modules>
 

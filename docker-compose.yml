@@ -1,12 +1,15 @@
 # The whole portfolio running together: the auth service (with its Postgres), the mail service
-# (delivering through Mailpit, whose web UI at http://localhost:8025 shows every mail sent), and
-# the meme service. Jars are built on the host first — use ./infra-up.sh, which packages and
-# starts everything, then ./infra-smoke.sh to prove the flows end to end.
+# (delivering through Mailpit, whose web UI at http://localhost:8025 shows every mail sent), the
+# meme service (gallery UI at :8083), the comments service (with a Postgres of its own) and Kafka
+# as the event backbone (mail requests from the outbox, the account-deletion saga, the
+# MEME_DELETED thread cascade). Jars are built on the host first — use ./infra-up.sh, then
+# ./infra-smoke.sh to prove the flows end to end.
 #
 # Ports on the host:
 #   8080  microservice-security  (register/authenticate/verify-email/...)
 #   8082  microservice-email     (POST /mails*, X-Api-Key required)
-#   8083  microservice-memes     (gallery UI at /; upload/comments/votes need signing in)
+#   8083  microservice-memes     (gallery UI at /; uploads/votes need signing in)
+#   8085  microservice-comments  (comment threads + comment votes)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
 services:
   security:
@@ -57,7 +60,7 @@ services:
     environment:
       # writes require a bearer token that security confirms; reads (and the UI at :8083) are public
       SECURITY_URL: http://security:8080
-      # account-deletion saga: consume purge commands, confirm on memes-events
+      # account-deletion saga (memes axis) + MEME_DELETED announcements for the comments service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_ENABLED: "true"
     depends_on:
@@ -66,8 +69,44 @@ services:
       kafka:
         condition: service_started
 
+  comments:
+    build:
+      context: microservice-comments
+    ports:
+      - "8085:8085"
+    environment:
+      DB_URL: jdbc:postgresql://comments-postgres:5432/comments
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      SECURITY_URL: http://security:8080
+      MEMES_URL: http://memes:8083
+      # account-deletion saga (comments axis) + the MEME_DELETED thread cascade
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_ENABLED: "true"
+    depends_on:
+      comments-postgres:
+        condition: service_healthy
+      security:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  comments-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: comments
+    volumes:
+      - comments_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d comments"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
   kafka:
-    # single-node KRaft — the event backbone (mail requests today, sagas next)
+    # single-node KRaft — the event backbone (mail requests, the deletion saga, thread cascades)
     image: apache/kafka:3.9.1
     environment:
       KAFKA_NODE_ID: 1
@@ -103,3 +142,4 @@ services:
 
 volumes:
   security_pgdata:
+  comments_pgdata:
