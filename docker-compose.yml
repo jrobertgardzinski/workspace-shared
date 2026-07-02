@@ -23,8 +23,10 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       EMAIL_SERVICE_URL: http://email:8080
       EMAIL_SERVICE_API_KEY: ${MAIL_API_KEY:-local-dev-key}
-      # links as they appear in the mails; tokens are POSTed back to these endpoints
-      VERIFY_LINK_BASE: http://localhost:8080/verify-email?token=
+      # links as they appear in the mails: the verify link opens the gallery UI, which POSTs the
+      # token to /verify-email (a bare GET on the API would be 405 — and side effects on GET invite
+      # mail-client prefetchers to consume tokens). No reset UI yet, so that link stays raw.
+      VERIFY_LINK_BASE: http://localhost:8083/?verify=
       RESET_LINK_BASE: http://localhost:8080/reset-password?token=
     depends_on:
       postgres:

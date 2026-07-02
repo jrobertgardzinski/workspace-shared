@@ -13,6 +13,10 @@ PASSWORD="StrongPassword1!"
 
 step() { echo "== $*"; }
 
+step "resetting brute-force state (manual clicking may have tripped the source block)"
+docker compose exec -T postgres psql -q -U postgres -d security \
+    -c "DELETE FROM authentication_blocks; DELETE FROM rejected_authentications;" >/dev/null 2>&1 || true
+
 step "waiting for the services"
 for url in "$SEC/health" "$MAIL_UI/api/v1/messages" "$MEMES/memes/hot"; do
     for i in $(seq 1 60); do
@@ -32,7 +36,7 @@ for i in $(seq 1 30); do
         'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
     if [ -n "$MSG_ID" ]; then
         TOKEN=$(curl -sf "$MAIL_UI/api/v1/message/$MSG_ID" | python3 -c \
-            'import json,sys,re; t=json.load(sys.stdin)["Text"]; print(re.search(r"token=([A-Za-z0-9_\-]+)", t).group(1))')
+            'import json,sys,re; t=json.load(sys.stdin)["Text"]; print(re.search(r"(?:token|verify)=([A-Za-z0-9_\-]+)", t).group(1))')
         break
     fi
     sleep 1
