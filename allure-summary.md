@@ -1,32 +1,50 @@
 # Collective Allure Test Report & Documentation
 
-Generated on: 2026-07-02 07:37:33
+Generated on: 2026-07-02 15:53:08
 
 ## 📊 Execution Summary
 
 | Module | Total | Passed | Failed | Broken | Skipped | Duration |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| adjustable-clock | 16 | 16 | 0 | 0 | 0 | 145ms |
-| email/email-domain | 13 | 13 | 0 | 0 | 0 | 152ms |
-| email/email-security/email-security-config | 1 | 1 | 0 | 0 | 0 | 91ms |
-| email/email-security/email-security-system | 28 | 28 | 0 | 0 | 0 | 177ms |
-| infrastructure-micronaut-clock | 12 | 12 | 0 | 0 | 0 | 2.14s |
-| microservice-memes/memes-application | 9 | 9 | 0 | 0 | 0 | 85ms |
-| microservice-memes/memes-config | 2 | 2 | 0 | 0 | 0 | 23ms |
+| adjustable-clock | 8 | 8 | 0 | 0 | 0 | 74ms |
+| email/email-domain | 13 | 13 | 0 | 0 | 0 | 156ms |
+| email/email-security/email-security-config | 1 | 1 | 0 | 0 | 0 | 96ms |
+| email/email-security/email-security-system | 28 | 28 | 0 | 0 | 0 | 179ms |
+| formula-simulator | 12 | 12 | 0 | 0 | 0 | 287ms |
+| infrastructure-micronaut-clock | 6 | 6 | 0 | 0 | 0 | 995ms |
+| microservice-email | 20 | 20 | 0 | 0 | 0 | 1.10s |
+| microservice-memes/memes-application | 9 | 9 | 0 | 0 | 0 | 84ms |
+| microservice-memes/memes-config | 2 | 2 | 0 | 0 | 0 | 20ms |
 | microservice-memes/memes-image | 2 | 2 | 0 | 0 | 0 | 198ms |
-| microservice-memes/memes-infrastructure | 5 | 5 | 0 | 0 | 0 | 1.48s |
-| microservice-security/security-config | 13 | 13 | 0 | 0 | 0 | 166ms |
-| microservice-security/security-system | 39 | 39 | 0 | 0 | 0 | 1.06s |
-| password/hash-algorithms/argon2 | 2 | 2 | 0 | 0 | 0 | 637ms |
-| password/hash-algorithms/argon2-config | 7 | 7 | 0 | 0 | 0 | 140ms |
+| microservice-memes/memes-infrastructure | 5 | 5 | 0 | 0 | 0 | 1.44s |
+| microservice-security/security-config | 13 | 13 | 0 | 0 | 0 | 152ms |
+| microservice-security/security-system | 40 | 40 | 0 | 0 | 0 | 1.06s |
+| password/hash-algorithms/argon2 | 2 | 2 | 0 | 0 | 0 | 636ms |
+| password/hash-algorithms/argon2-config | 7 | 7 | 0 | 0 | 0 | 141ms |
 | password/password-domain | 1 | 1 | 0 | 0 | 0 | 171ms |
-| password/password-security/password-security-config | 9 | 9 | 0 | 0 | 0 | 169ms |
-| password/password-security/password-security-system | 19 | 19 | 0 | 0 | 0 | 193ms |
-| **TOTAL** | **178** | **178** | **0** | **0** | **0** | **7.02s** |
+| password/password-security/password-security-config | 9 | 9 | 0 | 0 | 0 | 172ms |
+| password/password-security/password-security-system | 19 | 19 | 0 | 0 | 0 | 172ms |
+| **TOTAL** | **197** | **197** | **0** | **0** | **0** | **7.14s** |
 
 ## 📝 Test Documentation (Behaviors)
 
 This section describes the verified system behaviors based on passing tests.
+
+### Epic: Boundary
+
+#### Feature: HTTP API
+
+- **refuses a malformed driver with 400**
+- **refuses to race an empty grid with 409**
+- **registers drivers and races them**
+
+#### Feature: Mail commands
+
+- **password_reset_endpoint_renders_the_link()**
+- **posting_a_mail_with_the_api_key_sends_it()**
+- **posting_a_malformed_mail_is_refused()**
+- **posting_without_the_api_key_is_refused()**
+- **verification_endpoint_renders_the_link()**
 
 ### Epic: Config
 
@@ -34,6 +52,15 @@ This section describes the verified system behaviors based on passing tests.
 
 - **keeps a positive maximum dimension**
 - **rejects a non-positive maximum dimension**
+
+### Epic: Domain
+
+#### Feature: Driver attributes
+
+- **a driver must have a name**
+- **a race must have at least one lap**
+- **keeps attributes on the 0-100 scale**
+- **rejects attributes outside the 0-100 scale**
 
 ### Epic: Email
 
@@ -162,23 +189,23 @@ This section describes the verified system behaviors based on passing tests.
 - **if any subset of OTHER_CONSTRAINTS is unsatisfied → reject with all their codes**
   - *Parameters:*
     - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[RFC_FORMAT_INVALID]`
-    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[DOMAIN_BLOCKED, NOT_A_COMPANY_DOMAIN, DISPOSABLE_DOMAIN, RFC_FORMAT_INVALID]`
-    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[NOT_A_COMPANY_DOMAIN, RFC_FORMAT_INVALID]`
-    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
     - broken constraints: `[NOT_A_COMPANY_DOMAIN, RFC_FORMAT_INVALID, DOMAIN_BLOCKED, DISPOSABLE_DOMAIN]`
     - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
+    - broken constraints: `[DISPOSABLE_DOMAIN, NOT_A_COMPANY_DOMAIN, DOMAIN_BLOCKED]`
+    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
+    - broken constraints: `[NOT_A_COMPANY_DOMAIN, RFC_FORMAT_INVALID, DISPOSABLE_DOMAIN]`
+    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
+    - broken constraints: `[NOT_A_COMPANY_DOMAIN, DOMAIN_BLOCKED, RFC_FORMAT_INVALID, DISPOSABLE_DOMAIN]`
+    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
+    - broken constraints: `[DISPOSABLE_DOMAIN, NOT_A_COMPANY_DOMAIN, RFC_FORMAT_INVALID, DOMAIN_BLOCKED]`
+    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
     - broken constraints: `[RFC_FORMAT_INVALID]`
     - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[NOT_A_COMPANY_DOMAIN]`
+    - broken constraints: `[NOT_A_COMPANY_DOMAIN, DOMAIN_BLOCKED, DISPOSABLE_DOMAIN, RFC_FORMAT_INVALID]`
     - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[NOT_A_COMPANY_DOMAIN]`
+    - broken constraints: `[NOT_A_COMPANY_DOMAIN, DISPOSABLE_DOMAIN, RFC_FORMAT_INVALID]`
     - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[NOT_A_COMPANY_DOMAIN, RFC_FORMAT_INVALID, DOMAIN_BLOCKED]`
-    - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
-    - broken constraints: `[RFC_FORMAT_INVALID, DISPOSABLE_DOMAIN, NOT_A_COMPANY_DOMAIN]`
+    - broken constraints: `[DOMAIN_BLOCKED, NOT_A_COMPANY_DOMAIN, RFC_FORMAT_INVALID]`
     - OTHER_CONSTRAINTS: `[_RfcFormatConstraint, _BlockedDomainConstraint, _DisposableEmailConstraint, _IsEmployeeConstraint]`
     - broken constraints: `[RFC_FORMAT_INVALID]`
 
@@ -205,19 +232,15 @@ This section describes the verified system behaviors based on passing tests.
     - default: `Argon2Config[iterations=Iterations[value=3], memLimit=MemLimitInKB[value=65536], parallelism=Parallelism[value=1]]`
 - **Invariant: accepts valid values**
   - *Parameters:*
-    - MIN: `1`
-    - MAX: `16`
-- **Invariant: accepts valid values**
-  - *Parameters:*
-    - MIN: `1`
-- **Invariant: accepts valid values**
-  - *Parameters:*
     - MIN: `8`
     - MAX: `4194304`
-- **Invariant: rejects invalid values**
+- **Invariant: accepts valid values**
   - *Parameters:*
-    - MIN - 1: `0`
-    - MAX + 1: `17`
+    - MIN: `1`
+- **Invariant: accepts valid values**
+  - *Parameters:*
+    - MIN: `1`
+    - MAX: `16`
 - **Invariant: rejects invalid values**
   - *Parameters:*
     - MIN - 1: `7`
@@ -225,6 +248,10 @@ This section describes the verified system behaviors based on passing tests.
 - **Invariant: rejects invalid values**
   - *Parameters:*
     - MIN - 1: `0`
+- **Invariant: rejects invalid values**
+  - *Parameters:*
+    - MIN - 1: `0`
+    - MAX + 1: `17`
 
 #### Feature: Contract
 
@@ -258,35 +285,53 @@ This section describes the verified system behaviors based on passing tests.
 
 #### Feature: General
 
-- **advance_accumulates()**
+- **After All Features**
+- **Before All Features**
+- **Finish Cucumber**
+- **Start Cucumber**
+- **Start Feature**
+- **a caller without the API key is refused**
+- **a malformed command is refused**
+- **a password-reset link is rendered into the template**
+- **a trusted service sends a plain mail**
+- **a verification link is rendered into the template**
 - **advance_accumulates()**
 - **advance_is_thread_safe()**
-- **advance_is_thread_safe()**
-- **advance_moves_the_instant_forward()**
 - **advance_moves_the_instant_forward()**
 - **advance_moves_time_forward()**
-- **advance_moves_time_forward()**
-- **advance_with_a_negative_duration_moves_back()**
 - **advance_with_a_negative_duration_moves_back()**
 - **is_frozen_and_does_not_tick_on_its_own()**
-- **is_frozen_and_does_not_tick_on_its_own()**
 - **production_environment_provides_the_system_clock_and_no_controls()**
-- **production_environment_provides_the_system_clock_and_no_controls()**
-- **reset_returns_to_real_time()**
-- **reset_returns_to_real_time()**
 - **reset_returns_to_real_time()**
 - **reset_returns_to_real_time()**
 - **set_freezes_at_a_given_instant()**
-- **set_freezes_at_a_given_instant()**
-- **set_freezes_at_the_given_instant()**
 - **set_freezes_at_the_given_instant()**
 - **test_environment_provides_the_steerable_clock_and_the_controls()**
-- **test_environment_provides_the_steerable_clock_and_the_controls()**
-- **the_endpoint_steers_the_clock_the_service_injects()**
 - **the_endpoint_steers_the_clock_the_service_injects()**
 - **uploads_and_serves_an_optimized_meme()**
 - **with_zone_shares_the_live_instant()**
-- **with_zone_shares_the_live_instant()**
+
+#### Feature: Sending mail on behalf of trusted services
+
+##### Story: a caller without the API key is refused
+
+- **a caller without the API key is refused**
+
+##### Story: a malformed command is refused
+
+- **a malformed command is refused**
+
+##### Story: a password-reset link is rendered into the template
+
+- **a password-reset link is rendered into the template**
+
+##### Story: a trusted service sends a plain mail
+
+- **a trusted service sends a plain mail**
+
+##### Story: a verification link is rendered into the template
+
+- **a verification link is rendered into the template**
 
 #### Feature: Uploading a meme
 
@@ -344,11 +389,11 @@ This section describes the verified system behaviors based on passing tests.
 
 - **Security: toString() does not reveal plaintext**
   - *Parameters:*
-    - password: `LYVa`
+    - password: `iytUAdjB`
     - toString(): `PlaintextPassword[value=REDACTED]`
-    - password: `kKRziYMJRuiHOzDwWznKqDCybsyFWJxPijWNWjsCEpQLBmJoXuhecFDMPTNnBcbEvXardUunrKOeEGMfKUTWiwVVBvJnrNTjtjvfWwexPRFkRCPVZGsaiYtYhscRXdOOnxGAtHTUwZdNkdvdnTshTlwsCgNdpOmzIZLMNeouHYmhGhbvzpuaGNmjAeUpI`
+    - password: `AAA`
     - toString(): `PlaintextPassword[value=REDACTED]`
-    - password: `rWcZqXoj`
+    - password: `BqRPQbcKRZ`
     - toString(): `PlaintextPassword[value=REDACTED]`
 
 #### Feature: Password Security Configuration
@@ -381,38 +426,38 @@ This section describes the verified system behaviors based on passing tests.
     - default: `!@#$%^&*`
 - **Invariant: accepts valid values**
   - *Parameters:*
-    - value: `~{!}&;@`
+    - value: `{~.`
     - value: `!@#$%^&*`
-    - value: `_\|!.%:`
-    - value: `_@&~`
     - value: `!`
-    - value: `!`
+    - value: `=&`
+    - value: `!@#$%^&*`
     - value: `!@#$%^&*`
     - value: `!@#$%^&*`
     - value: `~`
     - value: `!@#$%^&*`
+    - value: `!@#$%^&*`
 - **Invariant: rejects duplicate characters**
   - *Parameters:*
-    - value: `!!`
-    - value: `%%`
-    - value: `&&`
-    - value: `~~`
-    - value: `,,`
-    - value: `>>`
-    - value: `??`
-    - value: `^^`
-    - value: `\\`
-    - value: `::`
-    - value: `<<`
-    - value: `!!`
-    - value: `!!`
     - value: `;;`
+    - value: `--`
+    - value: `{{`
+    - value: `!!`
+    - value: `{{`
+    - value: `//`
     - value: `((`
-    - value: `<<`
-    - value: `..`
-    - value: `__`
+    - value: `,,`
+    - value: `&&`
+    - value: `!!`
+    - value: `{{`
+    - value: `;;`
+    - value: `@@`
+    - value: `~~`
+    - value: `--`
     - value: `\\`
-    - value: `}}`
+    - value: `||`
+    - value: `]]`
+    - value: `@@`
+    - value: `!!`
 - **Invariant: rejects invalid values**
   - *Parameters:*
     - letter — not a special char: `a`
@@ -441,15 +486,15 @@ This section describes the verified system behaviors based on passing tests.
 - **all constraints satisfied → allowed**
 - **if any subset of constraints is unsatisfied → rejected with all their codes**
   - *Parameters:*
-    - broken constraints: `[SPECIAL_CHAR_REQUIRED, MIN_LENGTH_NOT_MET, UPPERCASE_REQUIRED]`
-    - broken constraints: `[DIGIT_REQUIRED]`
+    - broken constraints: `[MIN_LENGTH_NOT_MET]`
+    - broken constraints: `[MIN_LENGTH_NOT_MET, LOWERCASE_REQUIRED, SPECIAL_CHAR_REQUIRED, UPPERCASE_REQUIRED]`
+    - broken constraints: `[DIGIT_REQUIRED, SPECIAL_CHAR_REQUIRED]`
+    - broken constraints: `[MIN_LENGTH_NOT_MET, SPECIAL_CHAR_REQUIRED, LOWERCASE_REQUIRED, DIGIT_REQUIRED, UPPERCASE_REQUIRED]`
+    - broken constraints: `[MIN_LENGTH_NOT_MET]`
     - broken constraints: `[SPECIAL_CHAR_REQUIRED]`
-    - broken constraints: `[UPPERCASE_REQUIRED, LOWERCASE_REQUIRED, MIN_LENGTH_NOT_MET]`
-    - broken constraints: `[MIN_LENGTH_NOT_MET]`
-    - broken constraints: `[UPPERCASE_REQUIRED, SPECIAL_CHAR_REQUIRED]`
-    - broken constraints: `[MIN_LENGTH_NOT_MET]`
-    - broken constraints: `[DIGIT_REQUIRED, MIN_LENGTH_NOT_MET, UPPERCASE_REQUIRED, LOWERCASE_REQUIRED, SPECIAL_CHAR_REQUIRED]`
-    - broken constraints: `[MIN_LENGTH_NOT_MET, DIGIT_REQUIRED, SPECIAL_CHAR_REQUIRED, UPPERCASE_REQUIRED, LOWERCASE_REQUIRED]`
+    - broken constraints: `[SPECIAL_CHAR_REQUIRED]`
+    - broken constraints: `[SPECIAL_CHAR_REQUIRED, DIGIT_REQUIRED, MIN_LENGTH_NOT_MET]`
+    - broken constraints: `[DIGIT_REQUIRED]`
     - broken constraints: `[MIN_LENGTH_NOT_MET]`
 
 ### Epic: Security
@@ -478,7 +523,7 @@ This section describes the verified system behaviors based on passing tests.
 - **accepts**
   - *Parameters:*
     - MIN: `3`
-    - between: `59`
+    - between: `22`
     - MAX: `120`
 - **rejects**
   - *Parameters:*
@@ -492,7 +537,7 @@ This section describes the verified system behaviors based on passing tests.
 - **accepts**
   - *Parameters:*
     - MIN: `1`
-    - between: `1068`
+    - between: `442`
     - MAX: `1440`
 - **rejects**
   - *Parameters:*
@@ -506,7 +551,7 @@ This section describes the verified system behaviors based on passing tests.
 - **accepts**
   - *Parameters:*
     - MIN: `1`
-    - between: `12`
+    - between: `2`
     - MAX: `20`
 - **rejects**
   - *Parameters:*
@@ -542,6 +587,14 @@ This section describes the verified system behaviors based on passing tests.
     - MIN - 1: `0`
     - negative: `-1`
 
+### Epic: Simulation
+
+#### Feature: Local engine
+
+- **classifies every starter, positions in time order**
+- **far superior pace wins the race**
+- **the same seed reproduces the same race**
+
 ### Epic: Use case
 
 #### Feature: Add comment
@@ -553,6 +606,7 @@ This section describes the verified system behaviors based on passing tests.
 
 - **Authenticated when the guard allows and credentials are valid**
 - **Blocked when the brute-force guard blocks the IP**
+- **Email-not-verified when credentials are valid but the address is unverified**
 - **Rejected when the guard allows but credentials are invalid**
 
 ##### Story: Brute-force guard
@@ -593,7 +647,7 @@ This section describes the verified system behaviors based on passing tests.
 #### Feature: Change email
 
 - **A free new address starts the change and e-mails a link**
-- **A matching token moves the user to the new address**
+- **A matching token moves the user to the new address and marks it verified**
 - **A taken new address is refused, nothing e-mailed**
 - **An unknown token is rejected and no email is changed**
 
@@ -652,6 +706,11 @@ This section describes the verified system behaviors based on passing tests.
 #### Feature: Revoke all sessions
 
 - **Revoking all sessions revokes every session of the user**
+
+#### Feature: Run race
+
+- **races the roster and returns the classification**
+- **refuses to race fewer than two drivers**
 
 #### Feature: Verify email
 

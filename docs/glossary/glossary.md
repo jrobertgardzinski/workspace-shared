@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-120 classes · 13 feature files tagged.
+125 classes · 13 feature files tagged.
 
-## Domain (55)
+## Domain (60)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -24,6 +24,8 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Comment** — A comment posted on a meme: its id, the meme it belongs to, the author and the text. `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/Comment.java`
 - **Credentials** — Proof of identity presented by a user during authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/Credentials.java` · _used in_ authenticate
 - **DomainPart** — The mail server portion of an Email, following the '@' symbol. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/DomainPart.java`
+- **Driver** — An autonomous driver: an identity plus the DriverAttributes the simulation acts on. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/Driver.java`
+- **DriverAttributes** — What makes a driver an autonomous character rather than a lap-time constant (the Jagged Alliance 2 idea: mercenaries have stats and personality, and the game emerges from them). `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/DriverAttributes.java`
 - **Email** — An email address, composed of a LocalPart and a DomainPart. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/Email.java` · _used in_ change-email, register, verify-email
 - **EmailAlreadyTakenException** — Thrown by UserRepository#save when persistence rejects a user because the (normalized) email is already taken — the storage-level uniqueness guarantee, which closes the check-then-act race that a prior existsBy check alone cannot. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/EmailAlreadyTakenException.java`
 - **EmailChange** — A requested email change awaiting confirmation: from the user's current address to the new one. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/EmailChange.java`
@@ -41,6 +43,9 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **PasswordResetRepository** — Tracks pending password resets. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/PasswordResetRepository.java`
 - **PasswordResetToken** — Single-use token e-mailed to a user so they can set a new password after forgetting the old one. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/PasswordResetToken.java` · _used in_ reset-password
 - **PlaintextPassword** — A password as entered by the user, before hashing. `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/PlaintextPassword.java`
+- **RaceResult** — The classification of a finished race, best first. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/RaceResult.java`
+- **RaceSpec** — What race to run — for the walking skeleton just the number of laps. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/RaceSpec.java`
+- **RaceStanding** — One classified driver in a race result: final position (1 = winner), who, and the total race time in milliseconds. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/RaceStanding.java`
 - **RankedMeme** — A meme with its current vote score, for ranking ("hot"). `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/RankedMeme.java`
 - **RefreshToken** — Long-lived refresh token used to obtain a new access token without re-authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/RefreshToken.java` · _used in_ logout, reuse-detection, revoke-all-sessions
 - **RefreshTokenExpiration** — Expiration of a refresh token. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/RefreshTokenExpiration.java`
