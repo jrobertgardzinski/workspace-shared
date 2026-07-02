@@ -116,9 +116,31 @@ services:
       RACE_SIM_URL: http://race-sim:8090
       # game actions (start race, orders, R&D, era, homologate) require a security-confirmed token
       SECURITY_URL: http://security:8080
+      # durable game state (seasons, standings, developed cars) survives restarts
+      DB_URL: jdbc:postgresql://formula-postgres:5432/formula
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
     depends_on:
-      - race-sim
-      - security
+      race-sim:
+        condition: service_started
+      security:
+        condition: service_started
+      formula-postgres:
+        condition: service_healthy
+
+  formula-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: formula
+    volumes:
+      - formula_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d formula"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
 
   race-sim:
     build:
@@ -164,3 +186,4 @@ services:
 volumes:
   security_pgdata:
   comments_pgdata:
+  formula_pgdata:
