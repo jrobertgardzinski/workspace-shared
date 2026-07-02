@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-114 classes · 13 feature files tagged.
+120 classes · 13 feature files tagged.
 
-## Domain (51)
+## Domain (55)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -21,6 +21,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **AuthorizationDataRepository** — Stores the sessions issued to users, keyed by their refresh token — the credential a client presents to refresh. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/AuthorizationDataRepository.java`
 - **AuthorizationTokenExpiration** — The point in time at which an AccessToken expires. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/AuthorizationTokenExpiration.java`
 - **BruteForceProtectionEvent** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/event/BruteForceProtectionEvent.java`
+- **Comment** — A comment posted on a meme: its id, the meme it belongs to, the author and the text. `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/Comment.java`
 - **Credentials** — Proof of identity presented by a user during authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/Credentials.java` · _used in_ authenticate
 - **DomainPart** — The mail server portion of an Email, following the '@' symbol. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/DomainPart.java`
 - **Email** — An email address, composed of a LocalPart and a DomainPart. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/Email.java` · _used in_ change-email, register, verify-email
@@ -34,11 +35,13 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **HashedPassword** — A password transformed by a hashing algorithm, safe for storage. `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/HashedPassword.java`
 - **IpAddress** — Network address from which a request originates. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/IpAddress.java`
 - **LocalPart** — The recipient-specific portion of an Email, preceding the '@' symbol. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/LocalPart.java`
+- **Meme** — A stored meme: an identifier, the (browser-friendly) image format, and the image bytes. `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/Meme.java`
 - **NormalizedEmail** — An Email with provider-specific normalization applied, used for deduplication. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/NormalizedEmail.java`
 - **PasswordResetNotifier** — Outbound port that delivers a password-reset link — carrying the single-use token — to a user's e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/port/PasswordResetNotifier.java`
 - **PasswordResetRepository** — Tracks pending password resets. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/PasswordResetRepository.java`
 - **PasswordResetToken** — Single-use token e-mailed to a user so they can set a new password after forgetting the old one. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/PasswordResetToken.java` · _used in_ reset-password
 - **PlaintextPassword** — A password as entered by the user, before hashing. `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/PlaintextPassword.java`
+- **RankedMeme** — A meme with its current vote score, for ranking ("hot"). `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/RankedMeme.java`
 - **RefreshToken** — Long-lived refresh token used to obtain a new access token without re-authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/RefreshToken.java` · _used in_ logout, reuse-detection, revoke-all-sessions
 - **RefreshTokenExpiration** — Expiration of a refresh token. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/RefreshTokenExpiration.java`
 - **RefreshTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/RefreshTokenValidityInHours.java`
@@ -57,8 +60,9 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **UserRegistration** — A prospective user's request to join the system, with the password already hashed. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/UserRegistration.java`
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
+- **VoteDirection** — Which way a vote goes. `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/VoteDirection.java`
 
-## Config (24)
+## Config (26)
 
 - **BlockedDomains** — _(no Javadoc yet)_ `email/email-security/email-security-config/src/main/java/com/jrobertgardzinski/email/config/BlockedDomains.java`
 - **BruteForceConfig** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/BruteForceConfig.java`
@@ -70,6 +74,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **FailureWindowMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/FailureWindowMinutes.java`
 - **HardcodedConfigSource** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/source/hardcoded/HardcodedConfigSource.java`
 - **HardcodedKey** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/domain/HardcodedKey.java`
+- **ImageLimits** — Configuration for image optimisation: the largest dimension (width or height, in pixels) a stored meme may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ImageLimits.java`
 - **MaxBlockMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MaxBlockMinutes.java`
 - **MaxFailures** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MaxFailures.java`
 - **MinBlockMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MinBlockMinutes.java`
@@ -84,6 +89,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RequiresLowercase** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/RequiresLowercase.java`
 - **RequiresUppercase** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/RequiresUppercase.java`
 - **SpecialChars** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/SpecialChars.java`
+- **ThumbnailSize** — Configuration for meme thumbnails: the largest dimension (px) a generated thumbnail may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ThumbnailSize.java`
 
 ## System (34)
 
