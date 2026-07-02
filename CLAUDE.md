@@ -4,10 +4,13 @@ Guidance for Claude Code when working in this workspace.
 
 ## What this repo is
 
-A **workspace / aggregator** over six independent git repositories
-(`test-starter`, `constraint`, `config`, `email`, `password`,
-`microservice-security`). Each sub-directory has its **own `.git`, history and
-remote** and is gitignored here. This repo versions only:
+A **workspace / aggregator** over independent git repositories: the shared
+libraries (`test-starter`, `constraint`, `config`, `email`, `password`,
+`adjustable-clock`, `infrastructure-micronaut-clock`), the hexagonal Micronaut
+auth service (`microservice-security`), and two standalone services in other
+flavours — `microservice-email` (BCE, Quarkus) and `microservice-memes`
+(layered modules, Spring Boot). Each sub-directory has its **own `.git`,
+history and remote** and is gitignored here. This repo versions only:
 
 - the aggregating `pom.xml` (a pure aggregator, **not** a parent pom), and
 - shared scripts / docs (`aggregate_allure.py`, `allure-serve.sh`,
@@ -23,7 +26,8 @@ remote** and is gitignored here. This repo versions only:
   `./mvnw install` at the root builds everything in dependency order without
   needing each project pre-installed into `~/.m2`.
 - Every sub-project stays buildable standalone (own parent preserved). Do not
-  convert the aggregator into their parent — that would edit six separate repos.
+  convert the aggregator into their parent — that would edit several separate
+  repos.
 
 ## Build & test
 

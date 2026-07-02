@@ -32,6 +32,9 @@
         <module>email</module>
         <module>password</module>
         <module>microservice-security</module>
+        <!-- standalone services (own frameworks, no reactor inter-dependencies) -->
+        <module>microservice-email</module>
+        <module>microservice-memes</module>
     </modules>
 
 </project>
