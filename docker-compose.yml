@@ -6,7 +6,7 @@
 # Ports on the host:
 #   8080  microservice-security  (register/authenticate/verify-email/...)
 #   8082  microservice-email     (POST /mails*, X-Api-Key required)
-#   8083  microservice-memes     (upload/serve/comments/votes)
+#   8083  microservice-memes     (gallery UI at /; upload/comments/votes need signing in)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
 services:
   security:
@@ -50,6 +50,12 @@ services:
       context: microservice-memes
     ports:
       - "8083:8083"
+    environment:
+      # writes require a bearer token that security confirms; reads (and the UI at :8083) are public
+      SECURITY_URL: http://security:8080
+    depends_on:
+      security:
+        condition: service_started
 
   mailpit:
     image: axllent/mailpit

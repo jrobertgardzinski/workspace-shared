@@ -60,7 +60,7 @@ STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_SVC/mails" \
     -H 'Content-Type: application/json' -d '{"to":"x@example.com","subject":"Hi","text":"Hello"}')
 [ "$STATUS" = 401 ] || { echo "FAIL: expected 401 without API key, got $STATUS"; exit 1; }
 
-step "meme service: upload is optimised to PNG and served back"
+step "meme service: anonymous upload is refused, the security-issued token unlocks it"
 TMP_IMG=$(mktemp --suffix=.bmp)
 python3 - "$TMP_IMG" <<'EOF'
 import struct, sys
@@ -72,14 +72,24 @@ header = b'BM' + struct.pack('<IHHI', 54 + len(pixels), 0, 0, 54) \
        + struct.pack('<IiiHHIIiiII', 40, w, h, 1, 24, 0, len(pixels), 2835, 2835, 0, 0)
 open(sys.argv[1], 'wb').write(header + pixels)
 EOF
-MEME_ID=$(curl -sf -F "file=@$TMP_IMG;type=image/bmp" "$MEMES/memes" | python3 -c \
-    'import json,sys; print(json.load(sys.stdin)["id"])')
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -F "file=@$TMP_IMG;type=image/bmp" "$MEMES/memes")
+[ "$STATUS" = 401 ] || { echo "FAIL: anonymous upload expected 401, got $STATUS"; exit 1; }
+MEME_ID=$(curl -sf -H "Authorization: Bearer $ACCESS" -F "file=@$TMP_IMG;type=image/bmp" "$MEMES/memes" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 rm -f "$TMP_IMG"
+
+step "browsing is public; comment is signed by the security identity"
 curl -sf "$MEMES/memes/$MEME_ID" | head -c 4 | grep -q PNG \
     || { echo "FAIL: meme was not served back as PNG"; exit 1; }
-curl -sf -X POST "$MEMES/memes/$MEME_ID/votes" -H 'Content-Type: application/json' \
-    -d '{"direction":"UP"}' >/dev/null
+curl -sf "$MEMES/memes" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from the public gallery"; exit 1; }
+curl -sf -X POST "$MEMES/memes/$MEME_ID/comments" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"text":"smoke says hi"}' >/dev/null
+curl -sf "$MEMES/memes/$MEME_ID/comments" | grep -q "$USER_MAIL" \
+    || { echo "FAIL: comment not signed by $USER_MAIL"; exit 1; }
+curl -sf -X POST "$MEMES/memes/$MEME_ID/votes" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null
 curl -sf "$MEMES/memes/hot" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from /memes/hot"; exit 1; }
 
 echo
-echo "SMOKE PASS: register -> mail(Mailpit) -> verify -> sign-in -> /me, mail auth, meme upload/vote/hot"
+echo "SMOKE PASS: register -> mail(Mailpit) -> verify -> sign-in -> /me, mail auth,"
+echo "            memes gated by security (401 anon; upload/comment/vote with the token; public reads)"

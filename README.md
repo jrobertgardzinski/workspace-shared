@@ -52,7 +52,9 @@ system Maven is needed.
 infrastructure: `microservice-security` + Postgres, `microservice-email`
 delivering through [Mailpit](https://mailpit.axllent.org/) (web inbox at
 http://localhost:8025 — that's where the verification/reset mails land), and
-`microservice-memes`.
+`microservice-memes`, whose **gallery UI** lives at http://localhost:8083/
+(browsing is public; sign-up/sign-in goes through security, and only signed-in
+users upload, comment and vote).
 
 ```bash
 ./infra-up.sh      # package the jars, build the images, start everything
