@@ -92,21 +92,20 @@ COMMENT_ID=$(curl -sf -X POST "$MEMES/memes/$MEME_ID/comments" -H "Authorization
 curl -sf "$MEMES/memes/$MEME_ID/comments" | grep -q "$USER_MAIL" \
     || { echo "FAIL: comment not signed by $USER_MAIL"; exit 1; }
 
-step "one vote per user: voting twice does not stack (memes and comments)"
-curl -sf -X POST "$MEMES/memes/$MEME_ID/votes" -H "Authorization: Bearer $ACCESS" \
-    -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null
-SCORE=$(curl -sf -X POST "$MEMES/memes/$MEME_ID/votes" -H "Authorization: Bearer $ACCESS" \
-    -H 'Content-Type: application/json' -d '{"direction":"UP"}' | python3 -c \
-    'import json,sys; print(json.load(sys.stdin)["score"])')
-[ "$SCORE" = 1 ] || { echo "FAIL: meme score after double up-vote expected 1, got $SCORE"; exit 1; }
-curl -sf -X POST "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" -H "Authorization: Bearer $ACCESS" \
-    -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null
-CSCORE=$(curl -sf -X POST "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" -H "Authorization: Bearer $ACCESS" \
-    -H 'Content-Type: application/json' -d '{"direction":"UP"}' | python3 -c \
-    'import json,sys; print(json.load(sys.stdin)["score"])')
-[ "$CSCORE" = 1 ] || { echo "FAIL: comment score after double up-vote expected 1, got $CSCORE"; exit 1; }
+step "votes are a toggle: up-vote counts, repeating it retracts (memes and comments)"
+vote() { curl -sf -X POST "$1" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"direction":"UP"}'; }
+R=$(vote "$MEMES/memes/$MEME_ID/votes" | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["score"], b["myVote"])')
+[ "$R" = "1 UP" ] || { echo "FAIL: first up-vote expected '1 UP', got '$R'"; exit 1; }
+R=$(vote "$MEMES/memes/$MEME_ID/votes" | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["score"], b["myVote"])')
+[ "$R" = "0 None" ] || { echo "FAIL: repeated up-vote should retract ('0 None'), got '$R'"; exit 1; }
+vote "$MEMES/memes/$MEME_ID/votes" >/dev/null   # vote back for the hot check
+R=$(vote "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" | python3 -c 'import json,sys; print(json.load(sys.stdin)["score"])')
+[ "$R" = 1 ] || { echo "FAIL: comment up-vote expected score 1, got '$R'"; exit 1; }
+R=$(vote "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" | python3 -c 'import json,sys; print(json.load(sys.stdin)["score"])')
+[ "$R" = 0 ] || { echo "FAIL: repeated comment up-vote should retract (0), got '$R'"; exit 1; }
 curl -sf "$MEMES/memes/hot" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from /memes/hot"; exit 1; }
 
 echo
 echo "SMOKE PASS: register -> mail(Mailpit) -> verify -> sign-in -> /me, mail auth,"
-echo "            memes gated by security (401 anon; public reads; one vote per user on memes and comments)"
+echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments)"
