@@ -158,6 +158,53 @@ done
 curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | grep -q "account is deleted" \
     || { echo "FAIL: no goodbye mail"; exit 1; }
 
+step "deletion wizard: keep-popular memes survive anonymised, comments chosen to go, go"
+KEEPER="smoke-keeper-$(date +%s)@example.com"
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}" >/dev/null
+KTOKEN=""
+for i in $(seq 1 30); do
+    MSG=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$KEEPER" | python3 -c \
+        'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
+    [ -n "$MSG" ] && { KTOKEN=$(curl -sf "$MAIL_UI/api/v1/message/$MSG" | python3 -c \
+        'import json,sys,re; print(re.search(r"(?:token|verify)=([A-Za-z0-9_\-]+)", json.load(sys.stdin)["Text"]).group(1))'); break; }
+    sleep 1
+done
+curl -sf -X POST "$SEC/verify-email" -H 'Content-Type: application/json' -d "{\"token\":\"$KTOKEN\"}" >/dev/null
+KACCESS=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+TMP3=$(mktemp --suffix=.bmp)
+python3 - "$TMP3" <<'EOF'
+import os, struct, sys
+w, h = 2, 2
+row = os.urandom(3) * w + b'\x00' * ((4 - (w * 3) % 4) % 4)
+pixels = row * h
+header = b'BM' + struct.pack('<IHHI', 54 + len(pixels), 0, 0, 54) \
+       + struct.pack('<IiiHHIIiiII', 40, w, h, 1, 24, 0, len(pixels), 2835, 2835, 0, 0)
+open(sys.argv[1], 'wb').write(header + pixels)
+EOF
+KEEPER_MEME=$(curl -sf -H "Authorization: Bearer $KACCESS" -F "file=@$TMP3;type=image/bmp" "$MEMES/memes" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+rm -f "$TMP3"
+curl -sf -X POST "$MEMES/memes/$KEEPER_MEME/votes" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null   # the community likes it
+curl -sf -X POST "$MEMES/memes/$MEME_ID/comments" -H "Authorization: Bearer $KACCESS" \
+    -H 'Content-Type: application/json' -d '{"text":"chosen to vanish"}' >/dev/null
+curl -sf -X POST "$SEC/account/delete" -H "Authorization: Bearer $KACCESS" -H 'Content-Type: application/json' \
+    -d '{"purge":{"memes":"KEEP_POPULAR_ANONYMIZED:1","comments":"DELETE"}}' >/dev/null
+WIZ_OK=""
+for i in $(seq 1 30); do
+    KEPT=$(curl -s -o /dev/null -w '%{http_code}' "$MEMES/memes/$KEEPER_MEME")
+    GONE=$(curl -sf "$MEMES/memes/$MEME_ID/comments" | python3 -c \
+        'import json,sys; print(any(c["text"]=="chosen to vanish" for c in json.load(sys.stdin)))')
+    REREG=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/register" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}")
+    if [ "$KEPT" = 200 ] && [ "$GONE" = False ] && [ "$REREG" = 201 ]; then WIZ_OK=yes; break; fi
+    sleep 2
+done
+[ -n "$WIZ_OK" ] || { echo "FAIL: wizard policy not honoured (kept:$KEPT commentGone:$GONE rereg:$REREG)"; exit 1; }
+
 step "resilience: a mail requested while the mail service is DOWN arrives once it is back"
 RESIL_MAIL="smoke-resil-$(date +%s)@example.com"
 docker compose stop email >/dev/null 2>&1
@@ -178,4 +225,5 @@ echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
 echo "            outbox survives a mail-service outage,"
-echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed"
+echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"
+echo "            wizard override honoured: popular meme kept anonymised, chosen comments deleted"
