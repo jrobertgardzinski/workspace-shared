@@ -13,10 +13,13 @@ flavours — `microservice-email` (BCE, Quarkus), `microservice-memes`
 HTTP server). Each sub-directory has its **own `.git`, history and remote**
 and is gitignored here. This repo versions only:
 
-- the aggregating `pom.xml` (a pure aggregator, **not** a parent pom), and
+- the aggregating `pom.xml` (a pure aggregator, **not** a parent pom),
 - shared scripts / docs (`aggregate_allure.py`, `allure-serve.sh`,
   `create-documentation.sh`, `maven-cheatsheet.md`, `allure-summary.md`,
-  `todo.md`).
+  `todo.md`), and
+- the local deployment of the whole stack (`docker-compose.yml`,
+  `infra-up.sh` / `infra-down.sh` / `infra-smoke.sh` — security+Postgres,
+  email+Mailpit, memes; smoke script proves the cross-service flows).
 
 ## Working across repos — important
 

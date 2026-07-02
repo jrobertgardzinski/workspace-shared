@@ -24,7 +24,11 @@ dependency order is:
 | `config` | Configuration primitives (`PropertiesConfigPort`/`Source`) |
 | `email` | Email value objects + email-security |
 | `password` | Password value objects, hash algorithms (Argon2), password-security |
-| `microservice-security` | Auth microservice (register / authenticate / refresh / authorize / logout) |
+| `adjustable-clock` / `infrastructure-micronaut-clock` | Steerable test clock + its Micronaut adapter |
+| `microservice-security` | Auth microservice, hexagonal on Micronaut (13 use cases: register, authenticate, sessions, verify-email, resets, …) |
+| `microservice-email` | Mail microservice, BCE on Quarkus (`POST /mails*`, Qute templates) |
+| `microservice-memes` | Meme microservice, layered modules on Spring Boot (upload/thumbnails/comments/votes) |
+| `formula-simulator` | F1 simulator with autonomous drivers, no framework (JDK HTTP server) |
 
 ## Build
 
@@ -42,6 +46,22 @@ cd microservice-security && ./mvnw clean verify
 Requires JDK 25. The Maven Wrapper (`./mvnw`, Maven 3.9.9) is committed, so no
 system Maven is needed.
 
+## Run the whole stack
+
+`docker-compose.yml` starts the three deployable services together with their
+infrastructure: `microservice-security` + Postgres, `microservice-email`
+delivering through [Mailpit](https://mailpit.axllent.org/) (web inbox at
+http://localhost:8025 — that's where the verification/reset mails land), and
+`microservice-memes`.
+
+```bash
+./infra-up.sh      # package the jars, build the images, start everything
+./infra-smoke.sh   # end-to-end proof: register -> mail -> verify -> sign-in -> /me, meme upload
+./infra-down.sh    # stop (add -v to drop the database volume)
+```
+
+Ports: security 8080, email 8082, memes 8083, Mailpit UI 8025.
+
 ## Tooling
 
 | Script | Purpose |
@@ -49,6 +69,7 @@ system Maven is needed.
 | `aggregate_allure.py` | Merge Allure results across projects |
 | `allure-serve.sh` | Serve the aggregated Allure report |
 | `create-documentation.sh` | Generate project documentation |
+| `infra-up.sh` / `infra-down.sh` / `infra-smoke.sh` | Run and smoke-test the whole service stack (see above) |
 | `maven-cheatsheet.md` | Maven command reference |
 | `allure-summary.md` | Current test/documentation summary |
 | `todo.md` | Cross-project backlog |

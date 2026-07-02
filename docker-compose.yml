@@ -1,0 +1,74 @@
+# The whole portfolio running together: the auth service (with its Postgres), the mail service
+# (delivering through Mailpit, whose web UI at http://localhost:8025 shows every mail sent), and
+# the meme service. Jars are built on the host first — use ./infra-up.sh, which packages and
+# starts everything, then ./infra-smoke.sh to prove the flows end to end.
+#
+# Ports on the host:
+#   8080  microservice-security  (register/authenticate/verify-email/...)
+#   8082  microservice-email     (POST /mails*, X-Api-Key required)
+#   8083  microservice-memes     (upload/serve/comments/votes)
+#   8025  Mailpit web UI         (the "inbox" for verification/reset links)
+services:
+  security:
+    build:
+      context: microservice-security
+      dockerfile: security-infrastructure/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      MICRONAUT_ENVIRONMENTS: dev
+      DB_HOST: postgres
+      DB_NAME: security
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      EMAIL_SERVICE_URL: http://email:8080
+      EMAIL_SERVICE_API_KEY: ${MAIL_API_KEY:-local-dev-key}
+      # links as they appear in the mails; tokens are POSTed back to these endpoints
+      VERIFY_LINK_BASE: http://localhost:8080/verify-email?token=
+      RESET_LINK_BASE: http://localhost:8080/reset-password?token=
+    depends_on:
+      postgres:
+        condition: service_healthy
+      email:
+        condition: service_started
+
+  email:
+    build:
+      context: microservice-email
+    ports:
+      - "8082:8080"
+    environment:
+      MAIL_API_KEY: ${MAIL_API_KEY:-local-dev-key}
+      QUARKUS_MAILER_HOST: mailpit
+      QUARKUS_MAILER_PORT: "1025"
+      QUARKUS_MAILER_MOCK: "false"
+    depends_on:
+      - mailpit
+
+  memes:
+    build:
+      context: microservice-memes
+    ports:
+      - "8083:8083"
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"   # web UI; SMTP (1025) stays internal
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: security
+    volumes:
+      - security_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d security"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  security_pgdata:
