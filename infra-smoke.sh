@@ -249,7 +249,12 @@ if [ "$DRIVERS" -lt 2 ]; then
     curl -sf -X POST "$FORMULA/drivers" -H 'Content-Type: application/json' \
         -d '{"name":"SmokeRival","pace":90,"aggression":85,"consistency":60}' >/dev/null
 fi
-RACE=$(curl -sf -X POST "$FORMULA/broadcast/races" -H 'Content-Type: application/json' -d '{"laps":5}' \
+step "formula gates game actions behind a security token (anon start refused)"
+ANON=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$FORMULA/broadcast/races" \
+    -H 'Content-Type: application/json' -d '{"laps":5}')
+[ "$ANON" = 401 ] || { echo "FAIL: anonymous race start expected 401, got $ANON"; exit 1; }
+RACE=$(curl -sf -X POST "$FORMULA/broadcast/races" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' -d '{"laps":5}' \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["raceId"])')
 STREAM=$(curl -sN --max-time 20 "$FORMULA/broadcast/races/$RACE/stream")
 echo "$STREAM" | grep -q "event: frame"  || { echo "FAIL: no frames on the race stream"; exit 1; }

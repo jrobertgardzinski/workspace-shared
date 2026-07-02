@@ -114,8 +114,11 @@ services:
       - "8084:8084"
     environment:
       RACE_SIM_URL: http://race-sim:8090
+      # game actions (start race, orders, R&D, era, homologate) require a security-confirmed token
+      SECURITY_URL: http://security:8080
     depends_on:
       - race-sim
+      - security
 
   race-sim:
     build:
