@@ -67,10 +67,11 @@ STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_SVC/mails" \
 step "meme service: anonymous upload is refused, the security-issued token unlocks it"
 TMP_IMG=$(mktemp --suffix=.bmp)
 python3 - "$TMP_IMG" <<'EOF'
-import struct, sys
-# minimal valid 2x2 24-bit BMP, no external deps
+import os, struct, sys
+# minimal valid 2x2 24-bit BMP, no external deps; random pixels so content-hash
+# deduplication never links this run's meme to an earlier run's votes
 w, h = 2, 2
-row = b'\x00\x00\xff' * w + b'\x00' * ((4 - (w * 3) % 4) % 4)
+row = os.urandom(3) * w + b'\x00' * ((4 - (w * 3) % 4) % 4)
 pixels = row * h
 header = b'BM' + struct.pack('<IHHI', 54 + len(pixels), 0, 0, 54) \
        + struct.pack('<IiiHHIIiiII', 40, w, h, 1, 24, 0, len(pixels), 2835, 2835, 0, 0)
@@ -106,6 +107,23 @@ R=$(vote "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" | python3 -c 'import
 [ "$R" = 0 ] || { echo "FAIL: repeated comment up-vote should retract (0), got '$R'"; exit 1; }
 curl -sf "$MEMES/memes/hot" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from /memes/hot"; exit 1; }
 
+step "resilience: a mail requested while the mail service is DOWN arrives once it is back"
+RESIL_MAIL="smoke-resil-$(date +%s)@example.com"
+docker compose stop email >/dev/null 2>&1
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$RESIL_MAIL\",\"password\":\"$PASSWORD\"}" >/dev/null \
+    || { echo "FAIL: registration must survive a mail-service outage"; docker compose start email >/dev/null; exit 1; }
+docker compose start email >/dev/null 2>&1
+FOUND=""
+for i in $(seq 1 45); do
+    FOUND=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$RESIL_MAIL" | python3 -c \
+        'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
+    [ -n "$FOUND" ] && break
+    sleep 2
+done
+[ -n "$FOUND" ] || { echo "FAIL: outbox event did not reach the mail service after restart"; exit 1; }
+
 echo
-echo "SMOKE PASS: register -> mail(Mailpit) -> verify -> sign-in -> /me, mail auth,"
-echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments)"
+echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
+echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
+echo "            outbox survives a mail-service outage"

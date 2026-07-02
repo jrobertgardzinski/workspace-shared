@@ -49,7 +49,8 @@ system Maven is needed.
 ## Run the whole stack
 
 `docker-compose.yml` starts the three deployable services together with their
-infrastructure: `microservice-security` + Postgres, `microservice-email`
+infrastructure: `microservice-security` + Postgres, **Kafka** (mail requests travel as events
+from security's transactional outbox), `microservice-email`
 delivering through [Mailpit](https://mailpit.axllent.org/) (web inbox at
 http://localhost:8025 — that's where the verification/reset mails land), and
 `microservice-memes`, whose **gallery UI** lives at http://localhost:8083/
