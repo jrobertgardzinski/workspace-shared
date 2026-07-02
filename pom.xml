@@ -35,6 +35,7 @@
         <!-- standalone services (own frameworks, no reactor inter-dependencies) -->
         <module>microservice-email</module>
         <module>microservice-memes</module>
+        <module>formula-simulator</module>
     </modules>
 
 </project>

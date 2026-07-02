@@ -7,10 +7,11 @@ Guidance for Claude Code when working in this workspace.
 A **workspace / aggregator** over independent git repositories: the shared
 libraries (`test-starter`, `constraint`, `config`, `email`, `password`,
 `adjustable-clock`, `infrastructure-micronaut-clock`), the hexagonal Micronaut
-auth service (`microservice-security`), and two standalone services in other
-flavours — `microservice-email` (BCE, Quarkus) and `microservice-memes`
-(layered modules, Spring Boot). Each sub-directory has its **own `.git`,
-history and remote** and is gitignored here. This repo versions only:
+auth service (`microservice-security`), and standalone services in other
+flavours — `microservice-email` (BCE, Quarkus), `microservice-memes`
+(layered modules, Spring Boot) and `formula-simulator` (no framework, JDK
+HTTP server). Each sub-directory has its **own `.git`, history and remote**
+and is gitignored here. This repo versions only:
 
 - the aggregating `pom.xml` (a pure aggregator, **not** a parent pom), and
 - shared scripts / docs (`aggregate_allure.py`, `allure-serve.sh`,
