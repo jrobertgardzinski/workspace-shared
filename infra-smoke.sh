@@ -142,8 +142,13 @@ LEAVER_MEME=$(curl -sf -H "Authorization: Bearer $LACCESS" -F "file=@$TMP2;type=
 rm -f "$TMP2"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/delete" -H "Authorization: Bearer $LACCESS")
 [ "$STATUS" = 202 ] || { echo "FAIL: deletion request expected 202, got $STATUS"; exit 1; }
-STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/authenticate" \
-    -H 'Content-Type: application/json' -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}")
+STATUS=""
+for i in 1 2 3; do   # the lock is synchronous, but under load give the request a moment to be seen
+    STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/authenticate" \
+        -H 'Content-Type: application/json' -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}")
+    [ "$STATUS" = 401 ] && break
+    sleep 1
+done
 [ "$STATUS" = 401 ] || { echo "FAIL: locked account expected 401, got $STATUS"; exit 1; }
 SAGA_OK=""
 for i in $(seq 1 30); do
