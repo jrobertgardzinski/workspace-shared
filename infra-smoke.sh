@@ -107,6 +107,57 @@ R=$(vote "$MEMES/memes/$MEME_ID/comments/$COMMENT_ID/votes" | python3 -c 'import
 [ "$R" = 0 ] || { echo "FAIL: repeated comment up-vote should retract (0), got '$R'"; exit 1; }
 curl -sf "$MEMES/memes/hot" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from /memes/hot"; exit 1; }
 
+step "account-deletion SAGA: memes purged, comments elsewhere anonymised, account gone"
+LEAVER="smoke-leaver-$(date +%s)@example.com"
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}" >/dev/null
+LTOKEN=""
+for i in $(seq 1 30); do
+    MSG=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | python3 -c \
+        'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
+    [ -n "$MSG" ] && { LTOKEN=$(curl -sf "$MAIL_UI/api/v1/message/$MSG" | python3 -c \
+        'import json,sys,re; print(re.search(r"(?:token|verify)=([A-Za-z0-9_\-]+)", json.load(sys.stdin)["Text"]).group(1))'); break; }
+    sleep 1
+done
+curl -sf -X POST "$SEC/verify-email" -H 'Content-Type: application/json' -d "{\"token\":\"$LTOKEN\"}" >/dev/null
+LACCESS=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+# the leaver comments on someone else's meme (stays, anonymised) and uploads their own (goes away)
+curl -sf -X POST "$MEMES/memes/$MEME_ID/comments" -H "Authorization: Bearer $LACCESS" \
+    -H 'Content-Type: application/json' -d '{"text":"Lorem ipsum"}' >/dev/null
+TMP2=$(mktemp --suffix=.bmp)
+python3 - "$TMP2" <<'EOF'
+import os, struct, sys
+w, h = 2, 2
+row = os.urandom(3) * w + b'\x00' * ((4 - (w * 3) % 4) % 4)
+pixels = row * h
+header = b'BM' + struct.pack('<IHHI', 54 + len(pixels), 0, 0, 54) \
+       + struct.pack('<IiiHHIIiiII', 40, w, h, 1, 24, 0, len(pixels), 2835, 2835, 0, 0)
+open(sys.argv[1], 'wb').write(header + pixels)
+EOF
+LEAVER_MEME=$(curl -sf -H "Authorization: Bearer $LACCESS" -F "file=@$TMP2;type=image/bmp" "$MEMES/memes" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+rm -f "$TMP2"
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/delete" -H "Authorization: Bearer $LACCESS")
+[ "$STATUS" = 202 ] || { echo "FAIL: deletion request expected 202, got $STATUS"; exit 1; }
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/authenticate" \
+    -H 'Content-Type: application/json' -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}")
+[ "$STATUS" = 401 ] || { echo "FAIL: locked account expected 401, got $STATUS"; exit 1; }
+SAGA_OK=""
+for i in $(seq 1 30); do
+    MEME_GONE=$(curl -s -o /dev/null -w '%{http_code}' "$MEMES/memes/$LEAVER_MEME")
+    ANON=$(curl -sf "$MEMES/memes/$MEME_ID/comments" | python3 -c \
+        'import json,sys; cs=json.load(sys.stdin); print(any(c["author"]=="deleted account" and c["text"]=="Lorem ipsum" for c in cs))')
+    REREG=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/register" -H 'Content-Type: application/json' \
+        -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}")
+    if [ "$MEME_GONE" = 404 ] && [ "$ANON" = True ] && [ "$REREG" = 201 ]; then SAGA_OK=yes; break; fi
+    sleep 2
+done
+[ -n "$SAGA_OK" ] || { echo "FAIL: saga did not complete (meme:$MEME_GONE anon:$ANON rereg:$REREG)"; exit 1; }
+curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | grep -q "account is deleted" \
+    || { echo "FAIL: no goodbye mail"; exit 1; }
+
 step "resilience: a mail requested while the mail service is DOWN arrives once it is back"
 RESIL_MAIL="smoke-resil-$(date +%s)@example.com"
 docker compose stop email >/dev/null 2>&1
@@ -126,4 +177,5 @@ done
 echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
-echo "            outbox survives a mail-service outage"
+echo "            outbox survives a mail-service outage,"
+echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed"

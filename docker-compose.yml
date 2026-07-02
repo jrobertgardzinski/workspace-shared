@@ -57,8 +57,13 @@ services:
     environment:
       # writes require a bearer token that security confirms; reads (and the UI at :8083) are public
       SECURITY_URL: http://security:8080
+      # account-deletion saga: consume purge commands, confirm on memes-events
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_ENABLED: "true"
     depends_on:
       security:
+        condition: service_started
+      kafka:
         condition: service_started
 
   kafka:
