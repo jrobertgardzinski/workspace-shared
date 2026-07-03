@@ -167,8 +167,12 @@ for i in $(seq 1 30); do   # only after the purges: a 201 probe would consume th
     sleep 2
 done
 [ "$REREG" = 201 ] || { echo "FAIL: email not freed after full saga (rereg:$REREG)"; exit 1; }
-curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | grep -q "account is deleted" \
-    || { echo "FAIL: no goodbye mail"; exit 1; }
+GOODBYE=""
+for i in $(seq 1 15); do   # the goodbye mail is async (Kafka -> email -> SMTP); give it a moment
+    curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | grep -q "account is deleted" && { GOODBYE=1; break; }
+    sleep 2
+done
+[ -n "$GOODBYE" ] || { echo "FAIL: no goodbye mail"; exit 1; }
 
 step "deletion wizard: keep-popular memes survive anonymised, comments chosen to go, go"
 KEEPER="smoke-keeper-$(date +%s)@example.com"
