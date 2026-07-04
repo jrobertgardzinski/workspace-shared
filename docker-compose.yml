@@ -63,14 +63,34 @@ services:
     environment:
       # writes require a bearer token that security confirms; reads (and the UI at :8083) are public
       SECURITY_URL: http://security:8080
+      # the gallery is durable: metadata and image bytes in its own Postgres
+      DB_URL: jdbc:postgresql://memes-postgres:5432/memes
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       # account-deletion saga (memes axis) + MEME_DELETED announcements for the comments service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_ENABLED: "true"
     depends_on:
+      memes-postgres:
+        condition: service_healthy
       security:
         condition: service_started
       kafka:
         condition: service_started
+
+  memes-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: memes
+    volumes:
+      - memes_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d memes"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
 
   comments:
     build:
@@ -219,6 +239,7 @@ services:
 
 volumes:
   security_pgdata:
+  memes_pgdata:
   paddock_pgdata:
   comments_pgdata:
   formula_pgdata:
