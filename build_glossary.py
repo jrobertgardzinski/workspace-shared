@@ -137,7 +137,7 @@ def _layer(parts):
         return "system"
     if "config" in parts:
         return "config"
-    if "domain" in parts:
+    if "domain" in parts or "tags" in parts:   # `tags` is memes' domain vocabulary (the Tag VO)
         return "domain"
     if "boundary" in parts:
         return "boundary"
@@ -158,7 +158,7 @@ def collect_terms():
             continue
         parts = java.parts
         if not ("domain" in parts or "config" in parts or "boundary" in parts
-                or "control" in parts or "entity" in parts
+                or "control" in parts or "entity" in parts or "tags" in parts
                 or any(p.endswith("-system") for p in parts)):
             continue
         layer = _layer(parts)
