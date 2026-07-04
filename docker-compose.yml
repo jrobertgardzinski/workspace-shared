@@ -144,7 +144,9 @@ services:
 
   race-sim:
     build:
-      context: formula-simulator/sim/race
+      # repo-root context: the image also ships tracks/ (incident replays draw from it)
+      context: formula-simulator
+      dockerfile: sim/race/Dockerfile
     ports:
       - "8090:8090"
 
