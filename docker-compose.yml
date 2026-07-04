@@ -11,6 +11,7 @@
 #   8083  microservice-memes     (gallery UI at /; uploads/votes need signing in)
 #   8085  microservice-comments  (comment threads + comment votes)
 #   8086  microservice-paddock   (the social hub: servers, people, events; PWA at /)
+#   ----  image-encoder          (internal: PNG->WebP for memes; Python + Pillow)
 #   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
 #   8090  race-sim               (Python race module — the simulation prototype)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
@@ -70,6 +71,8 @@ services:
       # account-deletion saga (memes axis) + MEME_DELETED announcements for the comments service
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_ENABLED: "true"
+      # smaller WebP to clients that accept it; if the encoder is down, PNG is still served
+      IMAGE_ENCODER_URL: http://image-encoder:8087
     depends_on:
       memes-postgres:
         condition: service_healthy
@@ -77,6 +80,11 @@ services:
         condition: service_started
       kafka:
         condition: service_started
+
+  image-encoder:
+    build:
+      context: microservice-image
+    # internal only — memes calls it; not published to the host
 
   memes-postgres:
     image: postgres:16-alpine
