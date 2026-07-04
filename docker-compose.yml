@@ -11,6 +11,7 @@
 #   8083  microservice-memes     (gallery UI at /; uploads/votes need signing in)
 #   8085  microservice-comments  (comment threads + comment votes)
 #   8086  microservice-paddock   (the social hub: servers, people, events; PWA at /)
+#   ----  sms / push             (internal: paddock notification channels; stub-send by default)
 #   ----  image-encoder          (internal: PNG->WebP for memes; Python + Pillow)
 #   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
 #   8090  race-sim               (Python race module — the simulation prototype)
@@ -147,11 +148,31 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       SECURITY_URL: http://security:8080
+      # notification channels — each its own service; a blank URL disables that channel.
+      # email listens on 8080 inside the network (8082 is only the host-published port)
+      EMAIL_URL: http://email:8080
+      EMAIL_API_KEY: ${MAIL_API_KEY:-local-dev-key}
+      SMS_URL: http://sms:8088
+      PUSH_URL: http://push:8089
     depends_on:
       paddock-postgres:
         condition: service_healthy
       security:
         condition: service_started
+      sms:
+        condition: service_started
+      push:
+        condition: service_started
+
+  sms:
+    build:
+      context: microservice-sms
+    # internal only — the paddock fans out to it; stub-sends unless SMS_PROVIDER is set
+
+  push:
+    build:
+      context: microservice-push
+    # internal only — the paddock fans out to it; stub-sends unless PUSH_PROVIDER is set
 
   paddock-postgres:
     image: postgres:16-alpine
