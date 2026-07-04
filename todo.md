@@ -38,3 +38,12 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
   skanuje też warstwy BCE i memes), a nowe use case'y (verify-email, reset
   hasła, change password/email, delete account, list/revoke sessions) weszły
   już w gotowy pipeline. (Backlog use case'ów: microservice-security/todo.md.)
+
+## W toku
+
+- **microservice-paddock (socjale wokół gry)** — walking skeleton ZROBIONY (2026-07-04):
+  vertical slices + Javalin (piąty smak) + PWA mobile-first; rejestr serwerów
+  (PRIVATE/OPEN/CHAMPIONSHIP, członkostwa), „mój paddock" z żywym stanem instancji,
+  wydarzenia z RSVP; tożsamość przez introspekcję w security; Postgres+Flyway (H2 bez
+  DB_URL); wpięty w compose (:8086). Backlog w microservice-paddock/todo.md (wydarzenia
+  wywiedzione ze stanu gry, feed aktywności z powtórkami, rejestr→provision, powiadomienia).

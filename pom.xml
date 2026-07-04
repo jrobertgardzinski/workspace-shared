@@ -38,6 +38,7 @@
         <module>microservice-memes</module>
         <module>microservice-comments</module>
         <module>formula-simulator</module>
+        <module>microservice-paddock</module>
     </modules>
 
 </project>

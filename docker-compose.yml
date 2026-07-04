@@ -10,6 +10,7 @@
 #   8082  microservice-email     (POST /mails*, X-Api-Key required)
 #   8083  microservice-memes     (gallery UI at /; uploads/votes need signing in)
 #   8085  microservice-comments  (comment threads + comment votes)
+#   8086  microservice-paddock   (the social hub: servers, people, events; PWA at /)
 #   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
 #   8090  race-sim               (Python race module — the simulation prototype)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
@@ -107,6 +108,37 @@ services:
       timeout: 3s
       retries: 15
 
+  paddock:
+    build:
+      context: microservice-paddock
+    ports:
+      - "8086:8086"
+    environment:
+      # the social hub: your servers, their live campaign state, upcoming events (PWA at :8086)
+      DB_URL: jdbc:postgresql://paddock-postgres:5432/paddock
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      SECURITY_URL: http://security:8080
+    depends_on:
+      paddock-postgres:
+        condition: service_healthy
+      security:
+        condition: service_started
+
+  paddock-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: paddock
+    volumes:
+      - paddock_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d paddock"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
   formula:
     build:
       context: formula-simulator
@@ -187,5 +219,6 @@ services:
 
 volumes:
   security_pgdata:
+  paddock_pgdata:
   comments_pgdata:
   formula_pgdata:
