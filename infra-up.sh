@@ -3,7 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,microservice-memes/memes-infrastructure \
+# every JVM service in the compose file needs its jar built on the host (Dockerfiles are
+# runtime-only); sms/push/image/idp are Python and need nothing
+./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,microservice-memes/memes-infrastructure,microservice-comments,microservice-paddock \
     -am package -DskipTests
 
 docker compose up --build -d "$@"
