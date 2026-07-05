@@ -60,6 +60,20 @@ ACCESS=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json
 ME=$(curl -sf "$SEC/me" -H "Authorization: Bearer $ACCESS")
 echo "$ME" | grep -q "$USER_MAIL" || { echo "FAIL: /me did not return the user, got: $ME"; exit 1; }
 
+step "social login: the OAuth dance against the stub IdP opens a session"
+OAUTH_MAIL="smoke-oauth-$(date +%s)@example.com"
+AUTH_URL=$(curl -s -o /dev/null -w '%{redirect_url}' "$SEC/oauth/google/start?return=http://localhost:8083/")
+case "$AUTH_URL" in http://localhost:8091/authorize*) ;; *) echo "FAIL: /oauth/google/start did not redirect to the IdP ($AUTH_URL)"; exit 1;; esac
+# the stub's automation convenience: an &email= on /authorize signs in headlessly
+CALLBACK_URL=$(curl -s -o /dev/null -w '%{redirect_url}' "$AUTH_URL&email=$OAUTH_MAIL")
+case "$CALLBACK_URL" in "$SEC/oauth/callback"*) ;; *) echo "FAIL: the stub did not send the browser back ($CALLBACK_URL)"; exit 1;; esac
+FINAL_URL=$(curl -s -o /dev/null -w '%{redirect_url}' "$CALLBACK_URL")
+case "$FINAL_URL" in *"#accessToken="*) ;; *) echo "FAIL: the callback handed back no token ($FINAL_URL)"; exit 1;; esac
+OTOKEN=${FINAL_URL#*#accessToken=}
+OME=$(curl -sf "$SEC/me" -H "Authorization: Bearer $OTOKEN")
+echo "$OME" | grep -q "$OAUTH_MAIL" \
+    || { echo "FAIL: /me does not know the federated user, got: $OME"; exit 1; }
+
 step "mail service refuses a caller without the API key"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_SVC/mails" \
     -H 'Content-Type: application/json' -d '{"to":"x@example.com","subject":"Hi","text":"Hello"}')
@@ -283,6 +297,7 @@ echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not fi
 
 echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
+echo "            social login via the stub IdP (OAuth code+PKCE -> session -> /me),"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
 echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"

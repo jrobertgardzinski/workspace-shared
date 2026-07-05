@@ -15,6 +15,7 @@
 #   ----  image-encoder          (internal: PNG->WebP for memes; Python + Pillow)
 #   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
 #   8090  race-sim               (Python race module — the simulation prototype)
+#   8091  idp                    (stub OIDC provider: social login without Google)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
 services:
   security:
@@ -39,6 +40,16 @@ services:
       # the per-IP registration throttle (default 5/15min) would trip on the smoke test, which
       # registers a handful of accounts from one host in minutes — keep the guard on, but roomy
       SECURITY_REGISTRATION_MAX_PER_WINDOW: "100"
+      # social login: the provider named "google" points at the stub IdP here; production swaps
+      # these URLs/credentials for the real thing and the dance never changes. authorize-url is
+      # what the BROWSER visits (host-published port), token/userinfo are called server-side.
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_ISSUER: http://localhost:8091
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_AUTHORIZE_URL: http://localhost:8091/authorize
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_TOKEN_URL: http://idp:8091/token
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_CLIENT_ID: demo-client
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_REDIRECT_URI: http://localhost:8080/oauth/callback
+      SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8084/
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +103,19 @@ services:
     build:
       context: microservice-image
     # internal only — memes calls it; not published to the host
+
+  # stub OIDC provider: "Sign in with Google" without Google. The browser visits its authorize
+  # form on the published port; security exchanges codes with it service-to-service.
+  idp:
+    build:
+      context: microservice-idp
+    ports:
+      - "8091:8091"   # 8090 belongs to the race sim
+    environment:
+      PORT: "8091"
+      IDP_ISSUER: http://localhost:8091
+      IDP_CLIENT_ID: demo-client
+      IDP_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
 
   memes-postgres:
     image: postgres:16-alpine
