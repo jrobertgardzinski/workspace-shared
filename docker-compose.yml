@@ -141,6 +141,9 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       SECURITY_URL: http://security:8080
+      # the offline trade-off on display: comments verifies security's JWTs against its JWKS
+      # instead of calling /me (memes keeps introspection — instant revocation awareness)
+      SECURITY_VERIFY: offline
       MEMES_URL: http://memes:8083
       # account-deletion saga (comments axis) + the MEME_DELETED thread cascade
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
