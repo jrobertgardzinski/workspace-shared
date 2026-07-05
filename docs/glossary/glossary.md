@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-202 classes · 22 feature files tagged.
+207 classes · 22 feature files tagged.
 
-## Domain (98)
+## Domain (99)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -60,6 +60,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Money** — Team money, in credits (~millions). `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/Money.java`
 - **NormalizedEmail** — An Email with provider-specific normalization applied, used for deduplication. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/NormalizedEmail.java`
 - **Observability** — How much rivals can see of one car-development parameter. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/Observability.java`
+- **PasswordlessAccountRepository** — Which accounts have no usable password — the ones born through a federated (OAuth) sign-in and not since given one. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/PasswordlessAccountRepository.java`
 - **PasswordResetNotifier** — Outbound port that delivers a password-reset link — carrying the single-use token — to a user's e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/port/PasswordResetNotifier.java`
 - **PasswordResetRepository** — Tracks pending password resets. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/PasswordResetRepository.java`
 - **PasswordResetToken** — Single-use token e-mailed to a user so they can set a new password after forgetting the old one. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/PasswordResetToken.java` · _used in_ reset-password
@@ -105,7 +106,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
 
-## Config (40)
+## Config (41)
 
 - **BlockedDomains** — _(no Javadoc yet)_ `email/email-security/email-security-config/src/main/java/com/jrobertgardzinski/email/config/BlockedDomains.java`
 - **BruteForceConfig** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/BruteForceConfig.java`
@@ -123,6 +124,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **ImageLimits** — Configuration for image optimisation: the largest dimension (width or height, in pixels) a stored meme may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ImageLimits.java`
 - **MaxBlockMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MaxBlockMinutes.java`
 - **MaxFailures** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MaxFailures.java`
+- **MfaPolicy** — How many factors a role demands. `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/mfa/MfaPolicy.java`
 - **MinBlockMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MinBlockMinutes.java`
 - **MinLength** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/MinLength.java`
 - **MortalityConfig** — The server operator's mortality setting: whether on- and off-track deaths are real (permadeath) or downgrade to career-ending injuries. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/config/mortality/MortalityConfig.java`
@@ -148,7 +150,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **TagLimits** — Server policy on tagging: how many tags one meme may carry (folksonomy, not keyword spam). `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/TagLimits.java`
 - **ThumbnailSize** — Configuration for meme thumbnails: the largest dimension (px) a generated thumbnail may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ThumbnailSize.java`
 
-## System (55)
+## System (58)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, change-email, change-password, delete-account, list-sessions, mfa, reset-password
 - **AuthenticationFactor** — One authentication method, as a plug. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/AuthenticationFactor.java`
@@ -163,6 +165,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Challenge** — What the boundary remembers between issuing a challenge and verifying the proof: the hashed secret (never the raw code) and when it expires. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/Challenge.java` · _used in_ mfa
 - **ChangePassword** — Changes a signed-in user's password: the current password must match, and the new password must meet the policy. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ChangePassword.java` · _used in_ change-password
 - **ChangePasswordResult** — Outcome of ChangePassword: the password was changed, the current password was wrong, or the new password did not meet the policy. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ChangePasswordResult.java`
+- **CodeFactor** — A one-time-code factor over a CodeChannel — the same factor for every channel that delivers a short code (e-mail, SMS, …). `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/CodeFactor.java`
 - **CodeHasher** — Hashes a one-time code for storage against a challenge — the raw code is never kept. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/CodeHasher.java`
 - **ConfirmEmailChange** — Completes an email change: a matching, unused token applies the pending change (moving the user to the new address); an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ConfirmEmailChange.java` · _used in_ change-email
 - **ConfirmEmailChangeResult** — Outcome of ConfirmEmailChange: the address was changed, or the token was rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ConfirmEmailChangeResult.java`
@@ -171,15 +174,16 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **CreatePasswordHash** — _(no Javadoc yet)_ `password/password-security/password-security-system/src/main/java/com/jrobertgardzinski/password/policy/CreatePasswordHash.java`
 - **Decision** — Whether the attempt is allowed, and if not, how long until the window frees up. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/throttle/SourceThrottle.java`
 - **DeleteAccount** — Closes a user's account (GDPR right to be forgotten): revokes every session and deletes the user, so the account can no longer authenticate and its access tokens stop authorizing. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/DeleteAccount.java`
-- **EmailCodeFactor** — The e-mail second factor: on #issueChallenge it mints a random numeric code, sends it through the CodeChannel (an outbox mail event in production, a capturing double in tests), and remembers only its hash and expiry. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/EmailCodeFactor.java`
 - **EmailErrorCodes** — The email error codes of a registration attempt — a type deliberately distinct from PasswordErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/EmailErrorCodes.java`
-- **EnrolFactor** — Enrol a new factor for a signed-in user, in two steps that prove they control what they are adding: #start issues the factor's challenge (a code to the address/number they gave), #confirm accepts one correct proof and persists the factor. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/EnrolFactor.java`
+- **EnrolFactor** — Enrol a new factor for a signed-in user, in two steps that prove they control what they are adding: #start begins the factor (a code factor sends a code to the target; a possession factor generates a secret and returns what to show — a TOTP otpauth:// URI), #confirm accepts one correct proof and persists the factor. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/EnrolFactor.java`
 - **EnrolmentChallengeStore** — The half-finished enrolments — a user has asked to add a factor and a challenge went out, but the proof has not come back yet. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/EnrolmentChallengeStore.java`
+- **EnrolmentSetup** — What beginning a factor's enrolment produces. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/EnrolmentSetup.java`
 - **FactorRegistry** — The factors this deployment offers, keyed by type — assembled from whichever AuthenticationFactor beans are enabled. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/FactorRegistry.java`
 - **FederatedSignIn** — Signs a caller in with an identity a provider vouched for — registration collapses into the first sign-in. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignIn.java` · _used in_ federated-sign-in
 - **FederatedSignInResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignInResult.java`
 - **ListActiveSessions** — Lists a user's currently active sessions, so they can see where they are signed in and choose to revoke them. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/ListActiveSessions.java` · _used in_ list-sessions
 - **Logout** — Ends a session: the refresh token names the session, and removing it invalidates the whole session at once — its refresh token can no longer be refreshed and its access token (whose hash lived on the same record) no longer authorizes. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/Logout.java` · _used in_ logout
+- **MfaCompliance** — Whether an account meets its role's factor floor. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/MfaCompliance.java`
 - **MxRecordPort** — _(no Javadoc yet)_ `email/email-security/email-security-system/src/main/java/com/jrobertgardzinski/email/external/MxRecordPort.java`
 - **PasswordErrorCodes** — The password error codes of a registration attempt — a type deliberately distinct from EmailErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/PasswordErrorCodes.java`
 - **PasswordPolicy** — _(no Javadoc yet)_ `password/password-security/password-security-system/src/main/java/com/jrobertgardzinski/password/policy/PasswordPolicy.java`
@@ -203,6 +207,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **SourceThrottle** — Per-source rate limit for the expensive anonymous endpoints: at most maxPerWindow attempts from one IpAddress in a rolling window. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/throttle/SourceThrottle.java`
 - **StartAccountDeletion** — Opens the account-closure saga (GDPR right to be forgotten): the account locks at once — every session revoked, sign-in refused — and the user's content elsewhere is asked to be purged. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/StartAccountDeletion.java` · _used in_ delete-account
 - **Status** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java`
+- **TotpFactor** — A time-based one-time-password factor (RFC 6238 over HMAC-SHA1), i.e. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/TotpFactor.java`
 - **VerifyEmail** — Completes e-mail verification: a matching, unused token marks the address verified; an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmail.java` · _used in_ verify-email
 - **VerifyEmailResult** — Outcome of VerifyEmail: the address was verified, or the token was rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmailResult.java`
 
