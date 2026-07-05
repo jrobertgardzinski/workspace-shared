@@ -50,6 +50,8 @@ services:
       SECURITY_OAUTH_PROVIDERS_GOOGLE_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
       SECURITY_OAUTH_PROVIDERS_GOOGLE_REDIRECT_URI: http://localhost:8080/oauth/callback
       SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8084/
+      # MFA SMS factor delivers codes through the shared SMS channel service (internal)
+      SECURITY_SMS_URL: http://sms:8088
     depends_on:
       postgres:
         condition: service_healthy

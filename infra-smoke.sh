@@ -140,6 +140,46 @@ MFA_SESSION=$(curl -s -X POST "$SEC/authenticate/factor" -H 'Content-Type: appli
 curl -sf "$SEC/me" -H "Authorization: Bearer $MFA_SESSION" | grep -q "$MFA_MAIL" \
     || { echo "FAIL: /me does not know the MFA user after the two-step sign-in"; exit 1; }
 
+step "MFA: TOTP (authenticator app) — enrol with an otpauth secret, sign in with a computed code"
+TOTP_MAIL="smoke-totp-$(date +%s)@example.com"
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$TOTP_MAIL\",\"password\":\"$PASSWORD\"}" >/dev/null
+for i in $(seq 1 30); do
+    MSG=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$TOTP_MAIL" | python3 -c \
+        'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
+    [ -n "$MSG" ] && { TT=$(curl -sf "$MAIL_UI/api/v1/message/$MSG" | python3 -c \
+        'import json,sys,re; print(re.search(r"(?:token|verify)=([A-Za-z0-9_\-]+)", json.load(sys.stdin)["Text"]).group(1))'); break; }
+    sleep 1
+done
+curl -sf -X POST "$SEC/verify-email" -H 'Content-Type: application/json' -d "{\"token\":\"$TT\"}" >/dev/null
+TOTP_ACCESS=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$TOTP_MAIL\",\"password\":\"$PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+# computes the current TOTP code from a base32 secret (stdlib only)
+totp_code() { python3 - "$1" <<'PY'
+import base64, hashlib, hmac, struct, sys, time
+key = base64.b32decode(sys.argv[1] + "=" * (-len(sys.argv[1]) % 8))
+counter = struct.pack(">Q", int(time.time()) // 30)
+h = hmac.new(key, counter, hashlib.sha1).digest()
+o = h[-1] & 0x0f
+print("%06d" % ((struct.unpack(">I", h[o:o+4])[0] & 0x7fffffff) % 1000000))
+PY
+}
+OTPAUTH=$(curl -sf -X POST "$SEC/account/factors/TOTP/enroll/start" -H "Authorization: Bearer $TOTP_ACCESS" \
+    -H 'Content-Type: application/json' -d '{}' | python3 -c 'import json,sys; print(json.load(sys.stdin).get("display",""))')
+SECRET=$(echo "$OTPAUTH" | python3 -c 'import sys,re; print(re.search(r"secret=([A-Z2-7]+)", sys.stdin.read()).group(1))')
+[ -n "$SECRET" ] || { echo "FAIL: TOTP enrol returned no secret"; exit 1; }
+TOTP_ENROLLED=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/factors/TOTP/enroll/confirm" \
+    -H "Authorization: Bearer $TOTP_ACCESS" -H 'Content-Type: application/json' -d "{\"code\":\"$(totp_code "$SECRET")\"}")
+[ "$TOTP_ENROLLED" = 200 ] || { echo "FAIL: TOTP enrolment ($TOTP_ENROLLED)"; exit 1; }
+TOTP_TICKET=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$TOTP_MAIL\",\"password\":\"$PASSWORD\"}" | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b.get("mfaTicket",""))')
+[ -n "$TOTP_TICKET" ] || { echo "FAIL: TOTP sign-in did not require the factor"; exit 1; }
+TOTP_SESSION=$(curl -s -X POST "$SEC/authenticate/factor" -H 'Content-Type: application/json' \
+    -d "{\"mfaTicket\":\"$TOTP_TICKET\",\"proof\":\"$(totp_code "$SECRET")\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("accessToken",""))')
+[ -n "$TOTP_SESSION" ] || { echo "FAIL: the TOTP code did not complete the sign-in"; exit 1; }
+curl -sf "$SEC/me" -H "Authorization: Bearer $TOTP_SESSION" | grep -q "$TOTP_MAIL" \
+    || { echo "FAIL: /me does not know the TOTP user after sign-in"; exit 1; }
+
 step "mail service refuses a caller without the API key"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_SVC/mails" \
     -H 'Content-Type: application/json' -d '{"to":"x@example.com","subject":"Hi","text":"Hello"}')
@@ -365,6 +405,7 @@ echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            social login via the stub IdP (OAuth code+PKCE -> session -> /me),"
 echo "            MFA: enrol e-mail factor, password -> ticket -> mailed code -> session,"
+echo "            MFA: enrol TOTP (authenticator app), password -> ticket -> computed code -> session,"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
 echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"
