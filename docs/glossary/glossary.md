@@ -2,7 +2,7 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-208 classes · 22 feature files tagged.
+212 classes · 22 feature files tagged.
 
 ## Domain (99)
 
@@ -106,7 +106,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
 
-## Config (41)
+## Config (42)
 
 - **BlockedDomains** — _(no Javadoc yet)_ `email/email-security/email-security-config/src/main/java/com/jrobertgardzinski/email/config/BlockedDomains.java`
 - **BruteForceConfig** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/BruteForceConfig.java`
@@ -147,10 +147,11 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **SpecialChars** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/SpecialChars.java`
 - **Sponsorship** — A single tunable of the economy policy. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/config/economy/vo/Sponsorship.java`
 - **StartingBudget** — A single tunable of the economy policy. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/config/economy/vo/StartingBudget.java`
+- **StepUpPolicy** — How much a sensitive action must be re-proven — step-up authentication. `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/mfa/StepUpPolicy.java`
 - **TagLimits** — Server policy on tagging: how many tags one meme may carry (folksonomy, not keyword spam). `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/TagLimits.java`
 - **ThumbnailSize** — Configuration for meme thumbnails: the largest dimension (px) a generated thumbnail may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ThumbnailSize.java`
 
-## System (59)
+## System (62)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, change-email, change-password, delete-account, list-sessions, mfa, reset-password
 - **AuthenticationFactor** — One authentication method, as a plug. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/AuthenticationFactor.java`
@@ -202,12 +203,15 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **ResetPassword** — Completes a password reset: the new password must meet the policy, and the token must match a pending reset. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/passwordreset/ResetPassword.java` · _used in_ reset-password
 - **ResetPasswordResult** — Outcome of ResetPassword: the password was reset, the token was rejected, or the new password did not meet the policy. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/passwordreset/ResetPasswordResult.java`
 - **Result** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java`
-- **Result** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/EnrolFactor.java`
+- **Result** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/StepUp.java`
 - **RevokeAllSessions** — Logs a user out everywhere: revokes every session the user holds, across all lineages, so no refresh token can be refreshed and no access token authorizes any longer. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RevokeAllSessions.java` · _used in_ revoke-all-sessions
+- **SessionElevation** — A short-lived, one-shot "recently re-proven" mark for step-up authentication, keyed by the caller's access token. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/SessionElevation.java`
 - **SetUserRoles** — Grant or revoke a user's roles — the admin action behind flat RBAC. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java` · _used in_ roles
 - **SourceThrottle** — Per-source rate limit for the expensive anonymous endpoints: at most maxPerWindow attempts from one IpAddress in a rolling window. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/throttle/SourceThrottle.java`
 - **StartAccountDeletion** — Opens the account-closure saga (GDPR right to be forgotten): the account locks at once — every session revoked, sign-in refused — and the user's content elsewhere is asked to be purged. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/StartAccountDeletion.java` · _used in_ delete-account
 - **Status** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java`
+- **StepUp** — Re-proves a caller for a sensitive action. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/StepUp.java`
+- **StepUpStore** — Step-ups in flight, keyed by a one-shot ticket: who is stepping up, which session (access token) to elevate on success, and the factor chain being walked. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/StepUpStore.java`
 - **TotpFactor** — A time-based one-time-password factor (RFC 6238 over HMAC-SHA1), i.e. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/TotpFactor.java`
 - **VerifyEmail** — Completes e-mail verification: a matching, unused token marks the address verified; an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmail.java` · _used in_ verify-email
 - **VerifyEmailResult** — Outcome of VerifyEmail: the address was verified, or the token was rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmailResult.java`

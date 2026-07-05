@@ -260,6 +260,10 @@ EOF
 LEAVER_MEME=$(curl -sf -H "Authorization: Bearer $LACCESS" -F "file=@$TMP2;type=image/bmp" "$MEMES/memes" \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 rm -f "$TMP2"
+# deleting is step-up (FULL_CHAIN): no factors here, so re-entering the password elevates at once
+ELEV=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/step-up" -H "Authorization: Bearer $LACCESS" \
+    -H 'Content-Type: application/json' -d "{\"action\":\"delete-account\",\"password\":\"$PASSWORD\"}")
+[ "$ELEV" = 200 ] || { echo "FAIL: step-up before deletion expected 200, got $ELEV"; exit 1; }
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/delete" -H "Authorization: Bearer $LACCESS")
 [ "$STATUS" = 202 ] || { echo "FAIL: deletion request expected 202, got $STATUS"; exit 1; }
 STATUS=""
@@ -334,6 +338,8 @@ curl -sf -X POST "$MEMES/memes/$KEEPER_MEME/votes" -H "Authorization: Bearer $AC
     -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null   # the community likes it
 curl -sf -X POST "$COMMENTS/memes/$MEME_ID/comments" -H "Authorization: Bearer $KACCESS" \
     -H 'Content-Type: application/json' -d '{"text":"chosen to vanish"}' >/dev/null
+curl -sf -X POST "$SEC/account/step-up" -H "Authorization: Bearer $KACCESS" -H 'Content-Type: application/json' \
+    -d "{\"action\":\"delete-account\",\"password\":\"$PASSWORD\"}" >/dev/null
 curl -sf -X POST "$SEC/account/delete" -H "Authorization: Bearer $KACCESS" -H 'Content-Type: application/json' \
     -d '{"purge":{"memes":"KEEP_POPULAR_ANONYMIZED:1","comments":"DELETE"}}' >/dev/null
 WIZ_OK=""
