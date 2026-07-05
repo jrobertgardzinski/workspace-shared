@@ -31,6 +31,35 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
     `password:gemini-refactor`, `microservice-security:overnight/todo-cleanup`
     oraz omyłkowa gałąź `origin` na kilku remote (kandydat do skasowania).
 
+## Plan — kolejność realizacji (ustalona 2026-07-05)
+
+Szczegóły każdego punktu: microservice-security/todo.md (wpisy OAuth/MFA/step-up).
+
+1. (USER) kasacja gałęzi remote sprzed rewrite'u: `password:gemini-refactor`,
+   `microservice-security:overnight/todo-cleanup` (klasyfikator blokuje agenta).
+2. `infra-up.sh` buduje też jary comments/paddock (dziś `up --build` pada po `mvn clean`).
+3. Stub IdP jako mikroserwis (Python stdlib): /authorize+/token+userinfo, własny JWKS; w compose.
+4. Port `IdentityProvider` + adapter OIDC (Auth Code + PKCE, JDK HttpClient); stub i Google
+   różnią się tylko configiem.
+5. Tożsamości federacyjne: V10 `(provider,subject)→user`; jedno konto, wiele tożsamości;
+   `email_verified` providera spełnia bramę weryfikacji.
+6. Przepływ `/oauth/{provider}/start`+`/callback` → sesja jak dziś; feature+testy na stubie+smoke.
+7. Łączenie kont: (a) zweryfikowane→auto-link; (b) squatter→link+verified, hasło skasowane,
+   revoke sesji; (c) register na federacyjnym→quiet 201 + podpowiedź w mailu; reset="ustaw hasło".
+8. UI galerii: przycisk Google (dev→stub).
+9. [MFA, PO ANALIZIE USERA] egzekutor łańcucha (hasło ALBO provider = ogniwo #1; sesja po
+   ostatnim ogniwie).
+10. Port kodów + adaptery email/SMS (hash, TTL, jednorazowość, SourceThrottle).
+11. Enrollment per user + `PROVIDER_SATISFIES_CHAIN`.
+12. (opc.) TOTP + recovery codes.
+13. [STEP-UP] elewacja sesji (jednorazowa, TTL) + polityki per akcja NONE/SECOND_FACTORS/FULL_CHAIN.
+14. Wpięcie: delete=FULL_CHAIN, change-password=SECOND_FACTORS, revoke-all=TBD; federacyjni
+    prompt=login.
+15. Konsument offline JWT w memes/comments (JWKS zamiast /me, konfigurowalnie).
+16. Anty-enumeracja na /account/email (wzorzec quiet z /register).
+17. UI jako 3. wejście (Angular + cucumber-js/Playwright na specs/, tagi @http/@ui).
+18. (memes) flaga NSFW / moderacja treści.
+
 ## Kolejność większych tematów
 
 - **Glosariusz UL (skeleton) PRZED dodawaniem use case'ów** — SKONSUMOWANE
