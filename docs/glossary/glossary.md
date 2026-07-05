@@ -2,7 +2,7 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-207 classes · 22 feature files tagged.
+208 classes · 22 feature files tagged.
 
 ## Domain (99)
 
@@ -150,7 +150,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **TagLimits** — Server policy on tagging: how many tags one meme may carry (folksonomy, not keyword spam). `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/TagLimits.java`
 - **ThumbnailSize** — Configuration for meme thumbnails: the largest dimension (px) a generated thumbnail may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ThumbnailSize.java`
 
-## System (58)
+## System (59)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, change-email, change-password, delete-account, list-sessions, mfa, reset-password
 - **AuthenticationFactor** — One authentication method, as a plug. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/AuthenticationFactor.java`
@@ -183,6 +183,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **FederatedSignInResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignInResult.java`
 - **ListActiveSessions** — Lists a user's currently active sessions, so they can see where they are signed in and choose to revoke them. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/ListActiveSessions.java` · _used in_ list-sessions
 - **Logout** — Ends a session: the refresh token names the session, and removing it invalidates the whole session at once — its refresh token can no longer be refreshed and its access token (whose hash lived on the same record) no longer authorizes. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/Logout.java` · _used in_ logout
+- **MfaChain** — The factor chain, shared by every entry point that can trigger MFA: it opens a pending authentication over the factors that remain after link #1 (a password OR a provider login), issues each factor's challenge as it becomes current, and verifies a proof against the current factor. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/MfaChain.java`
 - **MfaCompliance** — Whether an account meets its role's factor floor. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/MfaCompliance.java`
 - **MxRecordPort** — _(no Javadoc yet)_ `email/email-security/email-security-system/src/main/java/com/jrobertgardzinski/email/external/MxRecordPort.java`
 - **PasswordErrorCodes** — The password error codes of a registration attempt — a type deliberately distinct from EmailErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/PasswordErrorCodes.java`
