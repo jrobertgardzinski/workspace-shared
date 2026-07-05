@@ -36,6 +36,9 @@ services:
       # mail-client prefetchers to consume tokens). No reset UI yet, so that link stays raw.
       VERIFY_LINK_BASE: http://localhost:8083/?verify=
       RESET_LINK_BASE: http://localhost:8080/reset-password?token=
+      # the per-IP registration throttle (default 5/15min) would trip on the smoke test, which
+      # registers a handful of accounts from one host in minutes — keep the guard on, but roomy
+      SECURITY_REGISTRATION_MAX_PER_WINDOW: "100"
     depends_on:
       postgres:
         condition: service_healthy

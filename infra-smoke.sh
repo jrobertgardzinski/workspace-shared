@@ -159,20 +159,27 @@ for i in $(seq 1 30); do
     sleep 2
 done
 [ -n "$SAGA_OK" ] || { echo "FAIL: purge incomplete (meme:$MEME_GONE anon:$ANON)"; exit 1; }
-REREG=""
-for i in $(seq 1 30); do   # only after the purges: a 201 probe would consume the freed email
-    REREG=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/register" -H 'Content-Type: application/json' \
-        -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}")
-    [ "$REREG" = 201 ] && break
-    sleep 2
-done
-[ "$REREG" = 201 ] || { echo "FAIL: email not freed after full saga (rereg:$REREG)"; exit 1; }
+# register answers 201 whether the email is taken or not (anti-enumeration), so a status probe
+# can no longer detect the freed email. The goodbye mail is sent in the same transaction that
+# deletes the user row, so once it shows up the email IS free — prove it by re-registering and
+# expecting a SECOND verification mail (a still-taken address would mail an
+# "already have an account" notice instead).
 GOODBYE=""
-for i in $(seq 1 15); do   # the goodbye mail is async (Kafka -> email -> SMTP); give it a moment
+for i in $(seq 1 30); do   # the goodbye mail is async (Kafka -> email -> SMTP); give it a moment
     curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | grep -q "account is deleted" && { GOODBYE=1; break; }
     sleep 2
 done
 [ -n "$GOODBYE" ] || { echo "FAIL: no goodbye mail"; exit 1; }
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}" >/dev/null
+VERIFY_MAILS=""
+for i in $(seq 1 15); do
+    VERIFY_MAILS=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$LEAVER" | python3 -c \
+        'import json,sys; ms=json.load(sys.stdin)["messages"]; print(sum(1 for m in ms if m["Subject"]=="Verify your email"))')
+    [ "$VERIFY_MAILS" -ge 2 ] && break
+    sleep 2
+done
+[ "$VERIFY_MAILS" -ge 2 ] || { echo "FAIL: email not freed after full saga (verification mails: $VERIFY_MAILS)"; exit 1; }
 
 step "deletion wizard: keep-popular memes survive anonymised, comments chosen to go, go"
 KEEPER="smoke-keeper-$(date +%s)@example.com"
@@ -218,14 +225,24 @@ for i in $(seq 1 30); do
     sleep 2
 done
 [ -n "$WIZ_OK" ] || { echo "FAIL: wizard policy not honoured (kept:$KEPT commentGone:$GONE)"; exit 1; }
-REREG=""
+# same freed-email proof as above: goodbye mail first, then a re-register must start a
+# brand-new verification (register alone is 201 either way — anti-enumeration)
+GOODBYE2=""
 for i in $(seq 1 30); do
-    REREG=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/register" -H 'Content-Type: application/json' \
-        -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}")
-    [ "$REREG" = 201 ] && break
+    curl -sf "$MAIL_UI/api/v1/search?query=to:$KEEPER" | grep -q "account is deleted" && { GOODBYE2=1; break; }
     sleep 2
 done
-[ "$REREG" = 201 ] || { echo "FAIL: email not freed after wizard saga (rereg:$REREG)"; exit 1; }
+[ -n "$GOODBYE2" ] || { echo "FAIL: no goodbye mail after wizard saga"; exit 1; }
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}" >/dev/null
+VERIFY_MAILS=""
+for i in $(seq 1 15); do
+    VERIFY_MAILS=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$KEEPER" | python3 -c \
+        'import json,sys; ms=json.load(sys.stdin)["messages"]; print(sum(1 for m in ms if m["Subject"]=="Verify your email"))')
+    [ "$VERIFY_MAILS" -ge 2 ] && break
+    sleep 2
+done
+[ "$VERIFY_MAILS" -ge 2 ] || { echo "FAIL: email not freed after wizard saga (verification mails: $VERIFY_MAILS)"; exit 1; }
 
 step "resilience: a mail requested while the mail service is DOWN arrives once it is back"
 RESIL_MAIL="smoke-resil-$(date +%s)@example.com"
