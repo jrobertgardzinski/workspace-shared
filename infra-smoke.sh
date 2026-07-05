@@ -74,6 +74,72 @@ OME=$(curl -sf "$SEC/me" -H "Authorization: Bearer $OTOKEN")
 echo "$OME" | grep -q "$OAUTH_MAIL" \
     || { echo "FAIL: /me does not know the federated user, got: $OME"; exit 1; }
 
+step "MFA: enrol the e-mail factor, then sign-in needs the mailed code"
+MFA_MAIL="smoke-mfa-$(date +%s)@example.com"
+curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$MFA_MAIL\",\"password\":\"$PASSWORD\"}" >/dev/null
+# verify the address (the verification link's token)
+MFA_TOKEN=""
+for i in $(seq 1 30); do
+    MSG=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$MFA_MAIL" | python3 -c \
+        'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
+    [ -n "$MSG" ] && { MFA_TOKEN=$(curl -sf "$MAIL_UI/api/v1/message/$MSG" | python3 -c \
+        'import json,sys,re; print(re.search(r"(?:token|verify)=([A-Za-z0-9_\-]+)", json.load(sys.stdin)["Text"]).group(1))'); break; }
+    sleep 1
+done
+curl -sf -X POST "$SEC/verify-email" -H 'Content-Type: application/json' -d "{\"token\":\"$MFA_TOKEN\"}" >/dev/null
+MFA_ACCESS=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$MFA_MAIL\",\"password\":\"$PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+# reads the newest 6-digit sign-in code mailed to a target (empty on any hiccup, never throws)
+read_signin_code() {
+    python3 - "$MAIL_UI" "$1" <<'PY'
+import json, re, sys, urllib.request
+mail_ui, target = sys.argv[1], sys.argv[2]
+try:
+    search = json.load(urllib.request.urlopen(f"{mail_ui}/api/v1/search?query=to:{target}"))
+    for m in search.get("messages", []):
+        if m.get("Subject") == "Your sign-in code":
+            text = json.load(urllib.request.urlopen(f"{mail_ui}/api/v1/message/{m['ID']}"))["Text"]
+            hit = re.search(r"\b(\d{6})\b", text)
+            if hit:
+                print(hit.group(1))
+                break
+except Exception:
+    pass
+PY
+}
+# wait for a sign-in code for $1 that differs from $2 (the enrolment code and the sign-in code
+# share a subject, so we must not grab the stale one that is already in the mailbox)
+latest_code() {
+    local exclude="${2:-}"
+    for i in $(seq 1 30); do
+        CODE=$(read_signin_code "$1")
+        [ -n "${CODE:-}" ] && [ "$CODE" != "$exclude" ] && { echo "$CODE"; return; }
+        sleep 1
+    done
+}
+# enrol: start sends a code, confirm seals it
+curl -sf -X POST "$SEC/account/factors/EMAIL_CODE/enroll/start" -H "Authorization: Bearer $MFA_ACCESS" \
+    -H 'Content-Type: application/json' -d '{}' >/dev/null
+ENROL_CODE=$(latest_code "$MFA_MAIL")
+[ -n "${ENROL_CODE:-}" ] || { echo "FAIL: no enrolment code mailed"; exit 1; }
+ENROLLED=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/factors/EMAIL_CODE/enroll/confirm" \
+    -H "Authorization: Bearer $MFA_ACCESS" -H 'Content-Type: application/json' -d "{\"code\":\"$ENROL_CODE\"}")
+[ "$ENROLLED" = 200 ] || { echo "FAIL: e-mail factor enrolment ($ENROLLED)"; exit 1; }
+# now the password alone yields a ticket, not a session
+MFA_RESP=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$MFA_MAIL\",\"password\":\"$PASSWORD\"}")
+TICKET=$(echo "$MFA_RESP" | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["mfaTicket"] if b.get("status")=="MFA_REQUIRED" else "")')
+[ -n "$TICKET" ] || { echo "FAIL: password alone did not require MFA ($MFA_RESP)"; exit 1; }
+# the sign-in code is the fresh one, not the enrolment code still sitting in the mailbox
+SIGNIN_CODE=$(latest_code "$MFA_MAIL" "$ENROL_CODE")
+[ -n "${SIGNIN_CODE:-}" ] || { echo "FAIL: no sign-in code mailed"; exit 1; }
+MFA_SESSION=$(curl -s -X POST "$SEC/authenticate/factor" -H 'Content-Type: application/json' \
+    -d "{\"mfaTicket\":\"$TICKET\",\"proof\":\"$SIGNIN_CODE\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("accessToken",""))')
+[ -n "$MFA_SESSION" ] || { echo "FAIL: the mailed code did not complete the sign-in"; exit 1; }
+curl -sf "$SEC/me" -H "Authorization: Bearer $MFA_SESSION" | grep -q "$MFA_MAIL" \
+    || { echo "FAIL: /me does not know the MFA user after the two-step sign-in"; exit 1; }
+
 step "mail service refuses a caller without the API key"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_SVC/mails" \
     -H 'Content-Type: application/json' -d '{"to":"x@example.com","subject":"Hi","text":"Hello"}')
@@ -298,6 +364,7 @@ echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not fi
 echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            social login via the stub IdP (OAuth code+PKCE -> session -> /me),"
+echo "            MFA: enrol e-mail factor, password -> ticket -> mailed code -> session,"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
 echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"
