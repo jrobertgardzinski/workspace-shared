@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-177 classes · 20 feature files tagged.
+180 classes · 20 feature files tagged.
 
-## Domain (89)
+## Domain (92)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -12,10 +12,11 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **AbstractTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractTokenValidityInHours.java`
 - **AccessGrant** — What a valid access token grants: whose session it is and when it expires. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/AccessGrant.java`
 - **AccessToken** — Short-lived access token issued after successful authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AccessToken.java` · _used in_ authorize, logout, revoke-all-sessions
+- **AccessTokenMint** — Outbound port that mints the access-token VALUE for a new session. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/port/AccessTokenMint.java`
 - **AccessTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/AccessTokenValidityInHours.java`
 - **AccountDeletionSaga** — Outbound port that starts the cross-service part of closing an account: other services purge the user's content, and their confirmation (or its absence) decides whether the deletion completes or rolls back. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/port/AccountDeletionSaga.java`
 - **ActiveSession** — A user's active session as shown when listing sessions: which lineage it belongs to and when its refresh token expires. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/ActiveSession.java`
-- **AuthenticationBlock** — A temporary suspension of authentication attempts from a given IpAddress. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/AuthenticationBlock.java`
+- **AuthenticationBlock** — A temporary suspension of authentication attempts from a given Source. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/AuthenticationBlock.java`
 - **AuthenticationBlockRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/AuthenticationBlockRepository.java`
 - **AuthenticationEvent** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/event/AuthenticationEvent.java`
 - **AuthenticationRequest** — A user's attempt to authenticate and gain access to the system. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/AuthenticationRequest.java`
@@ -70,6 +71,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RefreshToken** — Long-lived refresh token used to obtain a new access token without re-authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/RefreshToken.java` · _used in_ logout, reuse-detection, revoke-all-sessions
 - **RefreshTokenExpiration** — Expiration of a refresh token. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/RefreshTokenExpiration.java`
 - **RefreshTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/RefreshTokenValidityInHours.java`
+- **RegistrationNoticeNotifier** — Outbound port that tells the owner of an address that someone tried to register with it while it already has an account. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/port/RegistrationNoticeNotifier.java`
 - **Regulations** — The active era's rules as the domain cares about them: how much a team may spend on development this season (the cost cap — the anti-pay-to-win rule) and how race positions score. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/Regulations.java`
 - **RejectedAuthentication** — A recorded instance of a rejected authentication attempt. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/RejectedAuthentication.java`
 - **RejectedAuthenticationDetails** — Details of a RejectedAuthentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/RejectedAuthenticationDetails.java`
@@ -86,6 +88,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **SessionTokens** — An active session represented by a pair of tokens. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/SessionTokens.java`
 - **SessionTokensConfig** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/SessionTokensConfig.java`
 - **SimulationEngine** — Port for whatever actually races the drivers. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/port/SimulationEngine.java`
+- **Source** — The subject of brute-force accounting: who is knocking, as the boundary saw them. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/Source.java`
 - **StoredSession** — The stored essentials of a session, found by its refresh token: who it belongs to, when its refresh token expires, which lineage it belongs to (SessionFamily) and whether it is still active or already rotated. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/StoredSession.java`
 - **Tag** — A meme tag: the folksonomy's atom. `microservice-memes/memes-tags/src/main/java/com/jrobertgardzinski/memes/tags/Tag.java` · _used in_ tag-meme
 - **Team** — A constructor — one manager's team. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/entity/Team.java`
@@ -153,7 +156,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **ConfirmEmailChange** — Completes an email change: a matching, unused token applies the pending change (moving the user to the new address); an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ConfirmEmailChange.java` · _used in_ change-email
 - **ConfirmEmailChangeResult** — Outcome of ConfirmEmailChange: the address was changed, or the token was rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/ConfirmEmailChangeResult.java`
 - **CreatePasswordHash** — _(no Javadoc yet)_ `password/password-security/password-security-system/src/main/java/com/jrobertgardzinski/password/policy/CreatePasswordHash.java`
-- **Decision** — Whether the attempt is allowed, and if not, how long until the window frees up. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/RegistrationThrottle.java`
+- **Decision** — Whether the attempt is allowed, and if not, how long until the window frees up. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/throttle/SourceThrottle.java`
 - **DeleteAccount** — Closes a user's account (GDPR right to be forgotten): revokes every session and deletes the user, so the account can no longer authenticate and its access tokens stop authorizing. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/DeleteAccount.java`
 - **EmailErrorCodes** — The email error codes of a registration attempt — a type deliberately distinct from PasswordErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/EmailErrorCodes.java`
 - **ListActiveSessions** — Lists a user's currently active sessions, so they can see where they are signed in and choose to revoke them. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/ListActiveSessions.java` · _used in_ list-sessions
@@ -166,7 +169,6 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RefreshSessionResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RefreshSessionResult.java`
 - **Register** — Registers a new user from an email and a plaintext password: the email must be allowed to register and not already taken, and the password is hashed before the user is stored. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/Register.java` · _used in_ delete-account, register
 - **RegisterResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/RegisterResult.java`
-- **RegistrationThrottle** — Per-source rate limit on registration: at most maxPerWindow attempts from one IpAddress in a rolling window. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/RegistrationThrottle.java`
 - **RequestEmailChange** — Starts an email change for a signed-in user: refuses if the new address is already taken, otherwise mints a verification token, remembers the pending change, and e-mails the link to the new address (ownership must be proven before the change takes effect). `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/RequestEmailChange.java` · _used in_ change-email
 - **RequestEmailChangeResult** — Outcome of RequestEmailChange: a verification link was sent to the new address, or that address is already taken. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/RequestEmailChangeResult.java`
 - **RequestEmailVerification** — Starts e-mail verification: mints a single-use token, remembers it against the address, and e-mails the verification link. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/RequestEmailVerification.java`
@@ -176,6 +178,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Result** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java`
 - **RevokeAllSessions** — Logs a user out everywhere: revokes every session the user holds, across all lineages, so no refresh token can be refreshed and no access token authorizes any longer. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/RevokeAllSessions.java` · _used in_ revoke-all-sessions
 - **SetUserRoles** — Grant or revoke a user's roles — the admin action behind flat RBAC. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java` · _used in_ roles
+- **SourceThrottle** — Per-source rate limit for the expensive anonymous endpoints: at most maxPerWindow attempts from one IpAddress in a rolling window. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/throttle/SourceThrottle.java`
 - **StartAccountDeletion** — Opens the account-closure saga (GDPR right to be forgotten): the account locks at once — every session revoked, sign-in refused — and the user's content elsewhere is asked to be purged. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/StartAccountDeletion.java` · _used in_ delete-account
 - **Status** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/roles/SetUserRoles.java`
 - **VerifyEmail** — Completes e-mail verification: a matching, unused token marks the address verified; an unknown or already-used token is rejected. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/verification/VerifyEmail.java` · _used in_ verify-email
