@@ -37,16 +37,14 @@ Szczegóły każdego punktu: microservice-security/todo.md (wpisy OAuth/MFA/step
 
 1. (USER) kasacja gałęzi remote sprzed rewrite'u: `password:gemini-refactor`,
    `microservice-security:overnight/todo-cleanup` (klasyfikator blokuje agenta).
-2. `infra-up.sh` buduje też jary comments/paddock (dziś `up --build` pada po `mvn clean`).
-3. Stub IdP jako mikroserwis (Python stdlib): /authorize+/token+userinfo, własny JWKS; w compose.
-4. Port `IdentityProvider` + adapter OIDC (Auth Code + PKCE, JDK HttpClient); stub i Google
-   różnią się tylko configiem.
-5. Tożsamości federacyjne: V10 `(provider,subject)→user`; jedno konto, wiele tożsamości;
-   `email_verified` providera spełnia bramę weryfikacji.
-6. Przepływ `/oauth/{provider}/start`+`/callback` → sesja jak dziś; feature+testy na stubie+smoke.
-7. Łączenie kont: (a) zweryfikowane→auto-link; (b) squatter→link+verified, hasło skasowane,
-   revoke sesji; (c) register na federacyjnym→quiet 201 + podpowiedź w mailu; reset="ustaw hasło".
-8. UI galerii: przycisk Google (dev→stub).
+2. ~~infra-up.sh buduje też jary comments/paddock~~ — ZROBIONE (2026-07-05).
+3. ~~Stub IdP jako mikroserwis~~ — ZROBIONE (2026-07-05): `microservice-idp` (:8091), HS256
+   id_tokeny, kody jednorazowe+PKCE; NOWE REPO — czeka na `gh repo create` + push usera.
+4. ~~Port/adapter OIDC~~ — ZROBIONE: `OidcClient` (JDK HttpClient), provider = @EachProperty.
+5. ~~Tożsamości federacyjne~~ — ZROBIONE: V10, `FederatedSignIn`, konta bezhasłowe.
+6. ~~Przepływ /oauth/*~~ — ZROBIONE: feature (5 scen.) + OauthFlowHttpTest + smoke PASS live.
+7. ~~Łączenie kont a/b/c~~ — ZROBIONE (auto-link / przejęcie squattera / podpowiedź w mailu).
+8. ~~UI galerii: przycisk Google~~ — ZROBIONE (token wraca fragmentem, błąd jako notice).
 9. [MFA, PO ANALIZIE USERA] egzekutor łańcucha (hasło ALBO provider = ogniwo #1; sesja po
    ostatnim ogniwie).
 10. Port kodów + adaptery email/SMS (hash, TTL, jednorazowość, SourceThrottle).

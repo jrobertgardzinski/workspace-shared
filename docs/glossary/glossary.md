@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-180 classes · 20 feature files tagged.
+184 classes · 21 feature files tagged.
 
-## Domain (92)
+## Domain (94)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -43,6 +43,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Era** — The active rulebook the whole field races under (e.g. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/Era.java`
 - **EraChange** — The result of moving to the next era: the new rulebook in force and the car reshaped to it. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/EraChange.java`
 - **FailuresCount** — Consecutive failed authentication count for a given IpAddress. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/FailuresCount.java`
+- **FederatedIdentityRepository** — The links between external identities and local accounts: one account, many identities — a password, a Google subject, one day a Facebook subject are equal keys to the same user. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/FederatedIdentityRepository.java`
 - **GameRepository** — Durability for the domain aggregates, one thing at a time: a team by its manager key, a driver, a contract by driver id, the shared season and championship. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/repository/GameRepository.java`
 - **GameWorld** — The durable game state rehydrated on startup: the teams (by manager key), the driver contracts (by driver id), where the season stands, the championship so far, the drivers on the books and their developable personnel state (by driver id). `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/repository/GameWorld.java`
 - **HashAlgorithmPort** — _(no Javadoc yet)_ `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/HashAlgorithmPort.java`
@@ -61,6 +62,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Personnel** — A person's developable state, alongside their durable attributes (which are the BASE). `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/entity/Personnel.java`
 - **PersonStatus** — Where a person is in their working life. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/PersonStatus.java`
 - **PlaintextPassword** — A password as entered by the user, before hashing. `password/password-domain/src/main/java/com/jrobertgardzinski/password/domain/PlaintextPassword.java`
+- **ProviderIdentity** — What an external identity provider asserted about the caller, after the boundary has walked the OAuth dance and validated the assertion. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/ProviderIdentity.java` · _used in_ federated-sign-in
 - **PurgeChoices** — The leaver's choice of what happens to their content elsewhere, made in the deletion wizard and carried through the saga. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/PurgeChoices.java`
 - **RaceResult** — The classification of a finished race, best first. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/RaceResult.java`
 - **RaceSimulation** — The external race/engineering simulation, as the domain needs it — in domain terms, not JSON. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/port/RaceSimulation.java`
@@ -94,7 +96,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Team** — A constructor — one manager's team. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/entity/Team.java`
 - **TrainingSimulation** — The personnel-development simulation as the domain needs it: advance one person a training week and get their new developable state back. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/port/TrainingSimulation.java`
 - **TunnelLevel** — How hard a wind-tunnel / R&D programme is pushed. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/TunnelLevel.java`
-- **User** — A registered participant in the system, with the Roles they hold. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, change-email, change-password, delete-account, list-sessions, logout, refresh-session, register, reset-password, reuse-detection, revoke-all-sessions, roles, verify-email
+- **User** — A registered participant in the system, with the Roles they hold. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/entity/User.java` · _used in_ authenticate, authorize, change-email, change-password, delete-account, federated-sign-in, list-sessions, logout, refresh-session, register, reset-password, reuse-detection, revoke-all-sessions, roles, verify-email
 - **UserRegistration** — A prospective user's request to join the system, with the password already hashed. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/UserRegistration.java`
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
@@ -141,7 +143,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **TagLimits** — Server policy on tagging: how many tags one meme may carry (folksonomy, not keyword spam). `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/TagLimits.java`
 - **ThumbnailSize** — Configuration for meme thumbnails: the largest dimension (px) a generated thumbnail may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ThumbnailSize.java`
 
-## System (40)
+## System (42)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, change-email, change-password, delete-account, list-sessions, reset-password
 - **AuthenticationFactory** — Public assembly seam for Authentication. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/AuthenticationFactory.java`
@@ -159,6 +161,8 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **Decision** — Whether the attempt is allowed, and if not, how long until the window frees up. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/throttle/SourceThrottle.java`
 - **DeleteAccount** — Closes a user's account (GDPR right to be forgotten): revokes every session and deletes the user, so the account can no longer authenticate and its access tokens stop authorizing. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/account/DeleteAccount.java`
 - **EmailErrorCodes** — The email error codes of a registration attempt — a type deliberately distinct from PasswordErrorCodes, so the two channels can never be swapped when a RegisterResult.Rejected is built. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/registration/EmailErrorCodes.java`
+- **FederatedSignIn** — Signs a caller in with an identity a provider vouched for — registration collapses into the first sign-in. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignIn.java` · _used in_ federated-sign-in
+- **FederatedSignInResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignInResult.java`
 - **ListActiveSessions** — Lists a user's currently active sessions, so they can see where they are signed in and choose to revoke them. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/ListActiveSessions.java` · _used in_ list-sessions
 - **Logout** — Ends a session: the refresh token names the session, and removing it invalidates the whole session at once — its refresh token can no longer be refreshed and its access token (whose hash lived on the same record) no longer authorizes. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/Logout.java` · _used in_ logout
 - **MxRecordPort** — _(no Javadoc yet)_ `email/email-security/email-security-system/src/main/java/com/jrobertgardzinski/email/external/MxRecordPort.java`
@@ -216,6 +220,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - `microservice-security/specs/change-email.feature` — `Authentication` `ConfirmEmailChange` `Email` `RequestEmailChange` `User`
 - `microservice-security/specs/change-password.feature` — `Authentication` `ChangePassword` `User`
 - `microservice-security/specs/delete-account.feature` — `Authentication` `Register` `StartAccountDeletion` `User`
+- `microservice-security/specs/federated-sign-in.feature` — `FederatedSignIn` `ProviderIdentity` `User`
 - `microservice-security/specs/list-sessions.feature` — `Authentication` `ListActiveSessions` `User`
 - `microservice-security/specs/logout.feature` — `AccessToken` `Logout` `RefreshSession` `RefreshToken` `User`
 - `microservice-security/specs/refresh-session.feature` — `RefreshSession` `User`
