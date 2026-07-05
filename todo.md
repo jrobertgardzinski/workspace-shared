@@ -39,7 +39,7 @@ Szczegóły każdego punktu: microservice-security/todo.md (wpisy OAuth/MFA/step
    `microservice-security:overnight/todo-cleanup` (klasyfikator blokuje agenta).
 2. ~~infra-up.sh buduje też jary comments/paddock~~ — ZROBIONE (2026-07-05).
 3. ~~Stub IdP jako mikroserwis~~ — ZROBIONE (2026-07-05): `microservice-idp` (:8091), HS256
-   id_tokeny, kody jednorazowe+PKCE; NOWE REPO — czeka na `gh repo create` + push usera.
+   id_tokeny, kody jednorazowe+PKCE; repo na GitHubie (PRIVATE — decyzja usera), spushowane.
 4. ~~Port/adapter OIDC~~ — ZROBIONE: `OidcClient` (JDK HttpClient), provider = @EachProperty.
 5. ~~Tożsamości federacyjne~~ — ZROBIONE: V10, `FederatedSignIn`, konta bezhasłowe.
 6. ~~Przepływ /oauth/*~~ — ZROBIONE: feature (5 scen.) + OauthFlowHttpTest + smoke PASS live.
