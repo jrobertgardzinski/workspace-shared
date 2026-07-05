@@ -55,6 +55,9 @@ services:
       QUARKUS_MAILER_HOST: mailpit
       QUARKUS_MAILER_PORT: "1025"
       QUARKUS_MAILER_MOCK: "false"
+      # the prod profile defaults to STARTTLS=REQUIRED (real submission endpoints); Mailpit
+      # speaks plain SMTP only, so the local stack opts out explicitly
+      MAIL_SMTP_START_TLS: DISABLED
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     depends_on:
       - mailpit
