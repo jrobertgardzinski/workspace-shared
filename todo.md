@@ -53,10 +53,10 @@ Szczegóły każdego punktu: microservice-security/todo.md (wpisy OAuth/MFA/step
 13. [STEP-UP] elewacja sesji (jednorazowa, TTL) + polityki per akcja NONE/SECOND_FACTORS/FULL_CHAIN.
 14. Wpięcie: delete=FULL_CHAIN, change-password=SECOND_FACTORS, revoke-all=TBD; federacyjni
     prompt=login.
-15. Konsument offline JWT w memes/comments (JWKS zamiast /me, konfigurowalnie).
-16. Anty-enumeracja na /account/email (wzorzec quiet z /register).
-17. UI jako 3. wejście (Angular + cucumber-js/Playwright na specs/, tagi @http/@ui).
-18. (memes) flaga NSFW / moderacja treści.
+15. ~~Konsument offline JWT w memes/comments~~ — ZROBIONE (2026-07-05): brama `security.verify=offline` weryfikuje podpis EdDSA przez JWKS zamiast /me; comments biegnie offline w compose.
+16. ~~Anty-enumeracja na /account/email~~ — ZROBIONE (2026-07-05): zajęty adres = 202 jak świeży, notka mailem.
+17. ~~UI jako 3. wejście~~ — ZROBIONE (2026-07-05): security-ui (Angular) + cucumber-js/Playwright, 17 scenariuszy specs/ zielonych.
+18. ~~(memes) flaga NSFW~~ — ZROBIONE (2026-07-05): FlagMeme (moderator-only) + ContentFlags, V3, blur w galerii.
 
 ## Kolejność większych tematów
 
