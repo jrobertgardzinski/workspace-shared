@@ -31,7 +31,38 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
     `password:gemini-refactor`, `microservice-security:overnight/todo-cleanup`
     oraz omyłkowa gałąź `origin` na kilku remote (kandydat do skasowania).
 
-## Plan — kolejność realizacji (ustalona 2026-07-05)
+## Otwarte zadania (2026-07-05 wieczór — po domknięciu MFA A–F + admin reset)
+
+Kolejność ~malejącej wartości; szczegóły MFA w microservice-security/docs/mfa-design.md.
+
+1. **OAuth: Facebook + GitHub + GitLab** (zaparkowane — user chce). Uogólnić `OidcClient` na dwa
+   źródła tożsamości: `ID_TOKEN` (Google, GitLab — jest) i `USERINFO` (Facebook, GitHub —
+   exchange kodu → access_token → GET userinfo). Config per provider: `identity-source`, `scope`,
+   mapowanie pól (`subject-field`/`email-field`/`email-verified-field`), opcjonalny `emails-url`
+   (GitHub: prawdziwy verified z /user/emails), `assume-email-verified` (Facebook). `GET
+   /oauth/providers` → dynamiczne przyciski w UI (dodanie providera = tylko config). Stub IdP już
+   ma /userinfo — dołożyć w compose provider w trybie USERINFO, żeby smoke pokrył obie ścieżki.
+   ⚠ Bezpieczeństwo: linkować konto tylko przy zweryfikowanym mailu (jak dziś); Facebook bez
+   verified-flag → `assume-email-verified` świadoma decyzja deploymentu.
+2. **MFA: recovery codes jako czynnik ALTERNATYWNY** (nie obowiązkowe ogniwo!). Rozszerzyć
+   egzekutor: przy weryfikacji proofu na bieżącym ogniwie przyjąć też nieużyty recovery code
+   (skonsumować, pominąć ogniwo). `RecoveryCodeRepository` (kody hashowane, jednorazowe),
+   endpoint generujący (pokazać raz), zużycie w `ContinueAuthentication` i `StepUp`. UI: „use a
+   recovery code" na ekranie kodu.
+3. **MFA w e2e security-ui** (faza G, opcjonalny szlif). cucumber-js/Playwright: enrollment
+   e-mail/TOTP + logowanie dwustopniowe + step-up przy delete. `/test/mailbox` musi wystawić też
+   kod AUTH_CODE. (MFA już pokryte 4 testami HTTP + live smoke — niski przyrost wartości.)
+4. **(USER, zewnętrzne) Realny Google**: client-id/secret z Google Cloud Console → podmiana 4
+   env-ów w compose. Dev/smoke jadą na stub IdP bez tego.
+5. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
+   po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
+   aktualizować link w ConfirmEmailChange.
+6. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
+   niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
+7. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
+   outbox/broker wymaga przeniesienia cid z brzegu HTTP do zdarzenia (context-propagation).
+
+## Plan — kolejność realizacji (ustalona 2026-07-05) — SKONSUMOWANY
 
 Szczegóły każdego punktu: microservice-security/todo.md (wpisy OAuth/MFA/step-up).
 
