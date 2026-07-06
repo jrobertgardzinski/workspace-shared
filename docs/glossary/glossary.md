@@ -2,7 +2,7 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-212 classes · 22 feature files tagged.
+214 classes · 22 feature files tagged.
 
 ## Domain (99)
 
@@ -106,7 +106,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
 
-## Config (42)
+## Config (44)
 
 - **BlockedDomains** — _(no Javadoc yet)_ `email/email-security/email-security-config/src/main/java/com/jrobertgardzinski/email/config/BlockedDomains.java`
 - **BruteForceConfig** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/BruteForceConfig.java`
@@ -121,6 +121,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **FailureWindowMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/FailureWindowMinutes.java`
 - **HardcodedConfigSource** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/source/hardcoded/HardcodedConfigSource.java`
 - **HardcodedKey** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/domain/HardcodedKey.java`
+- **IdentitySource** — Where the validated identity comes from once the code is exchanged. `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/oauth/OauthProviderSettings.java`
 - **ImageLimits** — Configuration for image optimisation: the largest dimension (width or height, in pixels) a stored meme may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ImageLimits.java`
 - **MaxBlockMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MaxBlockMinutes.java`
 - **MaxFailures** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MaxFailures.java`
@@ -128,6 +129,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **MinBlockMinutes** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/vo/MinBlockMinutes.java`
 - **MinLength** — _(no Javadoc yet)_ `password/password-security/password-security-config/src/main/java/com/jrobertgardzinski/password/security/config/MinLength.java`
 - **MortalityConfig** — The server operator's mortality setting: whether on- and off-track deaths are real (permadeath) or downgrade to career-ending injuries. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/config/mortality/MortalityConfig.java`
+- **OauthProviderSettings** — One social-login identity provider, as the deployment configures it (security.oauth.providers.<name>.*). `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/oauth/OauthProviderSettings.java`
 - **PropertiesConfigPort** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/source/properties/PropertiesConfigPort.java`
 - **PropertiesConfigSource** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/source/properties/PropertiesConfigSource.java`
 - **PropertiesKey** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/domain/PropertiesKey.java`
