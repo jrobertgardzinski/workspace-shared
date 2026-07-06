@@ -74,6 +74,21 @@ OME=$(curl -sf "$SEC/me" -H "Authorization: Bearer $OTOKEN")
 echo "$OME" | grep -q "$OAUTH_MAIL" \
     || { echo "FAIL: /me does not know the federated user, got: $OME"; exit 1; }
 
+step "social login (USERINFO source): the github-flavoured provider signs in through /userinfo"
+PROVIDERS=$(curl -sf "$SEC/oauth/providers")
+echo "$PROVIDERS" | grep -q '"github"' \
+    || { echo "FAIL: /oauth/providers does not list github, got: $PROVIDERS"; exit 1; }
+UINFO_MAIL="smoke-userinfo-$(date +%s)@example.com"
+AUTH_URL=$(curl -s -o /dev/null -w '%{redirect_url}' "$SEC/oauth/github/start?return=http://localhost:8083/")
+case "$AUTH_URL" in http://localhost:8091/authorize*) ;; *) echo "FAIL: /oauth/github/start did not redirect to the IdP ($AUTH_URL)"; exit 1;; esac
+CALLBACK_URL=$(curl -s -o /dev/null -w '%{redirect_url}' "$AUTH_URL&email=$UINFO_MAIL")
+FINAL_URL=$(curl -s -o /dev/null -w '%{redirect_url}' "$CALLBACK_URL")
+case "$FINAL_URL" in *"#accessToken="*) ;; *) echo "FAIL: the USERINFO callback handed back no token ($FINAL_URL)"; exit 1;; esac
+UTOKEN=${FINAL_URL#*#accessToken=}
+UME=$(curl -sf "$SEC/me" -H "Authorization: Bearer $UTOKEN")
+echo "$UME" | grep -q "$UINFO_MAIL" \
+    || { echo "FAIL: /me does not know the userinfo-federated user, got: $UME"; exit 1; }
+
 step "MFA: enrol the e-mail factor, then sign-in needs the mailed code"
 MFA_MAIL="smoke-mfa-$(date +%s)@example.com"
 curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
@@ -410,6 +425,7 @@ echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not fi
 echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            social login via the stub IdP (OAuth code+PKCE -> session -> /me),"
+echo "            social login, USERINFO flavour (github-shaped: access token -> /userinfo -> session),"
 echo "            MFA: enrol e-mail factor, password -> ticket -> mailed code -> session,"
 echo "            MFA: enrol TOTP (authenticator app), password -> ticket -> computed code -> session,"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"

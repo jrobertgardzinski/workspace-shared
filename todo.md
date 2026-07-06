@@ -35,15 +35,14 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
 Kolejność ~malejącej wartości; szczegóły MFA w microservice-security/docs/mfa-design.md.
 
-1. **OAuth: Facebook + GitHub + GitLab** (zaparkowane — user chce). Uogólnić `OidcClient` na dwa
-   źródła tożsamości: `ID_TOKEN` (Google, GitLab — jest) i `USERINFO` (Facebook, GitHub —
-   exchange kodu → access_token → GET userinfo). Config per provider: `identity-source`, `scope`,
-   mapowanie pól (`subject-field`/`email-field`/`email-verified-field`), opcjonalny `emails-url`
-   (GitHub: prawdziwy verified z /user/emails), `assume-email-verified` (Facebook). `GET
-   /oauth/providers` → dynamiczne przyciski w UI (dodanie providera = tylko config). Stub IdP już
-   ma /userinfo — dołożyć w compose provider w trybie USERINFO, żeby smoke pokrył obie ścieżki.
-   ⚠ Bezpieczeństwo: linkować konto tylko przy zweryfikowanym mailu (jak dziś); Facebook bez
-   verified-flag → `assume-email-verified` świadoma decyzja deploymentu.
+1. ~~**OAuth: Facebook + GitHub + GitLab**~~ — ZROBIONE (2026-07-06). `OidcClient` uogólniony na
+   dwa źródła tożsamości (`identity-source`): `ID_TOKEN` (Google/GitLab) i `USERINFO`
+   (Facebook/GitHub — kod → access_token → GET userinfo; mapowanie pól, `emails-url` GitHub-shaped,
+   `assume-email-verified` jako świadoma decyzja — bez niej `EMAIL_NOT_VOUCHED`). `GET
+   /oauth/providers` → dynamiczne przyciski w galerii memów (dodanie providera = tylko config).
+   Compose: drugi provider „github" na stubie w trybie USERINFO; smoke kryje obie ścieżki (PASS
+   live). Przepisy realnych providerów: microservice-security/docs/oauth-providers.md. Realne
+   client-id/secret (Google/GitHub/…) pozostają zadaniem usera (pkt 4).
 2. **MFA: recovery codes jako czynnik ALTERNATYWNY** (nie obowiązkowe ogniwo!). Rozszerzyć
    egzekutor: przy weryfikacji proofu na bieżącym ogniwie przyjąć też nieużyty recovery code
    (skonsumować, pominąć ogniwo). `RecoveryCodeRepository` (kody hashowane, jednorazowe),
