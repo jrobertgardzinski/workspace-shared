@@ -21,6 +21,11 @@ docs/glossary/site/
 /test-starter/
 /adjustable-clock/
 /infrastructure-micronaut-clock/
+/microservice-idp/
+/microservice-sms/
+/microservice-push/
+/microservice-image/
+/microservice-paddock/
 
 # Compiled class file
 *.class
