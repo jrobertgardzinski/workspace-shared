@@ -43,11 +43,14 @@ Kolejność ~malejącej wartości; szczegóły MFA w microservice-security/docs/
    Compose: drugi provider „github" na stubie w trybie USERINFO; smoke kryje obie ścieżki (PASS
    live). Przepisy realnych providerów: microservice-security/docs/oauth-providers.md. Realne
    client-id/secret (Google/GitHub/…) pozostają zadaniem usera (pkt 4).
-2. **MFA: recovery codes jako czynnik ALTERNATYWNY** (nie obowiązkowe ogniwo!). Rozszerzyć
-   egzekutor: przy weryfikacji proofu na bieżącym ogniwie przyjąć też nieużyty recovery code
-   (skonsumować, pominąć ogniwo). `RecoveryCodeRepository` (kody hashowane, jednorazowe),
-   endpoint generujący (pokazać raz), zużycie w `ContinueAuthentication` i `StepUp`. UI: „use a
-   recovery code" na ekranie kodu.
+2. ~~**MFA: recovery codes jako czynnik ALTERNATYWNY**~~ — ZROBIONE (2026-07-06). `MfaChain.verify`
+   przyjmuje nieużyty recovery code zamiast proofu bieżącego ogniwa (konsumpcja atomowa —
+   warunkowy UPDATE; normalizacja wielkości liter i myślników), więc `ContinueAuthentication`
+   i `StepUp` łapią to bez zmian. `RecoveryCodeRepository` (hash SHA-256, jednorazowe, V13),
+   `GenerateRecoveryCodes` + `RecoveryCodeConfig` (count/length, warstwa config), endpointy
+   `POST/GET /account/recovery-codes` (batch pokazany RAZ; regeneracja unieważnia stary).
+   UI: security-ui (generowanie + licznik + hint na ekranie kodu), galeria (hint). Testy:
+   2 scenariusze w mfa.feature + MfaHttpTest po drucie + krok w infra-smoke.
 3. **MFA w e2e security-ui** (faza G, opcjonalny szlif). cucumber-js/Playwright: enrollment
    e-mail/TOTP + logowanie dwustopniowe + step-up przy delete. `/test/mailbox` musi wystawić też
    kod AUTH_CODE. (MFA już pokryte 4 testami HTTP + live smoke — niski przyrost wartości.)

@@ -195,6 +195,23 @@ TOTP_SESSION=$(curl -s -X POST "$SEC/authenticate/factor" -H 'Content-Type: appl
 curl -sf "$SEC/me" -H "Authorization: Bearer $TOTP_SESSION" | grep -q "$TOTP_MAIL" \
     || { echo "FAIL: /me does not know the TOTP user after sign-in"; exit 1; }
 
+step "MFA: a recovery code stands in for the factor once (generated, spent, dead on replay)"
+RC_CODES=$(curl -sf -X POST "$SEC/account/recovery-codes" -H "Authorization: Bearer $TOTP_SESSION")
+RC_FIRST=$(echo "$RC_CODES" | python3 -c 'import json,sys; print(json.load(sys.stdin)["codes"][0])')
+[ -n "$RC_FIRST" ] || { echo "FAIL: no recovery codes generated, got: $RC_CODES"; exit 1; }
+RC_TICKET=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$TOTP_MAIL\",\"password\":\"$PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("mfaTicket",""))')
+RC_SESSION=$(curl -s -X POST "$SEC/authenticate/factor" -H 'Content-Type: application/json' \
+    -d "{\"mfaTicket\":\"$RC_TICKET\",\"proof\":\"$RC_FIRST\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("accessToken",""))')
+[ -n "$RC_SESSION" ] || { echo "FAIL: the recovery code did not complete the sign-in"; exit 1; }
+RC_LEFT=$(curl -sf "$SEC/account/recovery-codes" -H "Authorization: Bearer $RC_SESSION" | python3 -c 'import json,sys; print(json.load(sys.stdin)["unused"])')
+[ "$RC_LEFT" = 9 ] || { echo "FAIL: expected 9 unused recovery codes after spending one, got $RC_LEFT"; exit 1; }
+RC_TICKET2=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$TOTP_MAIL\",\"password\":\"$PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("mfaTicket",""))')
+RC_REPLAY=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/authenticate/factor" -H 'Content-Type: application/json' \
+    -d "{\"mfaTicket\":\"$RC_TICKET2\",\"proof\":\"$RC_FIRST\"}")
+[ "$RC_REPLAY" = 401 ] || { echo "FAIL: a spent recovery code should be refused, got $RC_REPLAY"; exit 1; }
+
 step "mail service refuses a caller without the API key"
 STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$EMAIL_SVC/mails" \
     -H 'Content-Type: application/json' -d '{"to":"x@example.com","subject":"Hi","text":"Hello"}')
@@ -428,6 +445,7 @@ echo "            social login via the stub IdP (OAuth code+PKCE -> session -> /
 echo "            social login, USERINFO flavour (github-shaped: access token -> /userinfo -> session),"
 echo "            MFA: enrol e-mail factor, password -> ticket -> mailed code -> session,"
 echo "            MFA: enrol TOTP (authenticator app), password -> ticket -> computed code -> session,"
+echo "            MFA: recovery code stands in for the factor once (batch shown once; replay refused),"
 echo "            memes gated by security (401 anon; public reads; toggle votes on memes and comments),"
 echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"

@@ -2,9 +2,9 @@
 
 _Generated from the domain, config and *-system layers by `build_glossary.py` — do not edit by hand._
 
-214 classes · 22 feature files tagged.
+217 classes · 22 feature files tagged.
 
-## Domain (99)
+## Domain (100)
 
 - **AbstractEmail** — Common abstraction for all email address representations. `email/email-domain/src/main/java/com/jrobertgardzinski/email/domain/AbstractEmail.java`
 - **AbstractToken** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/AbstractToken.java`
@@ -75,6 +75,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **RaceStanding** — One classified driver in a race result: final position (1 = winner), who, and the total race time in milliseconds. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/RaceStanding.java`
 - **RankedMeme** — A meme with its current vote score, for ranking ("hot"). `microservice-memes/memes-domain/src/main/java/com/jrobertgardzinski/memes/domain/RankedMeme.java` · _used in_ vote-meme
 - **Ranking** — One row of a championship table: a competitor (a driver or a team) and their points. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/domain/vo/Ranking.java`
+- **RecoveryCodeRepository** — A user's recovery codes — single-use stand-ins for any MFA chain link they lost access to. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/RecoveryCodeRepository.java` · _used in_ mfa
 - **RefreshToken** — Long-lived refresh token used to obtain a new access token without re-authentication. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/RefreshToken.java` · _used in_ logout, reuse-detection, revoke-all-sessions
 - **RefreshTokenExpiration** — Expiration of a refresh token. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/expiration/RefreshTokenExpiration.java`
 - **RefreshTokenValidityInHours** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/RefreshTokenValidityInHours.java`
@@ -106,7 +107,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **UserRepository** — _(no Javadoc yet)_ `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/repository/UserRepository.java`
 - **VerificationToken** — Single-use token e-mailed to a user to prove they own their e-mail address. `microservice-security/security-domain/src/main/java/com/jrobertgardzinski/security/domain/vo/token/VerificationToken.java` · _used in_ verify-email
 
-## Config (44)
+## Config (45)
 
 - **BlockedDomains** — _(no Javadoc yet)_ `email/email-security/email-security-config/src/main/java/com/jrobertgardzinski/email/config/BlockedDomains.java`
 - **BruteForceConfig** — _(no Javadoc yet)_ `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/bruteforce/BruteForceConfig.java`
@@ -137,6 +138,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **PurgeRule** — What happens to a piece of a leaver's content. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/PurgeRule.java`
 - **RateLimit** — A fixed per-key, per-minute window — server policy against comment spam. `microservice-comments/src/main/java/com/jrobertgardzinski/comments/config/RateLimit.java`
 - **RateLimit** — A fixed per-key, per-minute window — server policy against abuse. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/RateLimit.java`
+- **RecoveryCodeConfig** — The shape of a recovery-code batch: how many codes a user gets and how many characters each code carries (excluding the group separators). `microservice-security/security-config/src/main/java/com/jrobertgardzinski/security/config/mfa/RecoveryCodeConfig.java`
 - **RepairUnitCost** — A single tunable of the economy policy. `formula-simulator/src/main/java/com/jrobertgardzinski/formula/config/economy/vo/RepairUnitCost.java`
 - **RepositoryConfigPort** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/source/repository/RepositoryConfigPort.java`
 - **RepositoryConfigSource** — _(no Javadoc yet)_ `config/src/main/java/com/jrobertgardzinski/config/source/repository/RepositoryConfigSource.java`
@@ -153,7 +155,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **TagLimits** — Server policy on tagging: how many tags one meme may carry (folksonomy, not keyword spam). `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/TagLimits.java`
 - **ThumbnailSize** — Configuration for meme thumbnails: the largest dimension (px) a generated thumbnail may have. `microservice-memes/memes-config/src/main/java/com/jrobertgardzinski/memes/config/ThumbnailSize.java`
 
-## System (62)
+## System (63)
 
 - **Authentication** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/authentication/Authentication.java` · _used in_ authenticate, change-email, change-password, delete-account, list-sessions, mfa, reset-password
 - **AuthenticationFactor** — One authentication method, as a plug. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/AuthenticationFactor.java`
@@ -184,6 +186,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - **FactorRegistry** — The factors this deployment offers, keyed by type — assembled from whichever AuthenticationFactor beans are enabled. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/FactorRegistry.java`
 - **FederatedSignIn** — Signs a caller in with an identity a provider vouched for — registration collapses into the first sign-in. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignIn.java` · _used in_ federated-sign-in
 - **FederatedSignInResult** — _(no Javadoc yet)_ `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/federation/FederatedSignInResult.java`
+- **GenerateRecoveryCodes** — Mints a fresh batch of recovery codes for a user: the plain codes are returned exactly once — to be shown, printed and never seen again — while only their hashes are stored. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/GenerateRecoveryCodes.java` · _used in_ mfa
 - **ListActiveSessions** — Lists a user's currently active sessions, so they can see where they are signed in and choose to revoke them. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/ListActiveSessions.java` · _used in_ list-sessions
 - **Logout** — Ends a session: the refresh token names the session, and removing it invalidates the whole session at once — its refresh token can no longer be refreshed and its access token (whose hash lived on the same record) no longer authorizes. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/session/Logout.java` · _used in_ logout
 - **MfaChain** — The factor chain, shared by every entry point that can trigger MFA: it opens a pending authentication over the factors that remain after link #1 (a password OR a provider login), issues each factor's challenge as it becomes current, and verifies a proof against the current factor. `microservice-security/security-system/src/main/java/com/jrobertgardzinski/security/system/mfa/MfaChain.java`
@@ -253,7 +256,7 @@ _Generated from the domain, config and *-system layers by `build_glossary.py` �
 - `microservice-security/specs/federated-sign-in.feature` — `FederatedSignIn` `ProviderIdentity` `User`
 - `microservice-security/specs/list-sessions.feature` — `Authentication` `ListActiveSessions` `User`
 - `microservice-security/specs/logout.feature` — `AccessToken` `Logout` `RefreshSession` `RefreshToken` `User`
-- `microservice-security/specs/mfa.feature` — `Authentication` `Challenge` `EnrolledFactor` `User`
+- `microservice-security/specs/mfa.feature` — `Authentication` `Challenge` `EnrolledFactor` `GenerateRecoveryCodes` `RecoveryCodeRepository` `User`
 - `microservice-security/specs/refresh-session.feature` — `RefreshSession` `User`
 - `microservice-security/specs/register.feature` — `Email` `Register` `User`
 - `microservice-security/specs/reset-password.feature` — `Authentication` `PasswordResetToken` `ResetPassword` `User`
