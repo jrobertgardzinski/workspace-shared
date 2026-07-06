@@ -51,9 +51,14 @@ Kolejność ~malejącej wartości; szczegóły MFA w microservice-security/docs/
    `POST/GET /account/recovery-codes` (batch pokazany RAZ; regeneracja unieważnia stary).
    UI: security-ui (generowanie + licznik + hint na ekranie kodu), galeria (hint). Testy:
    2 scenariusze w mfa.feature + MfaHttpTest po drucie + krok w infra-smoke.
-3. **MFA w e2e security-ui** (faza G, opcjonalny szlif). cucumber-js/Playwright: enrollment
-   e-mail/TOTP + logowanie dwustopniowe + step-up przy delete. `/test/mailbox` musi wystawić też
-   kod AUTH_CODE. (MFA już pokryte 4 testami HTTP + live smoke — niski przyrost wartości.)
+3. ~~**MFA w e2e security-ui** (faza G)~~ — ZROBIONE (2026-07-06). `mfa.feature` (5 scenariuszy,
+   w tym oba recovery) jedzie przez realny React UI (cucumber-js/Playwright, te same Gherkiny co
+   runnery JVM); `/test/mailbox/signin-code` wystawia kod AUTH_CODE; recovery codes zbierane
+   z JEDYNEGO miejsca, gdzie istnieją — ze strony po generacji. 22/22 e2e zielone. Bonus:
+   e2e od razu znalazło realny bug UI (fetch `r.ok` jest true dla 202, więc gałąź MFA nigdy nie
+   odpalała po rebuildzie na Reacta) — naprawione w signIn i submitFactor. TOTP/step-up przy
+   delete zostają poza e2e security-ui (TOTP: MfaHttpTest+smoke; step-up: galeria+smoke; delete
+   nie ma UI w security-ui).
 4. **(USER, zewnętrzne) Realny Google**: client-id/secret z Google Cloud Console → podmiana 4
    env-ów w compose. Dev/smoke jadą na stub IdP bez tego.
 5. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
