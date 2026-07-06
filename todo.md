@@ -31,43 +31,33 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
     `password:gemini-refactor`, `microservice-security:overnight/todo-cleanup`
     oraz omyłkowa gałąź `origin` na kilku remote (kandydat do skasowania).
 
-## Otwarte zadania (2026-07-05 wieczór — po domknięciu MFA A–F + admin reset)
+## Otwarte zadania (2026-07-06 — po domknięciu OAuth USERINFO + całego MFA A–G)
 
-Kolejność ~malejącej wartości; szczegóły MFA w microservice-security/docs/mfa-design.md.
+Kolejność ~malejącej wartości. Zamknięte 2026-07-06 (szczegóły: microservice-security/todo.md
++ git log): OAuth Facebook/GitHub/GitLab (`identity-source` ID_TOKEN/USERINFO, `GET
+/oauth/providers` → dynamiczne przyciski, provider = `OauthProviderSettings` w warstwie config,
+przepisy w docs/oauth-providers.md); recovery codes jako czynnik ALTERNATYWNY (V13, batch
+pokazany raz, konsumpcja atomowa w `MfaChain.verify` — sign-in i step-up za darmo); faza G
+(mfa.feature przez realny UI, 22/22 e2e; znalazła i naprawiła martwą gałąź MFA w signIn/
+submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.**
 
-1. ~~**OAuth: Facebook + GitHub + GitLab**~~ — ZROBIONE (2026-07-06). `OidcClient` uogólniony na
-   dwa źródła tożsamości (`identity-source`): `ID_TOKEN` (Google/GitLab) i `USERINFO`
-   (Facebook/GitHub — kod → access_token → GET userinfo; mapowanie pól, `emails-url` GitHub-shaped,
-   `assume-email-verified` jako świadoma decyzja — bez niej `EMAIL_NOT_VOUCHED`). `GET
-   /oauth/providers` → dynamiczne przyciski w galerii memów (dodanie providera = tylko config).
-   Compose: drugi provider „github" na stubie w trybie USERINFO; smoke kryje obie ścieżki (PASS
-   live). Przepisy realnych providerów: microservice-security/docs/oauth-providers.md. Realne
-   client-id/secret (Google/GitHub/…) pozostają zadaniem usera (pkt 4).
-2. ~~**MFA: recovery codes jako czynnik ALTERNATYWNY**~~ — ZROBIONE (2026-07-06). `MfaChain.verify`
-   przyjmuje nieużyty recovery code zamiast proofu bieżącego ogniwa (konsumpcja atomowa —
-   warunkowy UPDATE; normalizacja wielkości liter i myślników), więc `ContinueAuthentication`
-   i `StepUp` łapią to bez zmian. `RecoveryCodeRepository` (hash SHA-256, jednorazowe, V13),
-   `GenerateRecoveryCodes` + `RecoveryCodeConfig` (count/length, warstwa config), endpointy
-   `POST/GET /account/recovery-codes` (batch pokazany RAZ; regeneracja unieważnia stary).
-   UI: security-ui (generowanie + licznik + hint na ekranie kodu), galeria (hint). Testy:
-   2 scenariusze w mfa.feature + MfaHttpTest po drucie + krok w infra-smoke.
-3. ~~**MFA w e2e security-ui** (faza G)~~ — ZROBIONE (2026-07-06). `mfa.feature` (5 scenariuszy,
-   w tym oba recovery) jedzie przez realny React UI (cucumber-js/Playwright, te same Gherkiny co
-   runnery JVM); `/test/mailbox/signin-code` wystawia kod AUTH_CODE; recovery codes zbierane
-   z JEDYNEGO miejsca, gdzie istnieją — ze strony po generacji. 22/22 e2e zielone. Bonus:
-   e2e od razu znalazło realny bug UI (fetch `r.ok` jest true dla 202, więc gałąź MFA nigdy nie
-   odpalała po rebuildzie na Reacta) — naprawione w signIn i submitFactor. TOTP/step-up przy
-   delete zostają poza e2e security-ui (TOTP: MfaHttpTest+smoke; step-up: galeria+smoke; delete
-   nie ma UI w security-ui).
-4. **(USER, zewnętrzne) Realny Google**: client-id/secret z Google Cloud Console → podmiana 4
-   env-ów w compose. Dev/smoke jadą na stub IdP bez tego.
-5. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
+1. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
-6. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
+2. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
    niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
-7. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
+3. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
    outbox/broker wymaga przeniesienia cid z brzegu HTTP do zdarzenia (context-propagation).
+4. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
+   mają FK na users — saga kasująca konto zostawia osierocone wiersze (hashe, bez plaintextów);
+   dołożyć czyszczenie obu tabel do kroku kasującego usera.
+
+### (USER, zewnętrzne)
+
+- **Realny Google/GitHub/…**: client-id/secret z konsoli providera → podmiana env-ów w compose
+  wg microservice-security/docs/oauth-providers.md. Dev/smoke jadą na stub IdP bez tego.
+- **Kasacja gałęzi remote sprzed rewrite'u**: `password:gemini-refactor`,
+  `microservice-security:overnight/todo-cleanup` (klasyfikator blokuje agenta).
 
 ## Plan — kolejność realizacji (ustalona 2026-07-05) — SKONSUMOWANY
 
