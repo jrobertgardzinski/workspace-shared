@@ -7,6 +7,13 @@ datasources:
     url: http://loki:3100
     editable: true
     jsonData:
-      # click a cid in a log line and jump nowhere yet — but a derived field keeps the door open
-      # for wiring Loki->Tempo once distributed tracing lands.
       maxLines: 1000
+      # every service prints [trace=<id>] (the OTel agent feeds trace_id into the MDC); this
+      # derived field turns it into a click-through to the span waterfall in Tempo — the last
+      # stitch between the logs pillar and the traces pillar.
+      derivedFields:
+        - name: trace
+          matcherRegex: 'trace=([0-9a-f]{16,32})'
+          datasourceUid: tempo
+          url: '$${__value.raw}'
+          urlDisplayLabel: 'Trace w Tempo'
