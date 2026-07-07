@@ -1,0 +1,32 @@
+{
+  "realm": "portfolio",
+  "enabled": true,
+  "registrationAllowed": false,
+  "clients": [
+    {
+      "clientId": "security-portfolio",
+      "name": "microservice-security",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "secret": "portfolio-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/oauth/callback"],
+      "webOrigins": ["http://localhost:8080"]
+    }
+  ],
+  "users": [
+    {
+      "username": "kc-demo",
+      "email": "kc-demo@example.com",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Kaycee",
+      "lastName": "Demo",
+      "credentials": [
+        { "type": "password", "value": "StrongPassword1!", "temporary": false }
+      ]
+    }
+  ]
+}
