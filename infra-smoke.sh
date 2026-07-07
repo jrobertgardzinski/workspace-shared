@@ -240,6 +240,10 @@ step "browsing is public; comment is signed by the security identity"
 curl -sf "$MEMES/memes/$MEME_ID" | head -c 4 | grep -q PNG \
     || { echo "FAIL: meme was not served back as PNG"; exit 1; }
 curl -sf "$MEMES/memes" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from the public gallery"; exit 1; }
+
+step "the image bytes live in object storage (MinIO), not in the meme row"
+docker compose exec -T minio ls "/data/memes/$MEME_ID" >/dev/null 2>&1 \
+    || { echo "FAIL: meme $MEME_ID has no object in the MinIO bucket"; exit 1; }
 COMMENT_ID=$(curl -sf -X POST "$COMMENTS/memes/$MEME_ID/comments" -H "Authorization: Bearer $ACCESS" \
     -H 'Content-Type: application/json' -d '{"text":"smoke says hi"}' | python3 -c \
     'import json,sys; print(json.load(sys.stdin)["id"])')
