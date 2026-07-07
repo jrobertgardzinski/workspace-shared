@@ -26,6 +26,7 @@ docs/glossary/site/
 /microservice-push/
 /microservice-image/
 /microservice-paddock/
+/microservice-user-collections/
 
 # Compiled class file
 *.class

@@ -48,6 +48,8 @@ jobs:
         with: { repository: jrobertgardzinski/formula-simulator, path: formula-simulator }
       - uses: actions/checkout@v4
         with: { repository: jrobertgardzinski/microservice-paddock, path: microservice-paddock }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/microservice-user-collections, path: microservice-user-collections }
 
       - name: Set up JDK 25
         uses: actions/setup-java@v4

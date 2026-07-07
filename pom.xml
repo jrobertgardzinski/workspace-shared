@@ -39,6 +39,7 @@
         <module>microservice-comments</module>
         <module>formula-simulator</module>
         <module>microservice-paddock</module>
+        <module>microservice-user-collections</module>
     </modules>
 
 </project>
