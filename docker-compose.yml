@@ -90,6 +90,8 @@ services:
     ports:
       - "8082:8080"
     environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: email
       MAIL_API_KEY: ${MAIL_API_KEY:-local-dev-key}
       QUARKUS_MAILER_HOST: mailpit
       QUARKUS_MAILER_PORT: "1025"
@@ -98,6 +100,8 @@ services:
       # speaks plain SMTP only, so the local stack opts out explicitly
       MAIL_SMTP_START_TLS: DISABLED
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       - mailpit
       - kafka
@@ -292,6 +296,8 @@ services:
     ports:
       - "8084:8084"
     environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: formula
       RACE_SIM_URL: http://race-sim:8090
       # game actions (start race, orders, R&D, era, homologate) require a security-confirmed token
       SECURITY_URL: http://security:8080
@@ -300,6 +306,8 @@ services:
       DB_URL: jdbc:postgresql://formula-postgres:5432/formula
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       race-sim:
         condition: service_started
@@ -361,6 +369,7 @@ services:
     command: ["--config.file=/etc/prometheus/prometheus.yml"]
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
     ports:
       - "9090:9090"
 

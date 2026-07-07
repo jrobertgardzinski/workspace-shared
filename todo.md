@@ -85,8 +85,12 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    (Promtail zbiera stdout wszystkich 20 kontenerów przez Docker SD — zero zmian w serwisach),
    provisioned datasource Loki w Grafanie obok Prometheusa. Spłata cid: `{service=~".+"} |=
    "<cid>"` grepuje jedno żądanie po wszystkich serwisach naraz — zweryfikowane live (jeden cid
-   → linie z security I email w jednym zapytaniu). ZOSTAŁO (etap 5, opcjonalnie): dashboardy
-   per serwis + panel logów, alerty; OTel+Tempo (waterfall spanów, datasource Tempo + derived
+   → linie z security I email w jednym zapytaniu). ETAP 5 ZROBIONY (2026-07-07/3): dashboard „Serwisy — HTTP, JVM i logi”
+   (zmienna per serwis: RPS/czasy/5xx/heap/wątki + panel logów Loki {service="$svc"} +
+   rząd ręcznych eksporterów paddock/race-sim), agent OTel dopięty do OSTATNICH dwóch
+   JVM-ów (email, formula — Tempo widzi spany, formula nawet JDBC), alerty Prometheusa
+   (TargetDown/Http5xxBurst/HostMemoryHigh — widoczne w /alerts i Grafanie; Alertmanager
+   = produkcja); OTel+Tempo (waterfall spanów, datasource Tempo + derived
    field z Loki po cid). CI ZROBIONE: workflow w workspace (`.github/workflows/ci.yml`)
    checkoutuje 13 sub-repo i buduje cały reaktor jednym `./mvnw clean install` (testy włącznie,
    Testcontainers gdy jest Docker) — zweryfikowane lokalnie: BUILD SUCCESS, 43 moduły, 0 porażek.
