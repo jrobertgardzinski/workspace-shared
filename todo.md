@@ -134,6 +134,15 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    field Loki→Tempo** (klik w `trace=<id>` w logu otwiera waterfall — zweryfikowane live: id
    z linii security rozwiązuje się w Tempo) i user-collections w rzędzie ręcznych eksporterów.
    OBSERVABILITY: TEMAT ZAMKNIĘTY W CAŁOŚCI.
+   JAKOŚĆ UI (2026-07-07/4, „porób testy e2e, potestuj UI, porefactoruj"): (1) refaktor
+   security-ui pod zieloną siatką — 646-liniowy App.tsx rozcięty na ekrany prezentacyjne
+   (AccountScreen/MfaScreen/EntryScreens + lib.ts), stan i zachowanie w App, testidy nietknięte;
+   tsc czysty, 36/36 e2e przed I po. (2) memes-ui dostał PIERWSZĄ suitę przeglądarkową: 5
+   scenariuszy cucumber-js+Playwright na realnym trio security(test env)+memes(H2)+comments(H2),
+   porty omijają stack dockera; konta/seed przez API, UI klikany tylko w to, o czym scenariusz;
+   po drodze aria-labels na strzałkach głosów (a11y), testid score, vite proxy z env, h2 w
+   comments test→runtime (real jar wstaje bez bazy). (3) job e2e w CI prowadzi OBA UI (wspólny
+   Chromium, cache po obu lockfile'ach) — run zielony: reactor+e2e success.
 3. ~~**Odświeżanie linku federacyjnego przy change-email**~~ — ZROBIONE (2026-07-07), i głębiej niż
    sądziliśmy: „re-linkuje się przy następnym logowaniu" było ZŁUDZENIEM — provider zgłasza swój
    własny (stary) adres, więc auto-link nigdy nie znalazłby przeniesionego konta (a mógłby znaleźć
