@@ -41,14 +41,31 @@ pokazany raz, konsumpcja atomowa w `MfaChain.verify` — sign-in i step-up za da
 (mfa.feature przez realny UI, 22/22 e2e; znalazła i naprawiła martwą gałąź MFA w signIn/
 submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.**
 
-1. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
+0. **formula-simulator: wielki plan rozbudowy (ZMIANA PLANÓW 2026-07-07 — aktywny temat)** —
+   plan spisany w `formula-simulator/docs/expansion-plan.md`: ery jako dane (EraPack w
+   RegulationSet), fizyka jazdy per era i podzespół (silnik/turbolag+ERS, skrzynia, hamulce
+   z temperaturą i fade, opony crossply/radial, aero mech+aero-split, elektronika TC/ABS/LC,
+   masa/paliwo/tankowanie, bezpieczeństwo), katalog 6 er, fazy F0–F9, trzy tory pracy.
+   Realizacja w sub-repo formula-simulator (jego todo.md wskazuje plan). user-collections
+   (pkt 1) schodzi na drugi plan do odwołania.
+1. **microservice-user-collections (DECYZJA 2026-07-07: wydzielamy)** — generyczne kolekcje
+   referencji użytkownika (ulubione memy, zapisane komentarze, kiedyś watch/paddock).
+   Kształt granicy: element = opaque ref `(itemType, itemId)`; serwis NIE interpretuje
+   treści (zero synchronicznych wołań przy zapisie), brak inwariantów dzielonych z domeną
+   źródłową — to jest test wejścia dla każdego nowego typu. Hydracja szczegółów po stronie
+   UI (skasowany item = „niedostępny"), sprzątanie przez event `UserDeleted` (outbox/Kafka),
+   auth = offline JWT jak w memes/comments. NIE wchodzą: preferencje MFA (inwarianty
+   security), motyw/język/zgody (nie są referencjami — ewentualny osobny profil kiedyś).
+   Odrzucona alternatywa: favourites w memes + saved w comments (prostsza, transakcyjnie
+   spójna, ale rozmywa konteksty treści i duplikuje wzorzec per serwis).
+2. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
-2. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
+3. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
    niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
-3. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
+4. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
    outbox/broker wymaga przeniesienia cid z brzegu HTTP do zdarzenia (context-propagation).
-4. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
+5. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
    mają FK na users — saga kasująca konto zostawia osierocone wiersze (hashe, bez plaintextów);
    dołożyć czyszczenie obu tabel do kroku kasującego usera.
 
