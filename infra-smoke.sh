@@ -443,6 +443,19 @@ STREAM=$(curl -sN --max-time 20 "$FORMULA/broadcast/races/$RACE/stream")
 echo "$STREAM" | grep -q "event: frame"  || { echo "FAIL: no frames on the race stream"; exit 1; }
 echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not finish with a result"; exit 1; }
 
+step "observability: Prometheus scrapes containers, Grafana serves the dashboard"
+for i in $(seq 1 30); do
+    UP=$(curl -sf "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22cadvisor%22%7D" \
+        | python3 -c 'import json,sys; r=json.load(sys.stdin)["data"]["result"]; print(r[0]["value"][1] if r else "0")' 2>/dev/null || echo 0)
+    [ "$UP" = 1 ] && break
+    [ "$i" = 30 ] && { echo "FAIL: Prometheus never saw cAdvisor up"; exit 1; }
+    sleep 2
+done
+curl -sf http://localhost:3000/api/health | grep -q '"database": *"ok"' \
+    || { echo "FAIL: Grafana health not ok"; exit 1; }
+curl -sf "http://localhost:3000/api/dashboards/uid/stack-containers" >/dev/null \
+    || { echo "FAIL: the provisioned dashboard is missing"; exit 1; }
+
 echo
 echo "SMOKE PASS: register -> mail(Mailpit via Kafka) -> verify -> sign-in -> /me, mail auth,"
 echo "            social login via the stub IdP (OAuth code+PKCE -> session -> /me),"
@@ -454,4 +467,5 @@ echo "            memes gated by security (401 anon; public reads; toggle votes 
 echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"
 echo "            wizard override honoured: popular meme kept anonymised, chosen comments deleted,"
-echo "            formula race simulated in Python and streamed as SSE state"
+echo "            formula race simulated in Python and streamed as SSE state,"
+echo "            observability: Prometheus scrapes cAdvisor, Grafana provisioned with the stack dashboard"

@@ -58,14 +58,22 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    security), motyw/język/zgody (nie są referencjami — ewentualny osobny profil kiedyś).
    Odrzucona alternatywa: favourites w memes + saved w comments (prostsza, transakcyjnie
    spójna, ale rozmywa konteksty treści i duplikuje wzorzec per serwis).
-2. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
+2. **Observability (zlecone 2026-07-07: „Grafana itd.")** — ETAP 1 ZROBIONY tej samej
+   sesji: `observability/` + kontenery prometheus/grafana/cadvisor/node-exporter w compose
+   (Grafana :3000 anonimowo, provisioned datasource + dashboard „Stack — kontenery";
+   Prometheus :9090; metryki wszystkich kontenerów bez zmiany linijki w serwisach), wpięte
+   w infra-up/infra-smoke, zweryfikowane live (3 targety UP, 6+ kontenerów z metrykami).
+   ETAP 2 OTWARTY: `/metrics` per serwis (micrometer w security/email, actuator w memes/
+   comments, ręczny eksporter w formule + race-sim), dashboardy per serwis, correlation-id
+   w logach (stary temat „observability GO"), ew. Loki na logi.
+3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
-3. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
+4. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
    niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
-4. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
+5. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
    outbox/broker wymaga przeniesienia cid z brzegu HTTP do zdarzenia (context-propagation).
-5. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
+6. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
    mają FK na users — saga kasująca konto zostawia osierocone wiersze (hashe, bez plaintextów);
    dołożyć czyszczenie obu tabel do kroku kasującego usera.
 

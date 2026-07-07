@@ -12,4 +12,5 @@ docker compose up --build -d "$@"
 echo
 echo "security  -> http://localhost:8080    email -> http://localhost:8082"
 echo "memes     -> http://localhost:8083    mail inbox (Mailpit) -> http://localhost:8025"
+echo "grafana   -> http://localhost:3000    prometheus -> http://localhost:9090"
 echo "Smoke test: ./infra-smoke.sh"
