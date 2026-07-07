@@ -17,3 +17,13 @@ scrape_configs:
   - job_name: node
     static_configs:
       - targets: ["node-exporter:9100"]
+
+  # --- the services' own /metrics, as the sub-repos grow them (workspace todo.md, etap 2)
+  - job_name: security
+    metrics_path: /prometheus
+    static_configs:
+      - targets: ["security:8080"]
+
+  - job_name: race-sim
+    static_configs:
+      - targets: ["race-sim:8090"]
