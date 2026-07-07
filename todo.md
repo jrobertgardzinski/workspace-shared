@@ -71,15 +71,27 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    Dockerfile nadgonił F0 (obraz bez eras/ padał) i wozi teraz viewer+bolid (drive-ui
    działa Z KONTENERA, ten sam URL). ETAP 2 DOMKNIĘTY (jeszcze później tej sesji):
    paddock (ręczny /metrics jako slice, licznik per route + JVM) i formula backend (JDK,
-   ręczny /metrics) — **10/10 targetów UP**. ZOSTAŁO (etap 3, opcjonalnie): dashboardy
-   per serwis w Grafanie, Loki na logi, alerty.
+   ręczny /metrics) — **10/10 targetów UP**. ETAP 3 (traceability) ZROBIONY: correlation-id
+   przez Kafkę end-to-end (patrz pkt 5). ZOSTAŁO (etap 4, opcjonalnie): Loki (log aggregation
+   — szukanie po cid we wszystkich serwisach naraz, naturalna spłata roboty z cid), dashboardy
+   per serwis, alerty; dalej OTel+Tempo (waterfall spanów) i CI (testy na push).
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
 4. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
    niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
-5. **(opc.) Trace correlation-id przez Kafkę**: dziś tylko ścieżka synchroniczna; async przez
-   outbox/broker wymaga przeniesienia cid z brzegu HTTP do zdarzenia (context-propagation).
+5. ~~**Trace correlation-id przez Kafkę**~~ — ZROBIONE I ZWERYFIKOWANE LIVE (2026-07-07):
+   cid jedzie nagłówkiem Kafki `X-Correlation-Id` przez WSZYSTKIE granice frameworków.
+   Producent (security, Micronaut): outbox trzyma cid w kolumnie (V14), poller wysyła go
+   nagłówkiem. Konsumenci przywracają cid do MDC: memes/comments (Spring, `@Header`), security
+   (`@MessageHeader`), email (Quarkus, `IncomingKafkaRecordMetadata` + `Message<String>` +
+   ręczny ack; log `%X{cid}`). Potwierdzenia sagi niosą cid dalej (helper `KafkaTracing`,
+   bliźniak w memes/comments). **Bug złapany live**: MDC nie przechodzi przez wątki Micronauta
+   (filtr na event-loopie, outbox na wątku `@ExecuteOn`) — cid czytany teraz z atrybutu żądania
+   (`ServerRequestContext`), który Micronaut propaguje. Dowód: rejestracja z `X-Correlation-Id`
+   → ten sam cid w logu email; usunięcie konta → ten sam cid w memes+comments (saga a941e7a5).
+   email dostał brakujący filtr/log (miał 0 cid). ZOSTAŁO (opc.): async SMTP w email biegnie na
+   innych wątkach Mutiny — głębokie logi dispatchera wymagałyby smallrye-context-propagation.
 6. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
    mają FK na users — saga kasująca konto zostawia osierocone wiersze (hashe, bez plaintextów);
    dołożyć czyszczenie obu tabel do kroku kasującego usera.
