@@ -117,8 +117,18 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    outbox niesie teraz też W3C `traceparent` (kolumna V16, przechwyt z aktywnego spanu przez OTel
    API, które agent mostkuje); pooler odtwarza ten span jako rodzica przed publikacją, więc agent
    wstrzykuje `traceparent` KONTYNUUJĄCY trace. Dowód live: usunięcie konta = JEDEN trace w Tempo
-   przez security, memes, comments, user-collections i email. ZOSTAŁO (opc.): dashboardy per serwis
-   + panel logów, alerty, e2e jako osobny job CI.
+   przez security, memes, comments, user-collections i email. E2E W CI ZROBIONE (2026-07-07):
+   drugi job `e2e` w workflow workspace — te same specyfikacje Gherkina przez prawdziwe Chromium
+   (run-e2e.sh: jar w env test + Vite + cucumber-js/Playwright, passkeys na wirtualnym
+   authenticatorze włącznie); buduje tylko domknięcie -am jara security, cache npm po lockfile,
+   logi serwisu/UI jako artefakt przy porażce. Pierwszy run: ZIELONY (reactor+e2e success).
+   KEYCLOAK (2026-07-07): walidator `aud` nauczony kształtu tablicowego (string == clientId LUB
+   tablica zawierająca clientId z `azp` wskazującym nas — OIDC Core 3.1.3.7; obce azp odrzucane),
+   2 testy wire; ZWERYFIKOWANE LIVE pełnym headless dance z realnym Keycloakiem 26 (authorize →
+   formularz → code → wymiana PKCE → sesja → /me). Kontener Keycloaka NIE został w compose
+   (decyzja usera: dowód skonsumowany, waga zbędna); przepis + gotchas (KC_HOSTNAME przypina iss;
+   aud-array) w docs/oauth-providers.md. ZOSTAŁO (opc.): dashboardy per serwis + panel logów,
+   alerty.
 3. ~~**Odświeżanie linku federacyjnego przy change-email**~~ — ZROBIONE (2026-07-07), i głębiej niż
    sądziliśmy: „re-linkuje się przy następnym logowaniu" było ZŁUDZENIEM — provider zgłasza swój
    własny (stary) adres, więc auto-link nigdy nie znalazłby przeniesionego konta (a mógłby znaleźć
