@@ -27,3 +27,18 @@ scrape_configs:
   - job_name: race-sim
     static_configs:
       - targets: ["race-sim:8090"]
+
+  - job_name: email
+    metrics_path: /q/metrics
+    static_configs:
+      - targets: ["email:8080"]
+
+  - job_name: memes
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["memes:8083"]
+
+  - job_name: comments
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["comments:8085"]
