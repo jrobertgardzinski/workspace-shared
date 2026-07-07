@@ -1,0 +1,62 @@
+name: CI
+
+# The workspace is a pure aggregator: the sub-projects live in their own repos (gitignored here).
+# So CI mirrors exactly what a developer does locally — check each sub-repo out into its module
+# directory, then let the reactor build and test everything in dependency order with one command.
+# The reactor resolves the inter-project SNAPSHOTs from itself, so no publishing step is needed.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  reactor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workspace (aggregator)
+        uses: actions/checkout@v4
+
+      # The 13 aggregated sub-repos, each into the directory the aggregator pom expects.
+      # Pinned to main; a sub-repo feature branch is validated in its own repo's checks.
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/adjustable-clock, path: adjustable-clock }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/infrastructure-micronaut-clock, path: infrastructure-micronaut-clock }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/voting, path: voting }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/test-starter, path: test-starter }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/libs, path: constraint }   # the constraint lib lives in repo "libs"
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/config, path: config }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/email, path: email }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/password, path: password }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/microservice-security, path: microservice-security }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/microservice-email, path: microservice-email }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/microservice-memes, path: microservice-memes }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/microservice-comments, path: microservice-comments }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/formula-simulator, path: formula-simulator }
+      - uses: actions/checkout@v4
+        with: { repository: jrobertgardzinski/microservice-paddock, path: microservice-paddock }
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Docker is present on ubuntu-latest, so the Testcontainers tests (memes' MinIO round-trip)
+      # run rather than skip.
+      - name: Build and test the whole reactor
+        run: ./mvnw -B --no-transfer-progress clean install
