@@ -48,7 +48,19 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    masa/paliwo/tankowanie, bezpieczeństwo), katalog 6 er, fazy F0–F9, trzy tory pracy.
    Realizacja w sub-repo formula-simulator (jego todo.md wskazuje plan). user-collections
    (pkt 1) schodzi na drugi plan do odwołania.
-1. **microservice-user-collections (DECYZJA 2026-07-07: wydzielamy)** — generyczne kolekcje
+1. ~~**microservice-user-collections**~~ — ZROBIONE I ZWERYFIKOWANE LIVE (2026-07-07): szósty smak
+   **Helidon 4 SE na virtual threads**. 7 plasterków, commit na plaster: domena+use case'y
+   (opaque `ItemRef`, idempotentne save/remove/list/purge, spec-first Gherkin), Postgres+Flyway/H2
+   (jeden adapter, idempotent przez unique 23505), brama HTTP + offline-JWT (bliźniak
+   comments/memes/formula) — **ten sam feature prowadzony przez DWA wejścia** (aplikacja + czarna
+   skrzynka HTTP, jak security), konsument sagi (Kafka, cid w nagłówku), **trzeci uczestnik sagi
+   w security** (V15 `collections_purged`, topic `usercollections-events`, listener), compose+
+   własny Postgres+OTel+Prometheus, smoke rozszerzony. **`./infra-smoke.sh` PASS** — „collections
+   cleared" w sadze usuwania konta (leaver zapisał ulubione → usunięcie → kolekcja pusta). 26
+   testów w repo + 77 security zielone. ZOSTAŁO (opc.): CORS (brak UI), cid w logach Helidona
+   (JUL/MDC), traceparent w outboxie żeby saga linkowała się w jeden trace (wspólne z pkt 5).
+   --- Oryginalny opis granicy poniżej ---
+   **microservice-user-collections (DECYZJA 2026-07-07: wydzielamy)** — generyczne kolekcje
    referencji użytkownika (ulubione memy, zapisane komentarze, kiedyś watch/paddock).
    Kształt granicy: element = opaque ref `(itemType, itemId)`; serwis NIE interpretuje
    treści (zero synchronicznych wołań przy zapisie), brak inwariantów dzielonych z domeną
