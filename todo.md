@@ -78,7 +78,15 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    "<cid>"` grepuje jedno żądanie po wszystkich serwisach naraz — zweryfikowane live (jeden cid
    → linie z security I email w jednym zapytaniu). ZOSTAŁO (etap 5, opcjonalnie): dashboardy
    per serwis + panel logów, alerty; OTel+Tempo (waterfall spanów, datasource Tempo + derived
-   field z Loki po cid); CI (testy na push — dziś brak, jedyne workflow są w node_modules).
+   field z Loki po cid). CI ZROBIONE: workflow w workspace (`.github/workflows/ci.yml`)
+   checkoutuje 13 sub-repo i buduje cały reaktor jednym `./mvnw clean install` (testy włącznie,
+   Testcontainers gdy jest Docker) — zweryfikowane lokalnie: BUILD SUCCESS, 43 moduły, 0 porażek.
+   email i paddock (samowystarczalne) mają też własne, szybkie CI. ZASTRZEŻENIE: sama komenda
+   sprawdzona lokalnie, ale pierwszy run na Actions może wymagać PAT, jeśli któreś sub-repo jest
+   prywatne (domyślny GITHUB_TOKEN czyta tylko publiczne repo tego samego właściciela); JDK 25
+   temurin przez setup-java. ZOSTAŁO (etap 5, opcjonalnie): dashboardy per serwis + panel logów,
+   alerty; OTel+Tempo (waterfall spanów, derived field Loki→Tempo po cid); e2e (Playwright) jako
+   osobny job CI.
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
