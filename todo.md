@@ -69,8 +69,10 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    Przy okazji: zastany bug memes z sesji MinIO (S3ObjectStore: dwa konstruktory bez
    @Autowired = śmierć na starcie przy blob-store=s3) naprawiony w sub-repo; race-sim
    Dockerfile nadgonił F0 (obraz bez eras/ padał) i wozi teraz viewer+bolid (drive-ui
-   działa Z KONTENERA, ten sam URL). ZOSTAŁO: paddock (Javalin/micrometer), formula
-   backend (JDK, ręczny eksporter wzorem race-sim), dashboardy per serwis, ew. Loki.
+   działa Z KONTENERA, ten sam URL). ETAP 2 DOMKNIĘTY (jeszcze później tej sesji):
+   paddock (ręczny /metrics jako slice, licznik per route + JVM) i formula backend (JDK,
+   ręczny /metrics) — **10/10 targetów UP**. ZOSTAŁO (etap 3, opcjonalnie): dashboardy
+   per serwis w Grafanie, Loki na logi, alerty.
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
