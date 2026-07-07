@@ -203,7 +203,7 @@ jobs:
           java-version: '25'
           cache: maven
       - name: Build the service jars (deps closure, no tests)
-        run: ./mvnw -B -q --no-transfer-progress -pl microservice-security/security-infrastructure,microservice-memes/memes-infrastructure,microservice-comments -am package -DskipTests
+        run: ./mvnw -B -q --no-transfer-progress -pl microservice-security/security-infrastructure,microservice-memes/memes-infrastructure,microservice-comments,microservice-paddock -am package -DskipTests
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -228,9 +228,15 @@ jobs:
       - name: Drive the gallery through the browser (memes-ui)
         run: ./run-e2e.sh
         working-directory: microservice-memes/memes-ui
+      - name: Install paddock e2e dependencies
+        run: npm ci
+        working-directory: microservice-paddock
+      - name: Drive the PWA through the browser (paddock)
+        run: ./run-e2e.sh
+        working-directory: microservice-paddock
       - name: Upload service/UI logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-logs
-          path: /tmp/*-ui-e2e-*.log
+          path: /tmp/*-e2e-*.log
