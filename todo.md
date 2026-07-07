@@ -113,10 +113,12 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    się na JDK 25 ale NIC nie instrumentuje) podpięty do 4 serwisów JVM przez JAVA_TOOL_OPTIONS +
    wolumen (bez rebuildu), eksport do Tempo, datasource Tempo w Grafanie (z jumpem do logów Loki).
    Zweryfikowane live: upload → trace `[memes, security]`, odczyt komentarzy → `[comments, memes,
-   security]`. LUKA: saga usuwania konta NIE linkuje się w jeden trace — idzie przez outbox
-   drenowany async (pooler bez aktywnego spanu), ta sama granica co cid; fix = persystować W3C
-   `traceparent` w wierszu outboxa jak cid. ZOSTAŁO (opc.): traceparent w outboxie (domknięcie
-   sagi w tracingu), dashboardy per serwis + panel logów, alerty, e2e jako osobny job CI.
+   security]`. ~~LUKA: saga usuwania konta nie linkuje się w jeden trace~~ — ZAMKNIĘTE (2026-07-07):
+   outbox niesie teraz też W3C `traceparent` (kolumna V16, przechwyt z aktywnego spanu przez OTel
+   API, które agent mostkuje); pooler odtwarza ten span jako rodzica przed publikacją, więc agent
+   wstrzykuje `traceparent` KONTYNUUJĄCY trace. Dowód live: usunięcie konta = JEDEN trace w Tempo
+   przez security, memes, comments, user-collections i email. ZOSTAŁO (opc.): dashboardy per serwis
+   + panel logów, alerty, e2e jako osobny job CI.
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
