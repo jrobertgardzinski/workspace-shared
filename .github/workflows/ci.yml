@@ -4,6 +4,10 @@ name: CI
 # So CI mirrors exactly what a developer does locally — check each sub-repo out into its module
 # directory, then let the reactor build and test everything in dependency order with one command.
 # The reactor resolves the inter-project SNAPSHOTs from itself, so no publishing step is needed.
+#
+# The sub-repos are checked out with REPO_PAT — a fine-grained PAT with Contents:read on the
+# sub-repos — because some (formula-simulator, paddock) are private and the default GITHUB_TOKEN
+# only reads this repo. Set it as a repository secret named REPO_PAT.
 
 on:
   push:
@@ -18,38 +22,83 @@ jobs:
       - name: Checkout workspace (aggregator)
         uses: actions/checkout@v4
 
-      # The 13 aggregated sub-repos, each into the directory the aggregator pom expects.
+      # The 14 aggregated sub-repos, each into the directory the aggregator pom expects.
       # Pinned to main; a sub-repo feature branch is validated in its own repo's checks.
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/adjustable-clock, path: adjustable-clock }
+        with:
+          repository: jrobertgardzinski/adjustable-clock
+          path: adjustable-clock
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/infrastructure-micronaut-clock, path: infrastructure-micronaut-clock }
+        with:
+          repository: jrobertgardzinski/infrastructure-micronaut-clock
+          path: infrastructure-micronaut-clock
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/voting, path: voting }
+        with:
+          repository: jrobertgardzinski/voting
+          path: voting
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/test-starter, path: test-starter }
+        with:
+          repository: jrobertgardzinski/test-starter
+          path: test-starter
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/libs, path: constraint }   # the constraint lib lives in repo "libs"
+        with:
+          repository: jrobertgardzinski/libs   # the constraint lib lives in repo "libs"
+          path: constraint
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/config, path: config }
+        with:
+          repository: jrobertgardzinski/config
+          path: config
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/email, path: email }
+        with:
+          repository: jrobertgardzinski/email
+          path: email
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/password, path: password }
+        with:
+          repository: jrobertgardzinski/password
+          path: password
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/microservice-security, path: microservice-security }
+        with:
+          repository: jrobertgardzinski/microservice-security
+          path: microservice-security
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/microservice-email, path: microservice-email }
+        with:
+          repository: jrobertgardzinski/microservice-email
+          path: microservice-email
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/microservice-memes, path: microservice-memes }
+        with:
+          repository: jrobertgardzinski/microservice-memes
+          path: microservice-memes
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/microservice-comments, path: microservice-comments }
+        with:
+          repository: jrobertgardzinski/microservice-comments
+          path: microservice-comments
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/formula-simulator, path: formula-simulator }
+        with:
+          repository: jrobertgardzinski/formula-simulator
+          path: formula-simulator
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/microservice-paddock, path: microservice-paddock }
+        with:
+          repository: jrobertgardzinski/microservice-paddock
+          path: microservice-paddock
+          token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
-        with: { repository: jrobertgardzinski/microservice-user-collections, path: microservice-user-collections }
+        with:
+          repository: jrobertgardzinski/microservice-user-collections
+          path: microservice-user-collections
+          token: ${{ secrets.REPO_PAT }}
 
       - name: Set up JDK 25
         uses: actions/setup-java@v4
