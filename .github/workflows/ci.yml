@@ -111,3 +111,118 @@ jobs:
       # run rather than skip.
       - name: Build and test the whole reactor
         run: ./mvnw -B --no-transfer-progress clean install
+
+  # The third entry point in CI: the SAME Gherkin specs, driven through a real browser
+  # (cucumber-js + Playwright) against the security service and its React UI. Only the modules
+  # the security jar needs are built (-am closure), tests skipped — the reactor job owns those.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout workspace (aggregator)
+        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/adjustable-clock
+          path: adjustable-clock
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/infrastructure-micronaut-clock
+          path: infrastructure-micronaut-clock
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/voting
+          path: voting
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/test-starter
+          path: test-starter
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/libs   # the constraint lib lives in repo "libs"
+          path: constraint
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/config
+          path: config
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/email
+          path: email
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/password
+          path: password
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/microservice-security
+          path: microservice-security
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/microservice-email
+          path: microservice-email
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/microservice-memes
+          path: microservice-memes
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/microservice-comments
+          path: microservice-comments
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/formula-simulator
+          path: formula-simulator
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/microservice-paddock
+          path: microservice-paddock
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/microservice-user-collections
+          path: microservice-user-collections
+          token: ${{ secrets.REPO_PAT }}
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Build the security jar (deps closure, no tests)
+        run: ./mvnw -B -q --no-transfer-progress -pl microservice-security/security-infrastructure -am package -DskipTests
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: microservice-security/security-ui/package-lock.json
+      - name: Install UI dependencies
+        run: npm ci
+        working-directory: microservice-security/security-ui
+      - name: Install the Playwright browser
+        run: npx playwright install --with-deps chromium
+        working-directory: microservice-security/security-ui
+      - name: Drive the shared specs through the browser
+        run: ./run-e2e.sh
+        working-directory: microservice-security/security-ui
+      - name: Upload service/UI logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: /tmp/security-ui-e2e-*.log
