@@ -127,8 +127,13 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    2 testy wire; ZWERYFIKOWANE LIVE pełnym headless dance z realnym Keycloakiem 26 (authorize →
    formularz → code → wymiana PKCE → sesja → /me). Kontener Keycloaka NIE został w compose
    (decyzja usera: dowód skonsumowany, waga zbędna); przepis + gotchas (KC_HOSTNAME przypina iss;
-   aud-array) w docs/oauth-providers.md. ZOSTAŁO (opc.): dashboardy per serwis + panel logów,
-   alerty.
+   aud-array) w docs/oauth-providers.md. KOSMETYKA DOMKNIĘTA (2026-07-07): dashboardy per serwis
+   + panel logów + alerty zrobione (sesja równoległa: „Serwisy — HTTP, JVM i logi",
+   alert-rules.yml, [trace=] we wzorcach WSZYSTKICH serwisów); do tego „Stack — dostępność
+   i zdrowie" (metryka `up` jednolicie dla 11 targetów + panel warn/error z Loki), **derived
+   field Loki→Tempo** (klik w `trace=<id>` w logu otwiera waterfall — zweryfikowane live: id
+   z linii security rozwiązuje się w Tempo) i user-collections w rzędzie ręcznych eksporterów.
+   OBSERVABILITY: TEMAT ZAMKNIĘTY W CAŁOŚCI.
 3. ~~**Odświeżanie linku federacyjnego przy change-email**~~ — ZROBIONE (2026-07-07), i głębiej niż
    sądziliśmy: „re-linkuje się przy następnym logowaniu" było ZŁUDZENIEM — provider zgłasza swój
    własny (stary) adres, więc auto-link nigdy nie znalazłby przeniesionego konta (a mógłby znaleźć
