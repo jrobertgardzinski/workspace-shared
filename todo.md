@@ -58,6 +58,15 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    security), motyw/język/zgody (nie są referencjami — ewentualny osobny profil kiedyś).
    Odrzucona alternatywa: favourites w memes + saved w comments (prostsza, transakcyjnie
    spójna, ale rozmywa konteksty treści i duplikuje wzorzec per serwis).
+   **UWAGA — SAGA (obowiązkowe przy budowie):** user-collections to trzeci uczestnik sagi
+   usuwania konta (dziś: memes + comments). `AccountDeletionOrchestrator` w security kończy
+   usuwanie dopiero po potwierdzeniach WSZYSTKICH uczestników — trzeba dodać trzecie
+   oczekiwane potwierdzenie (nowy topic `usercollections-events`, uczestnik w `SagaParticipants`
+   / tabeli saga_participants). To jednak uczestnik PROSTY: kasuje wszystkie referencje usera
+   wholesale (nie parsuje `PurgeRule` — refy są opaque, bez DELETE/ANONYMIZE/KEEP), więc NIE
+   jest to „trzeci konsument PurgeRule" i nie wyzwala ekstrakcji wspólnej libki. Bez tej zmiany
+   saga albo nigdy się nie domknie (czeka na uczestnika, który nie odpowiada), albo kolekcje
+   usuniętego usera osierocą się.
 2. **Observability (zlecone 2026-07-07: „Grafana itd.")** — ETAP 1 ZROBIONY tej samej
    sesji: `observability/` + kontenery prometheus/grafana/cadvisor/node-exporter w compose
    (Grafana :3000 anonimowo, provisioned datasource + dashboard „Stack — kontenery";
@@ -84,9 +93,14 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    email i paddock (samowystarczalne) mają też własne, szybkie CI. ZASTRZEŻENIE: sama komenda
    sprawdzona lokalnie, ale pierwszy run na Actions może wymagać PAT, jeśli któreś sub-repo jest
    prywatne (domyślny GITHUB_TOKEN czyta tylko publiczne repo tego samego właściciela); JDK 25
-   temurin przez setup-java. ZOSTAŁO (etap 5, opcjonalnie): dashboardy per serwis + panel logów,
-   alerty; OTel+Tempo (waterfall spanów, derived field Loki→Tempo po cid); e2e (Playwright) jako
-   osobny job CI.
+   temurin przez setup-java. ETAP 5 (traces) ZROBIONY: OTel Java agent (2.29.0 — 2.11.0 ładuje
+   się na JDK 25 ale NIC nie instrumentuje) podpięty do 4 serwisów JVM przez JAVA_TOOL_OPTIONS +
+   wolumen (bez rebuildu), eksport do Tempo, datasource Tempo w Grafanie (z jumpem do logów Loki).
+   Zweryfikowane live: upload → trace `[memes, security]`, odczyt komentarzy → `[comments, memes,
+   security]`. LUKA: saga usuwania konta NIE linkuje się w jeden trace — idzie przez outbox
+   drenowany async (pooler bez aktywnego spanu), ta sama granica co cid; fix = persystować W3C
+   `traceparent` w wierszu outboxa jak cid. ZOSTAŁO (opc.): traceparent w outboxie (domknięcie
+   sagi w tracingu), dashboardy per serwis + panel logów, alerty, e2e jako osobny job CI.
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
