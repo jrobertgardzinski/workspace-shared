@@ -63,9 +63,14 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    (Grafana :3000 anonimowo, provisioned datasource + dashboard „Stack — kontenery";
    Prometheus :9090; metryki wszystkich kontenerów bez zmiany linijki w serwisach), wpięte
    w infra-up/infra-smoke, zweryfikowane live (3 targety UP, 6+ kontenerów z metrykami).
-   ETAP 2 OTWARTY: `/metrics` per serwis (micrometer w security/email, actuator w memes/
-   comments, ręczny eksporter w formule + race-sim), dashboardy per serwis, correlation-id
-   w logach (stary temat „observability GO"), ew. Loki na logi.
+   ETAP 2 W TOKU (2026-07-07 później): security (micrometer, `/prometheus`), race-sim
+   (stdlib `/metrics`: requesty/aktywne jazdy/uptime), email (quarkus-micrometer,
+   `/q/metrics`), memes i comments (actuator, `/actuator/prometheus`) — 8/8 targetów UP.
+   Przy okazji: zastany bug memes z sesji MinIO (S3ObjectStore: dwa konstruktory bez
+   @Autowired = śmierć na starcie przy blob-store=s3) naprawiony w sub-repo; race-sim
+   Dockerfile nadgonił F0 (obraz bez eras/ padał) i wozi teraz viewer+bolid (drive-ui
+   działa Z KONTENERA, ten sam URL). ZOSTAŁO: paddock (Javalin/micrometer), formula
+   backend (JDK, ręczny eksporter wzorem race-sim), dashboardy per serwis, ew. Loki.
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
