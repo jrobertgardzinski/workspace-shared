@@ -202,27 +202,35 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
-      - name: Build the security jar (deps closure, no tests)
-        run: ./mvnw -B -q --no-transfer-progress -pl microservice-security/security-infrastructure -am package -DskipTests
+      - name: Build the service jars (deps closure, no tests)
+        run: ./mvnw -B -q --no-transfer-progress -pl microservice-security/security-infrastructure,microservice-memes/memes-infrastructure,microservice-comments -am package -DskipTests
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: microservice-security/security-ui/package-lock.json
+          cache-dependency-path: |
+            microservice-security/security-ui/package-lock.json
+            microservice-memes/memes-ui/package-lock.json
       - name: Install UI dependencies
         run: npm ci
         working-directory: microservice-security/security-ui
       - name: Install the Playwright browser
         run: npx playwright install --with-deps chromium
         working-directory: microservice-security/security-ui
-      - name: Drive the shared specs through the browser
+      - name: Drive the shared specs through the browser (security-ui)
         run: ./run-e2e.sh
         working-directory: microservice-security/security-ui
+      - name: Install gallery UI dependencies
+        run: npm ci
+        working-directory: microservice-memes/memes-ui
+      - name: Drive the gallery through the browser (memes-ui)
+        run: ./run-e2e.sh
+        working-directory: microservice-memes/memes-ui
       - name: Upload service/UI logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-logs
-          path: /tmp/security-ui-e2e-*.log
+          path: /tmp/*-ui-e2e-*.log
