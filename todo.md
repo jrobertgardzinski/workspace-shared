@@ -136,9 +136,12 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    → ten sam cid w logu email; usunięcie konta → ten sam cid w memes+comments (saga a941e7a5).
    email dostał brakujący filtr/log (miał 0 cid). ZOSTAŁO (opc.): async SMTP w email biegnie na
    innych wątkach Mutiny — głębokie logi dispatchera wymagałyby smallrye-context-propagation.
-6. **(opc., porządek) Sprzątanie po delete-account**: `enrolled_factors` i `recovery_codes` nie
-   mają FK na users — saga kasująca konto zostawia osierocone wiersze (hashe, bez plaintextów);
-   dołożyć czyszczenie obu tabel do kroku kasującego usera.
+6. ~~**Sprzątanie po delete-account**~~ — ZROBIONE (2026-07-07): `DeleteAccount` czyści teraz
+   `enrolled_factors` i `recovery_codes` PRZED usunięciem usera (podejście hexagonalne przez porty,
+   jak `revokeAllSessions`: `RecoveryCodeRepository` dostał `removeAll`, bliźniak istniejącego w
+   repo czynników; JDBC reużywa sprawdzonego `deleteByUserEmail`). Test przybija kolejność:
+   sesje → czynniki → kody → user na końcu. Sekrety (materiał TOTP/WebAuthn, hasze kodów) nie
+   przeżywają już konta. 77 testów zielone.
 
 ### Plany na przyszłość (spisane)
 
