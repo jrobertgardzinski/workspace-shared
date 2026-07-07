@@ -1,0 +1,11 @@
+apiVersion: 1
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      # click a cid in a log line and jump nowhere yet — but a derived field keeps the door open
+      # for wiring Loki->Tempo once distributed tracing lands.
+      maxLines: 1000

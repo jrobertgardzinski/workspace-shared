@@ -336,6 +336,28 @@ services:
     ports:
       - "9090:9090"
 
+  # logs, the third pillar: Loki stores, Promtail ships every container's stdout (discovered via
+  # the Docker socket — no per-service config). In Grafana, {service="..."} |= "<cid>" greps one
+  # correlation id across all services at once — the payoff of the X-Correlation-Id that now rides
+  # the HTTP edge and the Kafka headers.
+  loki:
+    image: grafana/loki:3.1.0
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
   grafana:
     image: grafana/grafana:11.1.0
     environment:
@@ -352,6 +374,7 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
+      - loki
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
@@ -391,3 +414,4 @@ volumes:
   paddock_pgdata:
   comments_pgdata:
   formula_pgdata:
+  loki_data:
