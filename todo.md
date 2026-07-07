@@ -128,8 +128,16 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    `DeleteAccount` nie czyścił `federated_identities` (bez FK) — stały link pozwalałby staremu
    właścicielowi wejść Google'em na konto następcy adresu; teraz `unlinkAll` przed usunięciem
    usera. 180 testów + reactor CI zielone.
-4. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
-   niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
+4. ~~**Strona konsumencka podłogi MFA**~~ — ZROBIONE (2026-07-07): niedopełniony uprzywilejowany
+   jest u konsumentów obsługiwany jak zwykły USER (role MODERATOR/ADMIN zdjęte w bramie —
+   `Caller.withMfaFloor`, bliźniaki memes/comments; jedno miejsce per serwis, każdy istniejący
+   check ról egzekwuje podłogę bez zmian per-endpoint; fail-closed przy braku pola). Kluczowy
+   brakujący klocek: token NIE niósł werdyktu — mint w security stempluje teraz claim
+   `mfaCompliant` (wyliczony w chwili mintu, ten sam trade-off co reszta claimów), więc konsumenci
+   offline (comments) widzą podłogę bez wołania `/me`; memes (introspekcja) czyta pole z `/me`.
+   Test wire w security przybija claim=false dla świeżego tokenu niedopełnionego moderatora;
+   testy bram po obu stronach. paddock POZA zakresem — jego ADMIN to rola członkostwa serwera
+   gry (własna domena), nie rola security. 180+35+22 zielone, reactor CI zielony.
 5. ~~**Trace correlation-id przez Kafkę**~~ — ZROBIONE I ZWERYFIKOWANE LIVE (2026-07-07):
    cid jedzie nagłówkiem Kafki `X-Correlation-Id` przez WSZYSTKIE granice frameworków.
    Producent (security, Micronaut): outbox trzyma cid w kolumnie (V14), poller wysyła go
