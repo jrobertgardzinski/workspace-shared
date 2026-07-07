@@ -17,6 +17,18 @@
 #   8090  race-sim               (Python race module — the simulation prototype)
 #   8091  idp                    (stub OIDC provider: social login without Google)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
+
+# The OpenTelemetry Java agent, attached to each JVM service through JAVA_TOOL_OPTIONS (no image
+# rebuild) — it auto-instruments HTTP and Kafka and exports trace spans to Tempo. Per service, add
+# `<<: *otel-agent` to its environment plus its own OTEL_SERVICE_NAME, and mount the agent jar.
+x-otel-agent: &otel-agent
+  JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: none    # metrics already flow through Prometheus scraping
+  OTEL_LOGS_EXPORTER: none       # logs already flow through Promtail -> Loki
+
 services:
   security:
     build:
@@ -25,6 +37,8 @@ services:
     ports:
       - "8080:8080"
     environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: security
       MICRONAUT_ENVIRONMENTS: dev
       DB_HOST: postgres
       DB_NAME: security
@@ -62,6 +76,8 @@ services:
       SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8084/
       # MFA SMS factor delivers codes through the shared SMS channel service (internal)
       SECURITY_SMS_URL: http://sms:8088
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +108,8 @@ services:
     ports:
       - "8083:8083"
     environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: memes
       # writes require a bearer token that security confirms; reads (and the UI at :8083) are public
       SECURITY_URL: http://security:8080
       # the gallery is durable: metadata and image bytes in its own Postgres
@@ -109,6 +127,8 @@ services:
       MEMES_S3_BUCKET: memes
       MEMES_S3_ACCESS_KEY: memes
       MEMES_S3_SECRET_KEY: ${MINIO_PASSWORD:-supersecret}
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       memes-postgres:
         condition: service_healthy
@@ -173,6 +193,8 @@ services:
     ports:
       - "8085:8085"
     environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: comments
       DB_URL: jdbc:postgresql://comments-postgres:5432/comments
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
@@ -184,6 +206,8 @@ services:
       # account-deletion saga (comments axis) + the MEME_DELETED thread cascade
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_ENABLED: "true"
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       comments-postgres:
         condition: service_healthy
@@ -212,6 +236,8 @@ services:
     ports:
       - "8086:8086"
     environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: paddock
       # the social hub: your servers, their live campaign state, upcoming events (PWA at :8086)
       DB_URL: jdbc:postgresql://paddock-postgres:5432/paddock
       DB_USER: postgres
@@ -224,6 +250,8 @@ services:
       EMAIL_API_KEY: ${MAIL_API_KEY:-local-dev-key}
       SMS_URL: http://sms:8088
       PUSH_URL: http://push:8089
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       paddock-postgres:
         condition: service_healthy
@@ -358,6 +386,20 @@ services:
     depends_on:
       - loki
 
+  # traces, the third signal: the OpenTelemetry Java agent (attached to the JVM services below via
+  # JAVA_TOOL_OPTIONS, no image rebuild) exports OTLP here; Grafana shows the span waterfall. The
+  # agent propagates W3C trace context over HTTP AND Kafka, so a request's trace spans the whole
+  # saga. The agent jar is fetched by ./infra-up.sh into observability/otel (gitignored, 21 MB).
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo/config.yml"]
+    volumes:
+      - ./observability/tempo-config.yml:/etc/tempo/config.yml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo API (Grafana queries this)
+      - "4318:4318"   # OTLP/HTTP receiver
+
   grafana:
     image: grafana/grafana:11.1.0
     environment:
@@ -375,6 +417,7 @@ services:
     depends_on:
       - prometheus
       - loki
+      - tempo
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.49.1
@@ -415,3 +458,4 @@ volumes:
   comments_pgdata:
   formula_pgdata:
   loki_data:
+  tempo_data:
