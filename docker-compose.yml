@@ -217,6 +217,7 @@ services:
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       SECURITY_URL: http://security:8080
+      SECURITY_VERIFY: offline
       # notification channels — each its own service; a blank URL disables that channel.
       # email listens on 8080 inside the network (8082 is only the host-published port)
       EMAIL_URL: http://email:8080
@@ -266,6 +267,7 @@ services:
       RACE_SIM_URL: http://race-sim:8090
       # game actions (start race, orders, R&D, era, homologate) require a security-confirmed token
       SECURITY_URL: http://security:8080
+      SECURITY_VERIFY: offline
       # durable game state (seasons, standings, developed cars) survives restarts
       DB_URL: jdbc:postgresql://formula-postgres:5432/formula
       DB_USER: postgres
