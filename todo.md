@@ -96,6 +96,12 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    mają FK na users — saga kasująca konto zostawia osierocone wiersze (hashe, bez plaintextów);
    dołożyć czyszczenie obu tabel do kroku kasującego usera.
 
+### Plany na przyszłość (spisane)
+
+- **Wdrożenie/orkiestracja** → [docs/deployment-plan.md](docs/deployment-plan.md):
+  Compose dziś → VPS+Compose+Traefik na publikację → k3s przy piramidzie dywizji;
+  Podman i pełny k8s odrzucone z uzasadnieniem (plusy/minusy + wyzwalacze przejść).
+
 ### (USER, zewnętrzne)
 
 - **Realny Google/GitHub/…**: client-id/secret z konsoli providera → podmiana env-ów w compose
