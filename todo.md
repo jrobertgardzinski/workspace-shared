@@ -119,9 +119,15 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    wstrzykuje `traceparent` KONTYNUUJĄCY trace. Dowód live: usunięcie konta = JEDEN trace w Tempo
    przez security, memes, comments, user-collections i email. ZOSTAŁO (opc.): dashboardy per serwis
    + panel logów, alerty, e2e jako osobny job CI.
-3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
-   po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
-   aktualizować link w ConfirmEmailChange.
+3. ~~**Odświeżanie linku federacyjnego przy change-email**~~ — ZROBIONE (2026-07-07), i głębiej niż
+   sądziliśmy: „re-linkuje się przy następnym logowaniu" było ZŁUDZENIEM — provider zgłasza swój
+   własny (stary) adres, więc auto-link nigdy nie znalazłby przeniesionego konta (a mógłby znaleźć
+   obcego, kto zarejestruje zwolniony adres). `ConfirmEmailChange` PRZEPINA teraz linki
+   (`relinkAll` — subject jest trwały, to ta sama osoba); reguła w spec odwrócona na „FEDERATED
+   LINKS follow the account". PRZY OKAZJI załatana podatność tej samej klasy co czynniki/kody:
+   `DeleteAccount` nie czyścił `federated_identities` (bez FK) — stały link pozwalałby staremu
+   właścicielowi wejść Google'em na konto następcy adresu; teraz `unlinkAll` przed usunięciem
+   usera. 180 testów + reactor CI zielone.
 4. **(opc.) Strona konsumencka podłogi MFA**: memes/comments/paddock mogą odmawiać uprzywilejowanym
    niedopełnionym przez `mfaCompliant` z `/me` (security już to raportuje).
 5. ~~**Trace correlation-id przez Kafkę**~~ — ZROBIONE I ZWERYFIKOWANE LIVE (2026-07-07):
