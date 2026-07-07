@@ -8,6 +8,7 @@ SEC=http://localhost:8080
 MAIL_UI=http://localhost:8025
 MEMES=http://localhost:8083
 COMMENTS=http://localhost:8085
+COLLECTIONS=http://localhost:8092
 EMAIL_SVC=http://localhost:8082
 USER_MAIL="smoke-$(date +%s)@example.com"
 PASSWORD="StrongPassword1!"
@@ -19,7 +20,7 @@ docker compose exec -T postgres psql -q -U postgres -d security \
     -c "DELETE FROM authentication_blocks; DELETE FROM rejected_authentications;" >/dev/null 2>&1 || true
 
 step "waiting for the services"
-for url in "$SEC/health" "$MAIL_UI/api/v1/messages" "$MEMES/memes/hot" "$COMMENTS/memes/warmup/comments"; do
+for url in "$SEC/health" "$MAIL_UI/api/v1/messages" "$MEMES/memes/hot" "$COMMENTS/memes/warmup/comments" "$COLLECTIONS/health"; do
     for i in $(seq 1 60); do
         curl -sf "$url" >/dev/null && break
         [ "$i" = 60 ] && { echo "FAIL: $url did not come up"; exit 1; }
@@ -264,7 +265,7 @@ R=$(vote "$COMMENTS/memes/$MEME_ID/comments/$COMMENT_ID/votes" | python3 -c 'imp
 [ "$R" = 0 ] || { echo "FAIL: repeated comment up-vote should retract (0), got '$R'"; exit 1; }
 curl -sf "$MEMES/memes/hot" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from /memes/hot"; exit 1; }
 
-step "account-deletion SAGA: memes purged, comments elsewhere anonymised, account gone"
+step "account-deletion SAGA: memes purged, comments anonymised, collections cleared, account gone"
 LEAVER="smoke-leaver-$(date +%s)@example.com"
 curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
     -d "{\"email\":\"$LEAVER\",\"password\":\"$PASSWORD\"}" >/dev/null
@@ -296,6 +297,11 @@ EOF
 LEAVER_MEME=$(curl -sf -H "Authorization: Bearer $LACCESS" -F "file=@$TMP2;type=image/bmp" "$MEMES/memes" \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 rm -f "$TMP2"
+# the leaver saves a favourite in user-collections — the saga's third axis must clear it too
+curl -sf -X PUT "$COLLECTIONS/collections/favourites/items/meme/$MEME_ID" -H "Authorization: Bearer $LACCESS" >/dev/null
+SAVED=$(curl -sf "$COLLECTIONS/collections/favourites/items" -H "Authorization: Bearer $LACCESS" \
+    | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+[ "$SAVED" = 1 ] || { echo "FAIL: expected 1 saved favourite before deletion, got $SAVED"; exit 1; }
 # deleting is step-up (FULL_CHAIN): no factors here, so re-entering the password elevates at once
 ELEV=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/step-up" -H "Authorization: Bearer $LACCESS" \
     -H 'Content-Type: application/json' -d "{\"action\":\"delete-account\",\"password\":\"$PASSWORD\"}")
@@ -315,10 +321,13 @@ for i in $(seq 1 30); do
     MEME_GONE=$(curl -s -o /dev/null -w '%{http_code}' "$MEMES/memes/$LEAVER_MEME")
     ANON=$(curl -sf "$COMMENTS/memes/$MEME_ID/comments" | python3 -c \
         'import json,sys; cs=json.load(sys.stdin); print(any(c["author"]=="deleted account" and c["text"]=="Lorem ipsum" for c in cs))')
-    if [ "$MEME_GONE" = 404 ] && [ "$ANON" = True ]; then SAGA_OK=yes; break; fi
+    # the token still verifies offline (until exp), so we can read the now-empty collection
+    COLL_GONE=$(curl -sf "$COLLECTIONS/collections/favourites/items" -H "Authorization: Bearer $LACCESS" \
+        | python3 -c 'import json,sys; print(len(json.load(sys.stdin)) == 0)')
+    if [ "$MEME_GONE" = 404 ] && [ "$ANON" = True ] && [ "$COLL_GONE" = True ]; then SAGA_OK=yes; break; fi
     sleep 2
 done
-[ -n "$SAGA_OK" ] || { echo "FAIL: purge incomplete (meme:$MEME_GONE anon:$ANON)"; exit 1; }
+[ -n "$SAGA_OK" ] || { echo "FAIL: purge incomplete (meme:$MEME_GONE anon:$ANON coll:$COLL_GONE)"; exit 1; }
 # register answers 201 whether the email is taken or not (anti-enumeration), so a status probe
 # can no longer detect the freed email. The goodbye mail is sent in the same transaction that
 # deletes the user row, so once it shows up the email IS free — prove it by re-registering and

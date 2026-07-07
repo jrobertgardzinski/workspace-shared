@@ -11,6 +11,7 @@
 #   8083  microservice-memes     (gallery UI at /; uploads/votes need signing in)
 #   8085  microservice-comments  (comment threads + comment votes)
 #   8086  microservice-paddock   (the social hub: servers, people, events; PWA at /)
+#   8092  microservice-user-collections (Helidon SE; a user's saved refs; saga participant)
 #   ----  sms / push             (internal: paddock notification channels; stub-send by default)
 #   ----  image-encoder          (internal: PNG->WebP for memes; Python + Pillow)
 #   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
@@ -290,6 +291,47 @@ services:
       timeout: 3s
       retries: 15
 
+  # the sixth flavour: Helidon 4 SE on virtual threads. The user's saved refs (favourites etc.);
+  # the third participant in the account-deletion saga (consumes content-commands, confirms on
+  # usercollections-events). Offline JWT like comments; its own Postgres.
+  user-collections:
+    build:
+      context: microservice-user-collections
+    ports:
+      - "8092:8092"
+    environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: user-collections
+      COLLECTIONS_PORT: "8092"
+      DB_URL: jdbc:postgresql://collections-postgres:5432/collections
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      SECURITY_URL: http://security:8080
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
+    depends_on:
+      collections-postgres:
+        condition: service_healthy
+      security:
+        condition: service_started
+      kafka:
+        condition: service_started
+
+  collections-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: collections
+    volumes:
+      - collections_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d collections"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
   formula:
     build:
       context: formula-simulator
@@ -466,5 +508,6 @@ volumes:
   paddock_pgdata:
   comments_pgdata:
   formula_pgdata:
+  collections_pgdata:
   loki_data:
   tempo_data:
