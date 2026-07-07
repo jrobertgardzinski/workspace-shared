@@ -72,9 +72,13 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    działa Z KONTENERA, ten sam URL). ETAP 2 DOMKNIĘTY (jeszcze później tej sesji):
    paddock (ręczny /metrics jako slice, licznik per route + JVM) i formula backend (JDK,
    ręczny /metrics) — **10/10 targetów UP**. ETAP 3 (traceability) ZROBIONY: correlation-id
-   przez Kafkę end-to-end (patrz pkt 5). ZOSTAŁO (etap 4, opcjonalnie): Loki (log aggregation
-   — szukanie po cid we wszystkich serwisach naraz, naturalna spłata roboty z cid), dashboardy
-   per serwis, alerty; dalej OTel+Tempo (waterfall spanów) i CI (testy na push).
+   przez Kafkę end-to-end (patrz pkt 5). ETAP 4 (logi) ZROBIONY: Loki + Promtail w compose
+   (Promtail zbiera stdout wszystkich 20 kontenerów przez Docker SD — zero zmian w serwisach),
+   provisioned datasource Loki w Grafanie obok Prometheusa. Spłata cid: `{service=~".+"} |=
+   "<cid>"` grepuje jedno żądanie po wszystkich serwisach naraz — zweryfikowane live (jeden cid
+   → linie z security I email w jednym zapytaniu). ZOSTAŁO (etap 5, opcjonalnie): dashboardy
+   per serwis + panel logów, alerty; OTel+Tempo (waterfall spanów, datasource Tempo + derived
+   field z Loki po cid); CI (testy na push — dziś brak, jedyne workflow są w node_modules).
 3. **Odświeżanie linku federacyjnego przy change-email**: dziś stały `(provider,subject)→email`
    po zmianie maila bezpiecznie odpada i re-linkuje się przy następnym logowaniu; czystsze byłoby
    aktualizować link w ConfirmEmailChange.
