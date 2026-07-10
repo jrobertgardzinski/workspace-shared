@@ -63,16 +63,22 @@ stan:
 
 Follow-upy (otwarte, ~malejąca wartość):
 
-1. **Pakty w drugą stronę (potwierdzenia sagi)** — security jako KONSUMENT
-   `USER_CONTENT_PURGED` z memes-events/comments-events/usercollections-events; wymaga
-   wyłuskania budowy potwierdzenia do testowalnej metody w 3 repo uczestników, potem
-   weryfikacja providera w każdym z nich.
+1. ~~**Pakty w drugą stronę (potwierdzenia sagi)**~~ — ZROBIONE (2026-07-10/2): security
+   jako KONSUMENT deklaruje w 3 paktach co czyta z `USER_CONTENT_PURGED` (type+email;
+   uczestnik = topic); providery weryfikują na realnym kodzie BEZ refaktoru — memes/comments
+   przez capture z mocka KafkaTemplate, collections przez czysty `handle()`. Obie strony
+   sagi przypięte kontraktem; CI uczestników przeszło na układ workspace'owy (checkout
+   security po pakty).
 2. **Kontrakty HTTP** — JWKS (+ kształt JWT: sub/exp/podpis EdDSA) dla czterech
    konsumentów offline (comments/paddock/collections/formula) oraz introspekcja `/me`
    (memes ← security). Pact HTTP zamiast message pact; provider state z kontem testowym.
-3. **OfflineJwt jako wspólna libka?** — 4 bliźniacze kopie kodu security-critical
-   (dryf = ryzyko). Newman broni duplikacji nad couplingiem, ale to jest wyjątek,
-   w którym libka się broni — decyzja usera.
+3. ~~**OfflineJwt jako wspólna libka?**~~ — DECYZJA USERA (2026-07-10): libka. ZROBIONE
+   (2026-07-10/2): nowe repo `offline-jwt` (`OfflineJwtVerifier` + `VerifiedToken`,
+   jedyna zależność: jackson-databind; scalona suita testów pięciu kopii). Kopii było
+   PIĘĆ (memes też), nie cztery — i konwergencja złapała REALNY dryf: offline'owy gate
+   memes zgubił MFA floor, który introspekcyjny gate egzekwuje (moderator bez MFA
+   zachowywał MODERATOR offline). Naprawione przez przejście na libkę + test regresyjny.
+   Serwisy trzymają swoje polityki (Caller.withMfaFloor zostaje lokalnie).
 
 ## Otwarte zadania (2026-07-06 — po domknięciu OAuth USERINFO + całego MFA A–G)
 

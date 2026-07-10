@@ -41,6 +41,11 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
         with:
+          repository: jrobertgardzinski/offline-jwt
+          path: offline-jwt
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
           repository: jrobertgardzinski/test-starter
           path: test-starter
           token: ${{ secrets.REPO_PAT }}
@@ -134,6 +139,11 @@ jobs:
         with:
           repository: jrobertgardzinski/voting
           path: voting
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: jrobertgardzinski/offline-jwt
+          path: offline-jwt
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v4
         with:

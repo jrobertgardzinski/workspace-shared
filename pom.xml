@@ -26,6 +26,7 @@
     <modules>
         <module>adjustable-clock</module>
         <module>infrastructure-micronaut-clock</module>
+        <module>offline-jwt</module>
         <module>voting</module>
         <module>test-starter</module>
         <module>constraint</module>

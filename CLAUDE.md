@@ -6,7 +6,7 @@ Guidance for Claude Code when working in this workspace.
 
 A **workspace / aggregator** over independent git repositories: the shared
 libraries (`test-starter`, `constraint`, `config`, `email`, `password`,
-`adjustable-clock`, `infrastructure-micronaut-clock`, `voting`), the hexagonal Micronaut
+`adjustable-clock`, `infrastructure-micronaut-clock`, `voting`, `offline-jwt`), the hexagonal Micronaut
 auth service (`microservice-security`), and standalone services in other
 flavours — `microservice-email` (BCE, Quarkus), `microservice-memes` (layered modules,
 Spring Boot), `microservice-comments` (Spring Boot + Postgres) and
