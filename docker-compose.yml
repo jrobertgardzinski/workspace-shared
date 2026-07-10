@@ -431,8 +431,12 @@ services:
       DB_URL: jdbc:postgresql://formula-postgres:5432/formula
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      # uploaded bot sources land here — the SAME path the sim mounts, so the exam can read
+      # what the game just wrote (the group-server template already worked this way)
+      FORMULA_BOTS_DIR: /bots
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
+      - formula_bots:/bots
     depends_on:
       race-sim:
         condition: service_started
@@ -468,6 +472,9 @@ services:
       # A3: exam verdicts cached by file sha — the same bytes never mill twice (the cache is
       # opt-in precisely so the TEST suite keeps re-milling; production wants it on)
       FORMULA_EXAM_CACHE: "1"
+      FORMULA_BOTS_DIR: /bots
+    volumes:
+      - formula_bots:/bots
 
   kafka:
     # single-node KRaft — the event backbone (mail requests, the deletion saga, thread cascades)
@@ -602,6 +609,7 @@ volumes:
   minio_data:
   paddock_pgdata:
   comments_pgdata:
+  formula_bots:
   formula_pgdata:
   collections_pgdata:
   loki_data:

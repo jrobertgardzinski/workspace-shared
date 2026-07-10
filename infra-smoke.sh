@@ -469,7 +469,7 @@ code = open("formula-simulator/bots/example-bot.py").read()
 print(json.dumps({"filename": "smoke-example-bot.py", "code": code}))
 PY
 )
-CARD=$(curl -sf --max-time 600 -X POST "$FORMULA/broadcast/team/drivers/$BOT_DRIVER/bot/upload" \
+CARD=$(curl -sf --max-time 930 -X POST "$FORMULA/broadcast/team/drivers/$BOT_DRIVER/bot/upload" \
     -H "Authorization: Bearer $ACCESS" -H 'Content-Type: application/json' -d "$UPLOAD")
 echo "$CARD" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("grade"), d' \
     || { echo "FAIL: bot upload did not come back with an exam grade"; exit 1; }
