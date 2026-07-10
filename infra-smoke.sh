@@ -452,6 +452,19 @@ STREAM=$(curl -sN --max-time 20 "$FORMULA/broadcast/races/$RACE/stream")
 echo "$STREAM" | grep -q "event: frame"  || { echo "FAIL: no frames on the race stream"; exit 1; }
 echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not finish with a result"; exit 1; }
 
+step "collections UI on its own origin: page served, both CORS edges answer the preflight"
+curl -sf http://localhost:8093/ | grep -q "My collections" \
+    || { echo "FAIL: collections-ui is not serving its page"; exit 1; }
+# what the browser does before the UI's first authorized call — one preflight per service
+curl -sf -X OPTIONS "http://localhost:8092/collections/favourites/items" \
+    -H "Origin: http://localhost:8093" -H "Access-Control-Request-Method: GET" -o /dev/null -D - \
+    | grep -qi "^Access-Control-Allow-Origin: http://localhost:8093" \
+    || { echo "FAIL: user-collections does not allow the UI origin"; exit 1; }
+curl -sf -X OPTIONS "http://localhost:8080/authenticate" \
+    -H "Origin: http://localhost:8093" -H "Access-Control-Request-Method: POST" -o /dev/null -D - \
+    | grep -qi "^Access-Control-Allow-Origin: http://localhost:8093" \
+    || { echo "FAIL: security does not allow the collections-ui origin"; exit 1; }
+
 step "observability: Prometheus scrapes containers, Grafana serves the dashboard"
 for i in $(seq 1 30); do
     UP=$(curl -sf "http://localhost:9090/api/v1/query?query=up%7Bjob%3D%22cadvisor%22%7D" \
@@ -477,4 +490,5 @@ echo "            outbox survives a mail-service outage,"
 echo "            delete-account SAGA: memes purged, comments anonymised, goodbye mail, email freed,"
 echo "            wizard override honoured: popular meme kept anonymised, chosen comments deleted,"
 echo "            formula race simulated in Python and streamed as SSE state,"
+echo "            collections UI served on its own origin; CORS preflights pass on both edges,"
 echo "            observability: Prometheus scrapes cAdvisor, Grafana provisioned with the stack dashboard"

@@ -69,9 +69,16 @@ Follow-upy (otwarte, ~malejąca wartość):
    przez capture z mocka KafkaTemplate, collections przez czysty `handle()`. Obie strony
    sagi przypięte kontraktem; CI uczestników przeszło na układ workspace'owy (checkout
    security po pakty).
-2. **Kontrakty HTTP** — JWKS (+ kształt JWT: sub/exp/podpis EdDSA) dla czterech
-   konsumentów offline (comments/paddock/collections/formula) oraz introspekcja `/me`
-   (memes ← security). Pact HTTP zamiast message pact; provider state z kontem testowym.
+2. ~~**Kontrakty HTTP**~~ — ZROBIONE (2026-07-10/3). Kluczowa obserwacja: po konwergencji
+   do libki prawdziwym konsumentem JWKS jest `offline-jwt` — JEDEN pakt HTTP w repo libki
+   (kty/crv/kid/x, dowiedziony realnym fetcherem + tokenem podpisanym stałym kluczem
+   testowym), weryfikowany przez security na realnym kontrolerze. Kształt samego JWT
+   pilnuje mocniejsza domykająca pętla `OfflineLibraryRoundTripTest` w security: REALNY
+   token z /authenticate weryfikowany REALNĄ libką o realny JWKS. Introspekcja `/me`:
+   pakt HTTP memes (email/roles/mfaCompliant na 200 + 401 dla obcego tokenu; osobny
+   katalog `pacts-http/` — plik V3 nie miesza message i request/response), weryfikacja
+   u producenta z provider state (register→verify→authenticate; placeholder bearer
+   podmieniany na realny token w test template — idiom JUnit5, nie @TargetRequestFilter).
 3. ~~**OfflineJwt jako wspólna libka?**~~ — DECYZJA USERA (2026-07-10): libka. ZROBIONE
    (2026-07-10/2): nowe repo `offline-jwt` (`OfflineJwtVerifier` + `VerifiedToken`,
    jedyna zależność: jackson-databind; scalona suita testów pięciu kopii). Kopii było
@@ -79,6 +86,15 @@ Follow-upy (otwarte, ~malejąca wartość):
    memes zgubił MFA floor, który introspekcyjny gate egzekwuje (moderator bez MFA
    zachowywał MODERATOR offline). Naprawione przez przejście na libkę + test regresyjny.
    Serwisy trzymają swoje polityki (Caller.withMfaFloor zostaje lokalnie).
+4. ~~**CORS collections (brak UI)**~~ — ZROBIONE (2026-07-10/3, zlecenie usera „prostacja
+   UI w react native"): `collections-ui` w repo user-collections — komponenty React
+   Native (react-native-web + Vite; web celowo, bo natywna apka RN nie podlega CORS),
+   sign-in przez security, lista/zapis/usuwanie ulubionych. Własny origin :8093 (nginx
+   w compose) ⇒ przeglądarka woła security i collections CROSS-origin: ręczny
+   `CorsFilter` w Helidonie (allowlista z `COLLECTIONS_ALLOWED_ORIGINS`, preflight 204
+   przed routingiem, obcy origin bez echa; 3 testy), origins 8093+5173 dorzucone do
+   CORS security. Smoke sprawdza stronę + preflighty obu krawędzi. (Opc. na kiedyś:
+   e2e przez Playwright jak trzy pozostałe UI.)
 
 ## Otwarte zadania (2026-07-06 — po domknięciu OAuth USERINFO + całego MFA A–G)
 

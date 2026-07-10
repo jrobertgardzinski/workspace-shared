@@ -15,7 +15,9 @@
 #   ----  sms / push             (internal: paddock notification channels; stub-send by default)
 #   ----  image-encoder          (internal: PNG->WebP for memes; Python + Pillow)
 #   8084  formula-simulator      (F1 manager: race control UI at /, SSE race broadcast)
-#   8090  race-sim               (Python race module — the simulation prototype)
+#   ----  race-sim               (internal: Python race module — engine code never faces the
+#                                 network; only the JWT-gated game talks to it. The owner's
+#                                 manual drive UI needs docker-compose.dev.yml — formula-up.sh)
 #   8091  idp                    (stub OIDC provider: social login without Google)
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
 
@@ -385,6 +387,20 @@ services:
       kafka:
         condition: service_healthy
 
+  # the favourites UI on its OWN origin (react-native-web built by Vite, served by nginx) — the
+  # browser then calls security and user-collections cross-origin, exercising their CORS edges
+  collections-ui:
+    build:
+      context: microservice-user-collections/collections-ui
+    ports:
+      - "8093:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:80"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
+
   collections-postgres:
     image: postgres:16-alpine
     restart: always
@@ -444,8 +460,11 @@ services:
       # repo-root context: the image also ships tracks/ (incident replays draw from it)
       context: formula-simulator
       dockerfile: sim/race/Dockerfile
-    ports:
-      - "8090:8090"
+    # NO host port (A4): the sim carries the engine's secrets, so it lives on the internal
+    # network only — the public face is the game (JWT). Dev drive-ui: docker-compose.dev.yml.
+    environment:
+      # A2: the exam's hard wall-clock limit — a hostile bot cannot hold the examiner hostage
+      FORMULA_EXAM_TIMEOUT_SEC: "900"
 
   kafka:
     # single-node KRaft — the event backbone (mail requests, the deletion saga, thread cascades)
