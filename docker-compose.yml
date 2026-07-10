@@ -77,13 +77,22 @@ services:
       SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8084/
       # MFA SMS factor delivers codes through the shared SMS channel service (internal)
       SECURITY_SMS_URL: http://sms:8088
+    # Readiness, not just "process started": a JVM binds its port at the end of startup, and the
+    # temurin/python images ship no curl — so the probe is a bare TCP connect (bash /dev/tcp or a
+    # python socket). Dependents wait on service_healthy instead of racing a service mid-boot.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
 
   email:
     build:
@@ -101,11 +110,19 @@ services:
       # speaks plain SMTP only, so the local stack opts out explicitly
       MAIL_SMTP_START_TLS: DISABLED
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
-      - mailpit
-      - kafka
+      mailpit:
+        condition: service_started
+      kafka:
+        condition: service_healthy
 
   memes:
     build:
@@ -132,6 +149,12 @@ services:
       MEMES_S3_BUCKET: memes
       MEMES_S3_ACCESS_KEY: memes
       MEMES_S3_SECRET_KEY: ${MINIO_PASSWORD:-supersecret}
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8083"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
@@ -140,9 +163,9 @@ services:
       minio:
         condition: service_healthy
       security:
-        condition: service_started
+        condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
 
   # object storage for the gallery's image bytes — the S3 ObjectStore adapter's home
   minio:
@@ -164,6 +187,12 @@ services:
     build:
       context: microservice-image
     # internal only — memes calls it; not published to the host
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8087), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
 
   # stub OIDC provider: "Sign in with Google" without Google. The browser visits its authorize
   # form on the published port; security exchanges codes with it service-to-service.
@@ -177,6 +206,12 @@ services:
       IDP_ISSUER: http://localhost:8091
       IDP_CLIENT_ID: demo-client
       IDP_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8091), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
 
   memes-postgres:
     image: postgres:16-alpine
@@ -211,15 +246,21 @@ services:
       # account-deletion saga (comments axis) + the MEME_DELETED thread cascade
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_ENABLED: "true"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8085"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       comments-postgres:
         condition: service_healthy
       security:
-        condition: service_started
+        condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
 
   comments-postgres:
     image: postgres:16-alpine
@@ -255,27 +296,45 @@ services:
       EMAIL_API_KEY: ${MAIL_API_KEY:-local-dev-key}
       SMS_URL: http://sms:8088
       PUSH_URL: http://push:8089
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8086"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       paddock-postgres:
         condition: service_healthy
       security:
-        condition: service_started
+        condition: service_healthy
       sms:
-        condition: service_started
+        condition: service_healthy
       push:
-        condition: service_started
+        condition: service_healthy
 
   sms:
     build:
       context: microservice-sms
     # internal only — the paddock fans out to it; stub-sends unless SMS_PROVIDER is set
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8088), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
 
   push:
     build:
       context: microservice-push
     # internal only — the paddock fans out to it; stub-sends unless PUSH_PROVIDER is set
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8089), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
 
   paddock-postgres:
     image: postgres:16-alpine
@@ -308,15 +367,21 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
       SECURITY_URL: http://security:8080
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8092"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
     volumes:
       - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
     depends_on:
       collections-postgres:
         condition: service_healthy
       security:
-        condition: service_started
+        condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
 
   collections-postgres:
     image: postgres:16-alpine
@@ -354,7 +419,7 @@ services:
       race-sim:
         condition: service_started
       security:
-        condition: service_started
+        condition: service_healthy
       formula-postgres:
         condition: service_healthy
 
@@ -395,6 +460,12 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
 
   mailpit:
     image: axllent/mailpit

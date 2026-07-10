@@ -31,6 +31,49 @@ Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
     `password:gemini-refactor`, `microservice-security:overnight/todo-cleanup`
     oraz omyłkowa gałąź `origin` na kilku remote (kandydat do skasowania).
 
+## Przegląd „co wytknąłby Sam Newman" (2026-07-10) — wykonane + follow-upy
+
+Przegląd architektury mikroserwisowej całego stacku (poza formula). Fundamenty ocenione
+dobrze (outbox, saga z potwierdzeniami, DLQ+redrive, dedup, DB-per-service, timeouts,
+degradacja, cid przez HTTP i Kafkę, 3 sygnały observability). Cztery luki strukturalne —
+stan:
+
+- ~~**Testy kontraktowe (CDC)**~~ — ZROBIONE (2026-07-10), [ADR 0003](docs/adr/0003-file-based-consumer-driven-contracts.md):
+  Pact w trybie plikowym, bez brokera — workspace zastępuje brokera. Konsumenci deklarują
+  TYLKO pola, które czytają (pakt commitowany w `pacts/` repo konsumenta), producent
+  (security) weryfikuje pakty na REALNYM kodzie producenta (`SecurityEventPacts` +
+  4 klasy `*PactProviderTest`; sibling nie istnieje → skip, nie fail). Pokryte:
+  `mail-requests` (email ← security, 6 kształtów maili) i `content-commands`
+  (memes/comments/user-collections ← security, komenda purge ± policy).
+- ~~**Wersjonowanie eventów**~~ — ZROBIONE (2026-07-10), [ADR 0004](docs/adr/0004-event-envelope-versioning.md):
+  każda koperta niesie `"version": 1`; w ramach wersji zmiany TYLKO addytywne, konsumenci
+  to tolerant readers; zmiana łamiąca = bump + expand/contract. Producenci: outbox
+  notifiers + orchestrator (security), potwierdzenia purge (memes/comments/collections).
+- ~~**CI per repo (independent deployability)**~~ — ZROBIONE (2026-07-10): własne `ci.yml`
+  dostały security (checkout+install libek w kolejności zależności, checkout konsumentów →
+  weryfikacja paktów biegnie też u producenta), memes i comments (najpierw voting),
+  user-collections (self-contained) oraz idp/sms/push/image (unittest). Wcześniej miały
+  tylko email i paddock. UWAGA: workflowy wchodzą w życie po pushu sub-repo.
+- ~~**Healthchecki w compose**~~ — ZROBIONE (2026-07-10): sondy TCP (bash `/dev/tcp` /
+  python socket — obrazy temurin/python nie mają curla) na 10 serwisach + healthcheck
+  Kafki jej własnym skryptem; zależni czekają na `service_healthy` zamiast ścigać się
+  ze startem security/kafki/sms/push.
+- Niespójność stylów integracji z email (outbox/Kafka vs sync fan-out paddocka) —
+  UDOKUMENTOWANA jako decyzja z kryterium wejścia: [ADR 0005](docs/adr/0005-two-integration-styles-on-purpose.md).
+
+Follow-upy (otwarte, ~malejąca wartość):
+
+1. **Pakty w drugą stronę (potwierdzenia sagi)** — security jako KONSUMENT
+   `USER_CONTENT_PURGED` z memes-events/comments-events/usercollections-events; wymaga
+   wyłuskania budowy potwierdzenia do testowalnej metody w 3 repo uczestników, potem
+   weryfikacja providera w każdym z nich.
+2. **Kontrakty HTTP** — JWKS (+ kształt JWT: sub/exp/podpis EdDSA) dla czterech
+   konsumentów offline (comments/paddock/collections/formula) oraz introspekcja `/me`
+   (memes ← security). Pact HTTP zamiast message pact; provider state z kontem testowym.
+3. **OfflineJwt jako wspólna libka?** — 4 bliźniacze kopie kodu security-critical
+   (dryf = ryzyko). Newman broni duplikacji nad couplingiem, ale to jest wyjątek,
+   w którym libka się broni — decyzja usera.
+
 ## Otwarte zadania (2026-07-06 — po domknięciu OAuth USERINFO + całego MFA A–G)
 
 Kolejność ~malejącej wartości. Zamknięte 2026-07-06 (szczegóły: microservice-security/todo.md
