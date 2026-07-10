@@ -93,8 +93,14 @@ Follow-upy (otwarte, ~malejąca wartość):
    w compose) ⇒ przeglądarka woła security i collections CROSS-origin: ręczny
    `CorsFilter` w Helidonie (allowlista z `COLLECTIONS_ALLOWED_ORIGINS`, preflight 204
    przed routingiem, obcy origin bez echa; 3 testy), origins 8093+5173 dorzucone do
-   CORS security. Smoke sprawdza stronę + preflighty obu krawędzi. (Opc. na kiedyś:
-   e2e przez Playwright jak trzy pozostałe UI.)
+   CORS security. Smoke sprawdza stronę + preflighty obu krawędzi.
+5. ~~**Pełna integracja z galerią**~~ — ZROBIONE (2026-07-10/4, doprecyzowanie usera):
+   gwiazdka na kafelkach galerii zapisuje/zdejmuje ulubione wprost z przeglądarki
+   (cross-origin do collections), ściana „Favourites" hydratuje refy; ref przeżywa mema
+   z założenia — kafelek „unavailable" (cache-busting URL miniatury). Degradacja cicha:
+   collections leży → brak gwiazdek, ściana działa. 3 scenariusze Playwright w e2e galerii
+   (harness dostał collections na :8192); przy okazji naprawiony fałszywy pozytyw seedów —
+   memes DEDUPLIKUJE identyczne bajty, e2e uploaduje teraz unikalne PNG.
 
 ## Otwarte zadania (2026-07-06 — po domknięciu OAuth USERINFO + całego MFA A–G)
 
