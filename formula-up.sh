@@ -10,7 +10,9 @@ cd "$(dirname "$0")"
 ./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,formula-simulator \
     -am package -DskipTests
 
-docker compose up --build -d \
+# the dev override re-opens race-sim's host port (8090) for the owner's manual drive —
+# the base compose keeps the sim internal-only (A4: engine code never faces the network)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d \
     formula race-sim security email idp \
     prometheus grafana cadvisor node-exporter "$@"
 

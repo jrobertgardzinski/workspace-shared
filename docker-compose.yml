@@ -465,6 +465,9 @@ services:
     environment:
       # A2: the exam's hard wall-clock limit — a hostile bot cannot hold the examiner hostage
       FORMULA_EXAM_TIMEOUT_SEC: "900"
+      # A3: exam verdicts cached by file sha — the same bytes never mill twice (the cache is
+      # opt-in precisely so the TEST suite keeps re-milling; production wants it on)
+      FORMULA_EXAM_CACHE: "1"
 
   kafka:
     # single-node KRaft — the event backbone (mail requests, the deletion saga, thread cascades)

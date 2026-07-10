@@ -452,6 +452,28 @@ STREAM=$(curl -sN --max-time 20 "$FORMULA/broadcast/races/$RACE/stream")
 echo "$STREAM" | grep -q "event: frame"  || { echo "FAIL: no frames on the race stream"; exit 1; }
 echo "$STREAM" | grep -q "event: result" || { echo "FAIL: race stream did not finish with a result"; exit 1; }
 
+step "formula A4: the sim's port is NOT on the host (engine code never faces the network)"
+if curl -s --max-time 3 http://localhost:8090/calendar >/dev/null 2>&1; then
+    echo "FAIL: race-sim answers on the host — the engine must live on the internal network only"
+    exit 1
+fi
+
+step "formula A4: bot upload -> exam -> licence flows through the JWT-gated game instead"
+BOT_DRIVER=$(curl -sf -X POST "$FORMULA/broadcast/team/drivers" -H "Authorization: Bearer $ACCESS" \
+    -H 'Content-Type: application/json' \
+    -d '{"name":"SmokeBotSeat","pace":88,"aggression":60,"consistency":85}' \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+UPLOAD=$(python3 - "$BOT_DRIVER" <<'PY'
+import json, sys
+code = open("formula-simulator/bots/example-bot.py").read()
+print(json.dumps({"filename": "smoke-example-bot.py", "code": code}))
+PY
+)
+CARD=$(curl -sf --max-time 600 -X POST "$FORMULA/broadcast/team/drivers/$BOT_DRIVER/bot/upload" \
+    -H "Authorization: Bearer $ACCESS" -H 'Content-Type: application/json' -d "$UPLOAD")
+echo "$CARD" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("grade"), d' \
+    || { echo "FAIL: bot upload did not come back with an exam grade"; exit 1; }
+
 step "collections UI on its own origin: page served, both CORS edges answer the preflight"
 curl -sf http://localhost:8093/ | grep -q "My collections" \
     || { echo "FAIL: collections-ui is not serving its page"; exit 1; }

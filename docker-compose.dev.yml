@@ -1,0 +1,9 @@
+# DEV OVERRIDE — never on a public server. The base compose keeps race-sim internal-only
+# (A4: the engine's code never faces the network); this override re-opens its port on the
+# host so the owner can drive the training ground by hand:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d race-sim ...
+# formula-up.sh applies it automatically.
+services:
+  race-sim:
+    ports:
+      - "8090:8090"
