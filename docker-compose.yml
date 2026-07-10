@@ -297,7 +297,8 @@ services:
       SMS_URL: http://sms:8088
       PUSH_URL: http://push:8089
     healthcheck:
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8086"]
+      # alpine image: busybox nc, not bash /dev/tcp
+      test: ["CMD", "nc", "-z", "localhost", "8086"]
       interval: 3s
       timeout: 3s
       retries: 40
@@ -368,7 +369,8 @@ services:
       SECURITY_URL: http://security:8080
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     healthcheck:
-      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8092"]
+      # alpine image: busybox nc, not bash /dev/tcp
+      test: ["CMD", "nc", "-z", "localhost", "8092"]
       interval: 3s
       timeout: 3s
       retries: 40
