@@ -37,6 +37,7 @@ FLAVOURS = {
     "comments": "Spring Boot",
     "paddock": "Javalin",
     "user-collections": "Helidon SE",
+    "offboarding": "Helidon SE (process manager)",
     "formula": "JDK HttpServer",
     "collections-ui": "React Native Web + nginx",
     "idp": "Python (stub OIDC)",
@@ -78,6 +79,10 @@ BROWSER_EDGES = [
 def topic_for(description: str, producer: str) -> str:
     if "mail request" in description:
         return "mail-requests"
+    if "deletion requested fact" in description:
+        return "security-events"
+    if "portal content purged" in description or "portal purge failed" in description:
+        return "offboarding-events"
     if "purge user content command" in description:
         return "content-commands"
     if "purged confirmation" in description:
@@ -92,6 +97,22 @@ def topic_for(description: str, producer: str) -> str:
 EXTRA_ASYNC = [
     ("memes", "comments", "memes-events", "MEME_DELETED"),
 ]
+
+# TWO PRODUCTS, not one (the owner's verdict, 2026-07-11): the social PORTAL and the F1 GAME
+# share ONLY identity. Containers are grouped accordingly; everything unlisted is the portal
+# (incl. the shared notification channels — the portal side is their home, identity reaches
+# them across the boundary). render() FAILS if a derived edge ever joins game↔portal directly:
+# the diagram would then be exposing product conflation, not documenting architecture.
+GAME = {"formula", "race-sim", "formula-postgres"}
+IDENTITY = {"security", "idp", "postgres"}
+
+
+def product_of(name: str) -> str:
+    if name in GAME:
+        return "game"
+    if name in IDENTITY:
+        return "identity"
+    return "portal"
 
 OBSERVABILITY = {"prometheus", "grafana", "loki", "promtail", "tempo", "cadvisor", "node-exporter"}
 
@@ -229,25 +250,48 @@ def render(services, sync, stores, kafka_attached, contracts, async_edges):
     w("## C2 — kontenery: krawędzie synchroniczne (HTTP) i magazyny")
     w("")
     w("Krawędzie serwis→serwis wyprowadzone ze zmiennych środowiskowych w `docker-compose.yml`;")
-    w("etykieta = intencja wywołania. Obserwowalność (Prometheus/Grafana/Loki/Promtail/Tempo)")
-    w("celowo zwinięta — widzi wszystkie kontenery, na diagramie byłaby spaghetti.")
+    w("etykieta = intencja wywołania. **Granica produktów jest inwariantem generatora**: jedyne")
+    w("krawędzie wychodzące z GRY prowadzą do wspólnej tożsamości — gdyby kiedyś powstała krawędź")
+    w("gra↔portal, `build_c4.py` przerwie z błędem zamiast ją narysować. Obserwowalność")
+    w("(Prometheus/Grafana/Loki/Promtail/Tempo) celowo zwinięta — widzi wszystkie kontenery,")
+    w("na diagramie byłaby spaghetti.")
     w("")
+    # the invariant check: a derived edge joining the game directly to the portal means the
+    # products got conflated in compose — fail loudly instead of drawing it
+    for src, dst, label in sync + stores:
+        if {product_of(src), product_of(dst)} == {"game", "portal"}:
+            raise SystemExit(
+                f"PRODUCT BOUNDARY VIOLATED: {src} -> {dst} ({label}) joins the F1 game "
+                f"to the portal — the two products may share identity only (CLAUDE.md)")
     w("```mermaid")
     w("flowchart LR")
     w('  browser(["👤 Przeglądarka"])')
     app_services = [s for s in services
                     if s not in OBSERVABILITY and "postgres" not in s
                     and s not in ("kafka", "mailpit", "minio")]
-    for s in sorted(app_services):
-        flavour = FLAVOURS.get(s, "")
-        label = f"{s}<br/><i>{flavour}</i>" if flavour else s
-        w(f'  {node_id(s)}["{label}"]')
-    # no subgraphs: forcing the stores into one cluster drags every database away from its
-    # owner and the layout degenerates — free placement keeps each cylinder next to its service
     store_targets = sorted({t for _, t, _ in stores})
-    for t in store_targets:
-        w(f'  {node_id(t)}[("{t}")]')
-    w('  mailpit["mailpit (dev SMTP)"]')
+    # stores render INSIDE their product group next to their owner (one big stores cluster
+    # drags every database away from its service and the layout degenerates)
+    all_nodes = sorted(app_services) + store_targets + ["mailpit"]
+    groups = [
+        ("portal", "PORTAL społecznościowy"),
+        ("identity", "Wspólna TOŻSAMOŚĆ (jedyny łącznik produktów)"),
+        ("game", "GRA F1 — osobny produkt"),
+    ]
+    for gid, gtitle in groups:
+        w(f'  subgraph {gid} ["{gtitle}"]')
+        for n in all_nodes:
+            if product_of(n) != gid:
+                continue
+            if n in store_targets:
+                w(f'    {node_id(n)}[("{n}")]')
+            elif n == "mailpit":
+                w('    mailpit["mailpit (dev SMTP)"]')
+            else:
+                flavour = FLAVOURS.get(n, "")
+                label = f"{n}<br/><i>{flavour}</i>" if flavour else n
+                w(f'    {node_id(n)}["{label}"]')
+        w("  end")
     for target, label in BROWSER_EDGES:
         if target in services:
             w(f'  browser -->|"{label}"| {node_id(target)}')
@@ -260,6 +304,8 @@ def render(services, sync, stores, kafka_attached, contracts, async_edges):
     w("Uwagi nie do wyprowadzenia z env-ów (kuratorowane w skrypcie): krawędzie przeglądarki —")
     w("UI wypiekają adresy API w buildzie; `race-sim` nie ma portu na hosta (rozmawia z nim tylko")
     w("formula); collections-ui woła security i user-collections **cross-origin** (CORS).")
+    w("Kanały powiadomień (email/sms/push) mieszkają po stronie portalu; tożsamość sięga do nich")
+    w("przez granicę (kody MFA, maile kont) — patrz ADR 0005.")
     w("")
 
     # ---- C2 async
@@ -290,11 +336,18 @@ def render(services, sync, stores, kafka_attached, contracts, async_edges):
         w(f'  kafka -.->|"{topic} {label} {mark}"| c_{node_id(consumer)}')
     w("```")
     w("")
-    w("(Serwis może stać po obu stronach szyny — security produkuje komendy i konsumuje")
-    w("potwierdzenia — dlatego występuje po lewej i po prawej.)")
+    w("(Serwis może stać po obu stronach szyny — offboarding konsumuje fakt i potwierdzenia,")
+    w("a produkuje komendy i werdykty — dlatego występuje po lewej i po prawej.)")
     w("")
+    game_on_kafka = [s for s in kafka_attached if product_of(short(s)) == "game"]
+    if game_on_kafka:
+        raise SystemExit(
+            f"PRODUCT BOUNDARY VIOLATED: {game_on_kafka} (the F1 game) attached to Kafka — "
+            f"the backbone belongs to the portal+identity (CLAUDE.md)")
     attached = ", ".join(short(s) for s in kafka_attached)
-    w(f"Na Kafce siedzą (env `KAFKA_BOOTSTRAP_SERVERS`): {attached}.")
+    w(f"Na Kafce siedzą (env `KAFKA_BOOTSTRAP_SERVERS`): {attached}. **Gra F1 nie ma tu ani")
+    w("jednej krawędzi** — szyna zdarzeń należy do portalu i tożsamości (osobne produkty;")
+    w("generator pilnuje tego twardo).")
     w("")
 
     # ---- contract coverage table

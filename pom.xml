@@ -44,6 +44,7 @@
              ./mvnw -pl offline-jwt -am install); formula-up.sh and CI do exactly that. -->
         <module>microservice-paddock</module>
         <module>microservice-user-collections</module>
+        <module>microservice-offboarding</module>
     </modules>
 
 </project>

@@ -2,6 +2,28 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## ~~OTWARTE~~ ZROBIONE (2026-07-11/2) — saga wyprowadzona do `microservice-offboarding` (opcja D usera)
+
+Właściciel wybrał mocniejszą drogę niż A/B poniżej: **orkiestracja sagi wyprowadzona do NOWEGO
+serwisu portalu `microservice-offboarding`** (Helidon SE, bliźniak collections; process manager).
+Nowy przepływ: security ogłasza FAKT `ACCOUNT_DELETION_REQUESTED` (`security-events`, outbox,
+polityka wizarda jako nieprzezroczysta mapa) → offboarding otwiera sagę (dedup po `id` faktu),
+komenduje `PURGE_USER_CONTENT` (kształt BEZ ZMIAN — pakty uczestników przeszły bez modyfikacji
+payloadów), zbiera potwierdzenia (WIERSZE, nie kolumny; uczestnicy = env
+`OFFBOARDING_PARTICIPANTS`) i ogłasza JEDEN werdykt na `offboarding-events`:
+`PORTAL_CONTENT_PURGED` / `PORTAL_PURGE_FAILED` (timeout 2 min). Security: V17 zrzuca kolumny
+uczestników, `PurgeChoices` = generyczna mapa, listener werdyktów zamiast trzech topiców,
+własna siatka bezpieczeństwa 5 min, tryb `account-deletion.await-portal-purge=false`
+(czysta tożsamość = kasacja od razu — scenariusz „security+gra" działa). Kontrakty: 6 nowych
+paktów (fakt: offboarding←security ×2; werdykty: security←offboarding ×2; komendy: 3 uczestników
+→offboarding; potwierdzenia: offboarding←3), wszystkie zweryfikowane na realnym kodzie obu stron.
+Testy: offboarding 34/34 (7 scenariuszy Gherkina, prawo ADR 0006, JDBC, pakty), security pełna
+suita zielona. Compose: serwis+postgres+healthcheck+OTel+Prometheus (:8094). ZOSTAŁO przy
+pierwszym pushu (USER): `gh repo create microservice-offboarding` + push (CI uczestników
+i workspace już checkoutują to repo).
+
+--- Oryginalna diagnoza i drogi A/B poniżej (historycznie) ---
+
 ## OTWARTE — saga usuwania konta vs reużywalność security (właściciel 2026-07-11)
 
 Pytanie właściciela: „czy to security kieruje sagą?! zależało mi na reużywalności".

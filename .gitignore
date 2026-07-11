@@ -28,6 +28,7 @@ docs/glossary/site/
 /microservice-image/
 /microservice-paddock/
 /microservice-user-collections/
+/microservice-offboarding/
 
 # Compiled class file
 *.class

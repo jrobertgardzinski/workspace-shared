@@ -415,6 +415,54 @@ services:
       timeout: 3s
       retries: 15
 
+  # the portal's process manager for account deletion (the saga orchestration extracted from
+  # security): consumes the deletion fact off security-events, commands the content purge on
+  # content-commands, collects the participants' confirmations, and announces the single outcome
+  # security waits for on offboarding-events. Participants are CONFIGURATION — a new content
+  # service joins the saga right here, without touching a line of security.
+  offboarding:
+    build:
+      context: microservice-offboarding
+    ports:
+      - "8094:8094"
+    environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: offboarding
+      OFFBOARDING_PORT: "8094"
+      OFFBOARDING_PARTICIPANTS: memes=memes-events,comments=comments-events,collections=usercollections-events
+      DB_URL: jdbc:postgresql://offboarding-postgres:5432/offboarding
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    healthcheck:
+      # alpine image: busybox nc, not bash /dev/tcp
+      test: ["CMD", "nc", "-z", "localhost", "8094"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
+    depends_on:
+      offboarding-postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  offboarding-postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: offboarding
+    volumes:
+      - offboarding_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d offboarding"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
   formula:
     build:
       context: formula-simulator
@@ -605,6 +653,7 @@ services:
 
 volumes:
   security_pgdata:
+  offboarding_pgdata:
   memes_pgdata:
   minio_data:
   paddock_pgdata:

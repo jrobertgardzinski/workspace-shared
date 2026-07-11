@@ -1,5 +1,11 @@
 # Przewodnik po projekcie — dla juniora, za rękę
 
+> **⚠️ ZASTĄPIONY (2026-07-11):** aktualnym dokumentem wdrożeniowym jest
+> [przewodnik-juniora.md](przewodnik-juniora.md) — pełniejszy (tagi narzędzi per dział,
+> dwa produkty, ADR 0006, aneks rekrutacyjny o memes) i utrzymywany na bieżąco.
+> Ten plik zostaje jako archiwum; szczegóły poniżej mogą być nieaktualne
+> (m.in. formula-simulator nie jest już modułem reaktora).
+
 Czytasz to, bo chcesz zrozumieć, co tu jest, po co, i jak tego dotykać bez strachu.
 Idziemy od ogółu do szczegółu. Każde narzędzie ma sekcję „PO CO ono jest" — bo nazwa
 bez powodu istnienia nic nie uczy.

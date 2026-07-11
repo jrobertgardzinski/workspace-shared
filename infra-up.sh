@@ -16,7 +16,7 @@ fi
 
 # every JVM service in the compose file needs its jar built on the host (Dockerfiles are
 # runtime-only); sms/push/image/idp are Python and need nothing
-./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,microservice-memes/memes-infrastructure,microservice-comments,microservice-paddock,microservice-user-collections \
+./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,microservice-memes/memes-infrastructure,microservice-comments,microservice-paddock,microservice-user-collections,microservice-offboarding \
     -am package -DskipTests
 # the F1 game is a SEPARATE PRODUCT outside the reactor (the owner's verdict 2026-07-11):
 # its workspace library installs first, then its jar builds standalone off its own pom

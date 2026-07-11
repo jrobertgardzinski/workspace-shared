@@ -207,13 +207,14 @@ umie".
 
 | Serwis | Smak | Port | Za co odpowiada |
 |---|---|---|---|
-| `microservice-security` | **Micronaut** (hexagonal, 6 warstw) | 8080 | Konta, logowanie, JWT, MFA, OAuth, sesje; **orkiestruje** sagę usuwania konta (⚠ uczestnicy dziś wpisani NA SZTYWNO — memes/comments/collections; znany dług reużywalności, drogi naprawy w `todo.md` workspace'u) |
+| `microservice-security` | **Micronaut** (hexagonal, 6 warstw) | 8080 | Konta, logowanie, JWT, MFA, OAuth, sesje; przy usuwaniu konta ogłasza FAKT i czeka na jeden werdykt portalu (orkiestrację sagi wyprowadzono do `microservice-offboarding`, 2026-07-11) |
 | `microservice-email` | **Quarkus** (BCE, szablony Qute) | 8082 | Wysyłka maili (`POST /mails*`, X-Api-Key), konsument `mail-requests` |
 | `microservice-memes` | **Spring Boot** (wielomodułowy, layered) | 8083 | Galeria memów: upload, miniatury, głosy, moderacja/NSFW, UI na `/` |
 | `microservice-comments` | **Spring Boot** (jednomodułowy) | 8085 | Wątki komentarzy pod memami + głosy |
 | `microservice-paddock` | **Javalin** (vertical slices, PWA) | 8086 | Hub społecznościowy: serwery gry, członkostwa, wydarzenia z RSVP |
 | `formula-simulator` | **bez frameworka** (JDK HttpServer) | 8084 | Menedżer F1 z autonomicznymi kierowcami; SSE; OSOBNY PRODUKT poza reaktorem (buduje się standalone) — sekcja 16 |
 | `microservice-user-collections` | **Helidon 4 SE** (virtual threads) | 8092 | Generyczne kolekcje referencji usera (ulubione); 3. uczestnik sagi |
+| `microservice-offboarding` | **Helidon 4 SE** (process manager) | 8094 | Orkiestrator sagi usuwania konta po stronie PORTALU (wyprowadzony z security); uczestnicy = konfiguracja |
 | `collections-ui` | React Native Web + nginx | 8093 | UI ulubionych na WŁASNYM originie (celowo, dla ćwiczenia CORS) |
 | `microservice-idp` | Python | 8091 | **Stub OIDC** — „Zaloguj przez Google" bez Google (dev/testy) |
 | `microservice-image` | Python + Pillow | wewn. (8087) | Konwersja PNG→WebP dla memów |
@@ -329,15 +330,33 @@ transakcji** co zmianę stanu; poller wypycha je do Kafki. Dzięki temu zmiana i
 nigdy się nie rozjadą. Outbox niesie też **cid** (kolumna V14) i **W3C `traceparent`** (V16) —
 dlatego log i trace jednej operacji sklejają się przez granice asynchroniczne (sekcja 14).
 
-**Saga usuwania konta** — sztandarowy przepływ:
-1. security publikuje `PURGE_USER_CONTENT` na `content-commands`,
-2. **trzej uczestnicy** sprzątają i potwierdzają (`USER_CONTENT_PURGED`): memes (wg
+**Saga usuwania konta** — sztandarowy przepływ, po ekstrakcji orkiestratora (2026-07-11)
+prowadzony przez **`microservice-offboarding`** (process manager PORTALU):
+1. security blokuje konto i ogłasza FAKT `ACCOUNT_DELETION_REQUESTED` na `security-events`
+   (przez outbox; fakt niesie wybory usera z wizarda jako nieprzezroczystą mapę),
+2. **offboarding** otwiera sagę i publikuje `PURGE_USER_CONTENT` na `content-commands`,
+3. **trzej uczestnicy** sprzątają i potwierdzają (`USER_CONTENT_PURGED`): memes (wg
    `ContentPurgePolicy` — DELETE/ANONYMIZE/KEEP), comments (jw.), user-collections (wholesale,
    refy są nieprzezroczyste),
-3. `AccountDeletionOrchestrator` czeka na **wszystkie** potwierdzenia i dopiero wtedy kasuje konto.
+4. offboarding zbiera komplet potwierdzeń i ogłasza JEDEN werdykt na `offboarding-events`:
+   `PORTAL_CONTENT_PURGED` (security kasuje konto na dobre + mail pożegnalny) albo — po
+   timeoucie 2 min — `PORTAL_PURGE_FAILED` (security odblokowuje konto + mail z przeprosinami).
+   Security trzyma też własną siatkę bezpieczeństwa: cisza przez 5 min (martwy orkiestrator)
+   również odblokowuje konto.
 
-**Pułapka do zapamiętania:** każdy nowy serwis trzymający treści usera musi zostać dopisany jako
-uczestnik sagi (tabela `saga_participants`), inaczej saga nigdy się nie domknie albo osieroci dane.
+**Dlaczego tak (dawny dług — SPŁACONY 2026-07-11):** wcześniej security znało trzech uczestników
+NA SZTYWNO (kolumny w tabeli sagi!), a domena tożsamości znała osie portalu imiennie — wdrożenie
+„security + sama gra" nie umiało usunąć konta. Po ekstrakcji: **uczestnicy to KONFIGURACJA
+offboardingu** (`OFFBOARDING_PARTICIPANTS=nazwa=topic,...` — nowy serwis treści dopisuje się
+w compose, zero zmian w kodzie), potwierdzenia to WIERSZE nie kolumny, `PurgeChoices` to
+generyczna mapa, a wdrożenie czysto tożsamościowe ustawia
+`account-deletion.await-portal-purge=false` i kasuje konto od razu. Idempotencja: duplikat faktu
+znajduje swoją sagę po `id` faktu (klucz replay), przejście STARTED→COMPLETED to zatrzask
+jednorazowy.
+
+**Pułapka (złagodzona):** nowy serwis trzymający treści usera nadal musi dołączyć do sagi —
+ale teraz to wpis w konfiguracji offboardingu + własny konsument/potwierdzenie, nie zmiana
+w security.
 
 **ADR 0005 — dwa style integracji z email, celowo:** maile *należne* po zmianie stanu
 (rejestracja, reset, saga) idą przez outbox/Kafkę (nie mogą zginąć); powiadomienia *best-effort*
@@ -428,6 +447,7 @@ a zależni czekają na `service_healthy` zamiast ścigać się ze startem Kafki/
 | 8085 / 8086 | comments / paddock (PWA) |
 | 8091 | stub IdP (formularz „logowania Google") |
 | 8092 / 8093 | user-collections (API) / collections-ui (UI ulubionych) |
+| 8094 | offboarding (health/metrics; saga żyje na Kafce) |
 | 8025 | **Mailpit** — skrzynka odbiorcza dev (tu lądują wszystkie maile) |
 | 3000 / 9090 | Grafana / Prometheus |
 
@@ -520,7 +540,7 @@ wożony w kolumnie outboxa i atrybucie żądania, nie „w wątku".
 > **independent deployability** — każdy serwis testowalny i wdrażalny osobno, stąd CI per repo.
 
 Dwa poziomy:
-- **Workspace** (`.github/workflows/ci.yml`): checkoutuje 13 sub-repo, buduje cały reaktor
+- **Workspace** (`.github/workflows/ci.yml`): checkoutuje 14 sub-repo, buduje cały reaktor
   jednym `./mvnw clean install` **plus grę F1 osobnym krokiem** (osobny produkt poza
   reaktorem, bez własnego CI — workspace ją testuje standalone), a drugi job **e2e**
   prowadzi specyfikacje przez prawdziwe Chromium (oba UI, passkeys na wirtualnym
@@ -558,6 +578,13 @@ emerguje z symulacji). **Repo PRYWATNE**, ma własny, obszerny świat dokumentó
   z fizyką per podzespół (turbolag, ERS, fade hamulców, opony crossply/radial...), fazy F0–F9
   (F0 zrobiona) oraz **dwa niezależne mistrzostwa** na wspólnym silniku: branch agentów
   (benchmark AI) i branch użytkowników (persona JA2).
+- **Mapy architektury gry (2026-07-11)** — zanim ruszysz kod, przeczytaj trzy mapy:
+  `docs/architektura-java.md` (backend), `docs/mapa-sim-python.md` (moduły symulacji)
+  i `docs/infra.md` (drogi między nimi). Do tego `docs/rodowod.md`: **każda liczba balansu
+  ma spisany rodowód** — kotwica historyczna / karykatura / pokrętło; liczb bez rodowodu
+  się nie dodaje.
+- Po „wielkim przeglądzie" (2026-07-11): ekonomia (kasa) jest **fail-closed**, licencje botów
+  siedzą za bramą, a sprzedaż nieistniejących jeszcze funkcji jest zablokowana.
 - Jazda manualna właściciela (drive-ui) wymaga `docker-compose.dev.yml` → `./formula-up.sh`.
 
 ---
@@ -585,7 +612,7 @@ Potem, w tej kolejności:
 1. Przeczytaj `microservice-security/specs/*.feature` — katalog zachowań rdzenia.
 2. Prześledź w `microservice-user-collections` układ domain → application → infrastructure —
    to najmniejszy i najczystszy przykład hexagonu.
-3. Otwórz `docs/adr/` — pięć krótkich decyzji, które tłumaczą „dziwności".
+3. Otwórz `docs/adr/` — sześć krótkich decyzji, które tłumaczą „dziwności".
 4. Zrób jedno żądanie z własnym `X-Correlation-Id` i odszukaj je w Loki + Tempo.
 5. Zmień coś małego w jednym serwisie, odpal jego testy w jego katalogu i zobacz w `pacts/`,
    czy nie ruszyłeś kontraktu.
@@ -596,7 +623,8 @@ Potem, w tej kolejności:
 |---|---|
 | Jak serwisy się ze sobą łączą? | [`docs/c4-architecture.md`](c4-architecture.md) — diagramy C4 **generowane** z compose + paktów (`python3 build_c4.py`) |
 | Co się ostatnio działo / co dalej? | `todo.md` (workspace) + `todo.md` sub-repo + `git log` sub-repo |
-| Dlaczego tak zdecydowano? | `docs/adr/`, `formula-simulator/docs/zalozenia-projektu.md` |
+| Dlaczego tak zdecydowano? | `docs/adr/` (6 ADR-ów), `formula-simulator/docs/zalozenia-projektu.md` |
+| Jak zbudowana jest gra F1? | `formula-simulator/docs/`: `architektura-java.md`, `mapa-sim-python.md`, `infra.md`, `rodowod.md` (pochodzenie liczb balansu) |
 | Co umie security? | `microservice-security/specs/`, `Readme.md`, `docs/mfa-design.md`, `docs/oauth-providers.md` |
 | Jak podpiąć prawdziwego Google'a? | `microservice-security/docs/oauth-providers.md` |
 | Plany wdrożeniowe (VPS, k3s)? | `docs/deployment-plan.md` |
@@ -792,6 +820,14 @@ własna baza), a spójność między nimi jest **ostateczna** (eventual), nie tr
    przez `MEME_DELETED`; wspólna semantyka głosów wyciągnięta do libki `voting` zamiast kopii.
 10. **„Jak testujesz?"** — Piramida z tym samym scenariuszem na kilku wejściach: unit → use case'y →
     MockMvc/HTTP czarna skrzynka → pakty → Playwright w przeglądarce → smoke stacku.
+11. **„Co byś poprawił?" / „Opowiedz o refaktoringu"** — Gotowa historia z happy endem:
+    zdiagnozowałem, że orkiestrator sagi w security znał uczestników NA SZTYWNO (kolumny w tabeli!),
+    a domena tożsamości znała osie treści portalu imiennie — wdrożenie „sama tożsamość + gra" nie
+    umiało usunąć konta. **Wyprowadziłem orkiestrację do osobnego serwisu portalu**
+    (`microservice-offboarding`): security ogłasza fakt i czeka na jeden werdykt, uczestnicy są
+    konfiguracją, a granicę pilnują pakty w obie strony — uczestnicy nie zauważyli zmiany producenta
+    komend (ich kontrakty przeszły bez modyfikacji payloadów). Diagnoza → opcje → wykonanie →
+    dowód kontraktami: dokładnie to, co senior chce usłyszeć.
 
 **Przed rozmowami przećwicz demo (15 minut):** `./infra-up.sh` → rejestracja → link w Mailpicie →
 upload → gwiazdka (cross-origin do collections) → flaga NSFW moderatorem → usunięcie konta
