@@ -137,6 +137,26 @@ domain (model + reguły)        <- czyste reguły biznesowe, zero technologii
 infrastruktura tylko binduje na nie properties. Dzięki temu konfiguracja jest testowalna
 jednostkowo.
 
+### Jeden wzorzec, różne dialekty — mapa per serwis
+
+**Wspólna dla wszystkich jest REGUŁA ZALEŻNOŚCI (do środka), nie nazwy pakietów** —
+różnorodność jest celowa (portfolio!). Kto jak mówi:
+
+| Serwis | Układ pakietów/modułów | Dialekt |
+|---|---|---|
+| `microservice-security` | `domain → config → system → application → infrastructure → ui` (6 MODUŁÓW Mavena) | pełny hexagon, najdrobniejszy podział; `system` = use case'y, `application` = orkiestracja/serwisy |
+| `formula-simulator` | `domain / config / system / application / infrastructure` (te same warstwy, JEDEN moduł) | ten sam dialekt co security — pakietami zamiast modułami; sprawdzone: zero importów `infrastructure` z wewnętrznych warstw |
+| `microservice-comments` | `domain / application / config / infrastructure` | hexagon 4-pakietowy (bez osobnego `system` — use case'y w `application`) |
+| `microservice-user-collections` | `domain / application / infrastructure` | hexagon minimalny, 3 pakiety |
+| `microservice-memes` | `domain / application / config / infrastructure` + `image`, `tags` (7 modułów) | „layered modules": warstwy + wydzielone zdolności; framework w JEDNYM module z siedmiu |
+| `microservice-email` | `boundary / control / entity` | **BCE** — świadomie INNY wzorzec z tej samej rodziny (Quarkus); boundary≈adapter, control≈use case, entity≈domena |
+| `microservice-paddock` | `events / feed / myservers / notifications / registry / workshop / infra` | **package-by-feature**: pionowe ficzery zamiast poziomych warstw — trzeci sposób krojenia |
+
+Morał: jak przechodzisz między serwisami, szukaj tej samej REGUŁY („logika nie zna
+technologii; zależności do środka"), a nie tych samych katalogów. `system` vs
+`application` to kwestia dialektu security/formula: tam use case'y i orkiestracja
+mieszkają osobno.
+
 **Decyzje są spisane w ADR-ach** — `docs/adr/` w workspace (0001: domena nie broni się przed
 null, pilnuje tego warstwa aplikacji; 0002: prefiks `_` dla kroków use case'ów; 0003–0005 —
 sekcje 9–10). Zanim zakwestionujesz coś „dziwnego", sprawdź, czy nie ma o tym ADR-a.
