@@ -49,3 +49,12 @@ actually keeps null out; this one needs teeth of the same kind.
   list next to the use-case wiring).
 - Existing per-operation idempotence scenarios are retitled to what they actually pin
   (replies), not deleted — the reply contracts they carry are real spec.
+
+## Enforcement registry (2026-07-11)
+
+- `microservice-user-collections` — `IdempotentCommandsTest` (the reference); no exceptions.
+- `microservice-comments` — `IdempotentCommandsTest`; declared exception: **AddComment**
+  (two calls are two comments, by design — proven in the test).
+- `microservice-memes` — `IdempotentCommandsTest` (delete / flag / purge under the law);
+  declared exception: **CastVote** (the second identical vote TOGGLES the first away —
+  a UX choice, proven in the test).
