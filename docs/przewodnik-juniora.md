@@ -1,421 +1,743 @@
-# Przewodnik po projekcie — dla juniora, krok po kroku
+# Dokument wdrożeniowy — cały projekt po kolei, jak dla juniora
 
-Ten dokument prowadzi Cię za rękę przez cały projekt: **co to jest**, **jakie narzędzia go
-budują**, **za co każde odpowiada** i **jak to wszystko uruchomić**. Czytaj po kolei — każda sekcja
-zakłada, że rozumiesz poprzednią. Żargon tłumaczę na bieżąco, a na końcu jest słowniczek.
+Stan na **2026-07-11**. Ten dokument prowadzi Cię przez cały projekt od zera: **co to jest**,
+**jakie narzędzia go budują**, **za co każde odpowiada** i **jak to uruchomić**. Zakładam, że
+umiesz programować, ale wielu narzędzi widzisz pierwszy raz. Czytaj po kolei — każda sekcja
+buduje na poprzednich.
+
+Każdy dział zaczyna się od bloku **🏷️ Tagi** — listy narzędzi/technik, które w nim występują,
+z jednozdaniowym wyjaśnieniem. Jak szukasz konkretnego narzędzia, skanuj same tagi.
 
 ---
 
 ## 1. Czym w ogóle jest ten projekt?
 
-To **nie jest jeden program**. To **portfolio mikroserwisów** — kilka niezależnych serwisów, które
-razem tworzą backend gry/serwisu społecznościowego. Kluczowa idea:
+> 🏷️ **Tagi:**
+> **mikroserwisy** — system złożony z małych, niezależnie wdrażanych serwisów;
+> **multi-repo** — każdy serwis w osobnym repozytorium git (przeciwieństwo monorepo);
+> **workspace / agregator** — repo-spinacz, które nie zawiera kodu serwisów, tylko skleja je do wspólnej pracy.
 
-> **Ta sama domena (konta, treści, głosy, komentarze) zbudowana w RÓŻNYCH frameworkach.**
+To **nie jest jeden program**. To **portfolio mikroserwisów** — kilkanaście niezależnych serwisów,
+które razem tworzą backend serwisu społecznościowego wokół gry (galeria memów, komentarze,
+konta, gra F1). Kluczowa idea:
 
-Po co tak? Bo to portfolio — pokazuje, że tę samą architekturę (hexagonalną, o niej za chwilę)
-umiesz zrealizować w Micronaucie, Springu, Quarkusie, Javalinie, Helidonie i „gołym" Javie. Każdy
-serwis to osobne repozytorium git, z własną historią i własnym `pom.xml`.
+> **Ta sama architektura (hexagonalna) zrealizowana w RÓŻNYCH frameworkach — sześciu „smakach".**
 
-**Workspace (repo `security`)** to „spinacz" — sam nie zawiera kodu serwisów (są gitignorowane),
-tylko:
-- `pom.xml` agregatora (buduje wszystkie serwisy w jednej komendzie),
-- `docker-compose.yml` (uruchamia całość lokalnie),
-- skrypty (`infra-up.sh`, `infra-smoke.sh`),
-- dokumentację (m.in. ten plik).
+Micronaut, Quarkus, Spring Boot, Javalin, Helidon SE i „goły" JDK. Portfolio pokazuje, że wzorzec
+jest przenośny; jak zrozumiesz jeden serwis, zrozumiesz wszystkie.
 
-### Mapa serwisów
+**Każdy podkatalog to osobne repozytorium git** z własną historią i własnym remote na GitHubie.
+Repo `security` (ten katalog) to tylko **workspace-spinacz** — kod serwisów jest w nim
+gitignorowany. Workspace wersjonuje wyłącznie:
 
-| Serwis | Framework („smak") | Język | Port | Za co odpowiada |
-|---|---|---|---|---|
-| `microservice-security` | **Micronaut** | Java | 8080 | Konta, logowanie, JWT, MFA, OAuth, saga usuwania konta |
-| `microservice-email` | **Quarkus** | Java | 8082 | Wysyłka maili (weryfikacja, reset hasła, kody) |
-| `microservice-memes` | **Spring Boot** (wielomodułowy) | Java | 8083 | Galeria memów, upload, głosowanie, moderacja |
-| `microservice-comments` | **Spring Boot** (jednomodułowy) | Java | 8085 | Komentarze pod memami + głosy |
-| `microservice-paddock` | **Javalin** | Java | 8086 | Hub społecznościowy: serwery, ludzie, wydarzenia (PWA) |
-| `formula-simulator` | **brak frameworka** (JDK HttpServer) | Java | 8084 | Menedżer F1: sterowanie wyścigiem, SSE |
-| `microservice-user-collections` | **Helidon 4 SE** (virtual threads) | Java | 8092 | Kolekcje referencji użytkownika (ulubione, zapisane) |
-| `microservice-idp` | (Python) | Python | 8091 | Stub „Zaloguj przez Google" do dev/testów |
-| `microservice-image` | (Python + Pillow) | Python | 8087 | Konwersja PNG→WebP dla memów (wewnętrzny) |
-| `microservice-sms` / `push` | (Python) | Python | 8088/8089 | Kanały powiadomień (wewnętrzne, stub) |
-| `race-sim` | (Python) | Python | 8090 | Prototyp symulacji wyścigu dla formula |
+- `pom.xml` agregatora (buduje wszystko jedną komendą),
+- `docker-compose.yml` + skrypty `infra-*.sh` (uruchamiają cały stack lokalnie),
+- dokumentację (`docs/`, w tym ten plik), backlog (`todo.md`), narzędzia
+  (`aggregate_allure.py`, `build_glossary.py`).
 
-Do tego **biblioteki współdzielone** (osobne repa): `password`, `email` (libka walidacji),
-`constraint`, `config`, `voting`, `test-starter`, `adjustable-clock` — używane głównie przez
-`microservice-security`.
+**Najważniejsza konsekwencja praktyczna:** commit w workspace **nie dotyka** serwisów. Żeby
+zmienić kod serwisu, wchodzisz do jego katalogu (`cd microservice-...`) i commitujesz **tam**,
+względem JEGO historii.
 
 ---
 
 ## 2. Fundament: język i budowanie
 
-### JDK 25 (Java)
-Cały backend to Java w wersji **25**. JDK = Java Development Kit, czyli kompilator (`javac`) +
-maszyna wirtualna (`java`) + biblioteki standardowe. Wersja 25 daje m.in. **virtual threads**
-(wątki wirtualne z projektu Loom — tanie wątki, których możesz mieć miliony; wykorzystuje je
-`user-collections` na Helidonie).
+> 🏷️ **Tagi:**
+> **JDK 25** — kompilator + maszyna wirtualna Javy; **virtual threads (Loom)** — tanie wątki JVM, można mieć ich miliony;
+> **Maven** — narzędzie budowania (kompilacja, zależności, testy, pakowanie); **pom.xml** — plik konfiguracyjny Mavena;
+> **Maven Wrapper (`./mvnw`)** — skrypt, który sam ściąga właściwą wersję Mavena (3.9.9);
+> **reaktor** — Mavenowe budowanie wielu modułów naraz, w kolejności zależności;
+> **`~/.m2`** — lokalne repozytorium artefaktów Mavena na Twoim dysku.
 
-### Maven — narzędzie do budowania
-**Maven** kompiluje kod, ściąga biblioteki (zależności), uruchamia testy i pakuje aplikację do
-pliku `.jar`. Konfiguracja siedzi w plikach **`pom.xml`** (Project Object Model). Każdy `pom.xml`
-mówi: „nazywam się tak, zależę od tych bibliotek, buduj mnie tak".
+Cały backend to **Java 25**. Frontendy to TypeScript (o nich w sekcji 12), pomocnicze stuby —
+Python. Virtual threads wykorzystują `user-collections` (Helidon SE) i `formula-simulator`.
 
-- **`./mvnw`** to „Maven Wrapper" — skrypt, który sam ściąga właściwą wersję Mavena (3.9.9), żebyś
-  nie musiał jej instalować ręcznie. Zawsze używaj `./mvnw`, nie systemowego `mvn`.
-- **Reaktor / agregator**: `pom.xml` w workspace wypisuje wszystkie serwisy jako `<module>`.
-  Komenda `./mvnw clean install` w katalogu workspace buduje je **wszystkie naraz, w kolejności
-  zależności**. „Reaktor" to Mavenowa nazwa na budowanie wielu modułów razem.
+**Maven** czyta `pom.xml` („nazywam się tak, zależę od tych bibliotek, buduj mnie tak").
+Zawsze używaj `./mvnw`, nie systemowego `mvn`. Workspace'owy `pom.xml` to **czysty agregator** —
+wypisuje serwisy jako `<module>`, ale **nie jest ich rodzicem** (każdy serwis ma własnego parenta
+i buduje się samodzielnie; nie zmieniaj tego, bo to edycja wielu osobnych repozytoriów).
 
-Najważniejsze komendy Mavena (co robią):
+Reaktor sam rozwiązuje zależności między projektami — `./mvnw clean install` w workspace buduje
+wszystkie ~43 moduły w dobrej kolejności, bez wcześniejszego instalowania czegokolwiek do `~/.m2`.
+Wszystkie moduły mają wspólne współrzędne `com.jrobertgardzinski:*:1.0.0-SNAPSHOT`.
+
 | Komenda | Co robi |
 |---|---|
-| `./mvnw clean` | Kasuje katalog `target/` (wyniki poprzedniego buildu) |
-| `./mvnw compile` | Kompiluje kod (bez testów) |
-| `./mvnw test` | Kompiluje + uruchamia testy jednostkowe |
-| `./mvnw verify` | test + testy integracyjne |
-| `./mvnw package` | Buduje plik `.jar` |
-| `./mvnw install` | Pakuje i wrzuca do lokalnego repozytorium `~/.m2` (żeby inne moduły mogły użyć) |
-| flaga `-pl X -am` | Buduj tylko moduł X i to, od czego zależy (`-am` = „also make") |
-| flaga `-DskipTests` | Pomiń testy (szybciej, gdy chcesz tylko zbudować) |
+| `./mvnw clean install` | Zbuduj wszystko (pierwszy raz długo — ściąga zależności) |
+| `./mvnw -pl microservice-security -am clean verify` | Jeden projekt + to, od czego zależy (`-am` = also make) |
+| `./mvnw test` / `verify` / `package` | testy jednostkowe / +integracyjne / zbuduj jar |
+| `-DskipTests` | pomiń testy (gdy chcesz tylko jar) |
+
+Ściąga: `maven-cheatsheet.md` w korzeniu workspace.
 
 ---
 
-## 3. Uruchamianie całości: Docker i Compose
+## 3. Git w tym projekcie
 
-### Docker
-**Docker** pakuje aplikację razem z jej środowiskiem (Java, biblioteki, ustawienia) w **kontener** —
-lekką, izolowaną „paczkę", która działa tak samo na każdym komputerze. Obraz (image) to szablon,
-kontener to działająca instancja obrazu. Każdy serwis ma swój **`Dockerfile`** — przepis na obraz.
+> 🏷️ **Tagi:**
+> **git multi-repo** — kilkanaście niezależnych repozytoriów obok siebie; **remote / origin** — zdalna kopia repo na GitHubie;
+> **gh (GitHub CLI)** — narzędzie do GitHuba z terminala (PR-y, repo, API); **PAT** — Personal Access Token, hasło do pushowania przez HTTPS;
+> **Co-Authored-By** — stopka commita wskazująca współautora.
 
-### Docker Compose
-Jeden serwis to za mało — potrzebujesz bazy, Kafki, poczty itd. **`docker-compose.yml`** opisuje
-**wszystkie** kontenery i jak się łączą (sieć, porty, zmienne środowiskowe). Jedną komendą
-podnosisz cały stack.
-
-W tym projekcie nie uruchamiasz Compose'a ręcznie — są skrypty:
-| Skrypt | Co robi |
-|---|---|
-| **`./infra-up.sh`** | Buduje jary serwisów + podnosi cały stack w Dockerze (i ściąga agenta OTel) |
-| **`./infra-down.sh`** | Zatrzymuje i sprząta stack |
-| **`./infra-smoke.sh`** | „Smoke test" — sprawdza, że kluczowe przepływy działają end-to-end (rejestracja→mail→logowanie→upload→usunięcie konta) |
-
-„Smoke test" = szybki test „czy się w ogóle dymi", czyli czy podstawy żyją po uruchomieniu.
+- Autor kanoniczny: `Robert Gardziński <jrobertgardzinski@gmail.com>` (historia wszystkich repo
+  została pod to przepisana).
+- Push działa przez `credential.helper store` + PAT. `gh` jest zainstalowane w `~/.local/bin/gh`
+  i zalogowane.
+- Część repo jest **prywatna** (`formula-simulator`, `microservice-idp`), reszta publiczna —
+  ma to znaczenie dla CI (sekcja 15).
+- Backlog: `todo.md` w workspace (przekrojowy) + `todo.md` w każdym sub-repo (lokalny).
+  **To pierwsze miejsce, gdzie sprawdzasz „co się działo i co dalej".**
 
 ---
 
-## 4. Przechowywanie danych
+## 4. Architektura: hexagonal (porty i adaptery)
 
-### PostgreSQL
-**Postgres** to relacyjna baza danych (tabele, SQL). Każdy serwis, który trzyma dane trwale, ma
-**własną** bazę Postgresa (security, memes, comments, paddock, formula, user-collections) — to
-zasada mikroserwisów: **każdy pilnuje swoich danych**, nikt nie grzebie w cudzej bazie.
+> 🏷️ **Tagi:**
+> **architektura heksagonalna / porty i adaptery** — logika biznesowa odseparowana od technologii;
+> **DDD (Domain-Driven Design)** — modelowanie kodu wokół pojęć domeny biznesowej; **value object** — mały niemutowalny obiekt z inwariantami (np. `EmailAddress`);
+> **use case** — jedna operacja aplikacji jako klasa z `execute(...)`;
+> **port** — interfejs opisujący, czego logika potrzebuje; **adapter** — konkretna implementacja portu (JDBC, HTTP, in-memory);
+> **ADR (Architecture Decision Record)** — krótki dokument utrwalający decyzję architektoniczną i jej powody.
 
-### H2
-**H2** to baza „w pamięci" (in-memory) — znika po wyłączeniu programu. Używamy jej w **dev i
-testach**, gdy nie ustawisz zmiennej `DB_URL`. Sztuczka: H2 pracuje w „trybie PostgreSQL", więc te
-same zapytania SQL działają w testach (H2) i na produkcji (Postgres) — **jeden adapter, żadnego
-drugiego kodu do utrzymania**.
-
-### Flyway — migracje bazy
-Schemat bazy (tabele) zmienia się w czasie. **Flyway** wersjonuje te zmiany plikami SQL:
-`V1__cos.sql`, `V2__cos_innego.sql`. Przy starcie serwis odpala Flyway, który wykonuje brakujące
-migracje po kolei. Dzięki temu każda baza (dev, test, prod) ma **identyczny, powtarzalny schemat**.
-Przykład: `microservice-user-collections/src/main/resources/db/migration/V1__collection_items.sql`.
-
-### MinIO / S3
-**Obiektowa** pamięć na pliki (nie tabele — całe binaria, np. obrazki memów). **S3** to standard
-Amazona; **MinIO** to serwer mówiący tym samym protokołem, który stawiamy lokalnie. `memes` trzyma
-metadane w Postgresie, a **bajty obrazków w MinIO**. Adapter `S3ObjectStore` obsługuje i MinIO, i
-prawdziwe S3 — bez zmiany kodu.
-
----
-
-## 5. Komunikacja między serwisami
-
-Serwisy gadają ze sobą na dwa sposoby:
-
-### a) Synchronicznie — HTTP/REST
-Jeden serwis woła drugi po HTTP i **czeka na odpowiedź**. Przykład: `memes` przy uploadzie pyta
-`security` „kim jest ten user?" (endpoint `/me`) i czeka na wynik. Proste, ale jak `security`
-padnie, `memes` też się zablokuje na tym wywołaniu.
-
-### b) Asynchronicznie — Apache Kafka
-**Kafka** to „szyna zdarzeń" (event backbone). Serwis **publikuje zdarzenie** na „temat" (topic),
-a inne serwisy je **konsumują**, każdy w swoim tempie. Nadawca nie czeka. Przykłady:
-- security publikuje „wyślij maila" → email konsumuje i wysyła,
-- security publikuje „usuń treści usera X" → memes i comments konsumują i sprzątają.
-
-Kafka daje **luźne powiązanie** (nadawca nie wie, kto słucha) i **odporność** (gdy konsument
-chwilowo padnie, zdarzenie na niego poczeka).
-
-### Transactional Outbox — dlaczego jest potrzebny
-Problem: security musi **zapisać do bazy** (np. „konto skasowane") **i** wysłać zdarzenie na Kafkę.
-Jak baza się zapisze, a Kafka padnie między jednym a drugim — zdarzenie zginie. Rozwiązanie
-**outbox**: zdarzenie zapisujesz do specjalnej tabeli `outbox_events` **w tej samej transakcji** co
-zmianę stanu. Osobny wątek („poller") czyta outbox i wypycha na Kafkę, oznaczając wysłane. Gwarancja:
-**zmiana i jej zdarzenie nigdy się nie rozjadą** (dostawa „co najmniej raz").
-
-### Saga usuwania konta — przykład złożonego przepływu
-Gdy user kasuje konto, dane ma w kilku serwisach. **Saga** to rozproszona sekwencja kroków:
-1. security zapisuje „usuwam konto" i publikuje `PURGE_USER_CONTENT` na Kafkę,
-2. memes kasuje memy usera → potwierdza (`USER_CONTENT_PURGED`),
-3. comments kasuje/anonimizuje komentarze → potwierdza,
-4. security czeka na **wszystkie** potwierdzenia i dopiero wtedy kasuje samo konto.
-
-`AccountDeletionOrchestrator` w security pilnuje, kto już potwierdził. **Ważne:** gdy dojdzie nowy
-serwis z treściami usera (np. `user-collections`), trzeba go dopisać jako **kolejnego uczestnika
-sagi**, bo inaczej saga będzie czekać w nieskończoność albo zostawi osierocone dane.
-
----
-
-## 6. Poczta
-
-### microservice-email + Mailpit
-`microservice-email` (Quarkus) wysyła maile (weryfikacja adresu, reset hasła, kody logowania).
-W dev nie wysyłamy prawdziwych maili — przechwytuje je **Mailpit**, czyli fałszywy serwer SMTP z
-podglądem w przeglądarce (**http://localhost:8025**). Rejestrujesz konto → wchodzisz na Mailpit →
-widzisz maila z linkiem/kodem. Testy i smoke czytają Mailpit przez jego API.
-
----
-
-## 7. Bezpieczeństwo i logowanie (microservice-security)
-
-To najbogatszy serwis. Pojęcia, które musisz znać:
-
-- **JWT (JSON Web Token)** — podpisany cyfrowo „bilet", który dostajesz po zalogowaniu i pokazujesz
-  przy każdym żądaniu (nagłówek `Authorization: Bearer <token>`). Zawiera kim jesteś i jakie masz
-  role. Podpis (EdDSA) gwarantuje, że nikt go nie podrobił.
-- **JWKS** — publiczne klucze security wystawia pod adresem JWKS. Inne serwisy pobierają je i
-  **same weryfikują podpis** JWT bez pytania security (tryb „offline", tak robi comments/paddock).
-  Alternatywa: „introspekcja" — pytać security `/me` przy każdym żądaniu (tak robi memes; wolniej,
-  ale natychmiast wie o wylogowaniu).
-- **OAuth / OIDC** — „Zaloguj przez Google/GitHub". Standard, w którym zewnętrzny dostawca
-  potwierdza tożsamość. W dev używamy **stub-a** (`microservice-idp`), żeby nie potrzebować
-  prawdziwego Google.
-- **MFA (uwierzytelnianie wieloskładnikowe)** — poza hasłem drugi czynnik: kod z maila, TOTP
-  (aplikacja typu Google Authenticator), albo **WebAuthn / passkey** (podpis z klucza w telefonie/
-  laptopie, bez hasła). Kody odzyskiwania to zapasowy czynnik.
-- **Step-up** — podniesienie uprawnień przed wrażliwą operacją (np. przed usunięciem konta system
-  każe potwierdzić hasło jeszcze raz).
-
----
-
-## 8. Architektura: hexagonal (porty i adaptery)
-
-To najważniejszy wzorzec w tym projekcie. Wyobraź sobie kod w **trzech warstwach**:
+Najważniejszy wzorzec w projekcie. Kod ułożony jest w warstwy, zależności **tylko w dół**:
 
 ```
-   infrastructure (adaptery)          <- świat zewnętrzny: HTTP, baza, Kafka
-        |  wywołuje
-   application (use case'y)           <- logika: "co robi aplikacja"
-        |  używa
-   domain (model + reguły)            <- czyste reguły biznesowe, zero technologii
+infrastructure (adaptery)      <- świat zewnętrzny: HTTP, baza, Kafka, UI
+     |  wywołuje
+application (use case'y)       <- "co robi aplikacja": SaveItem, DeleteComment...
+     |  używa portów (interfejsów)
+domain (model + reguły)        <- czyste reguły biznesowe, zero technologii
 ```
 
-- **domain** — czysty model (np. `ItemRef`, `Comment`), bez ani jednej linijki o bazie czy HTTP.
-- **application** — **use case'y** („przypadki użycia"), np. `SaveItem`, `DeleteComment`. Klasa z
-  metodą `execute(...)` zwracającą wynik. Zależy tylko od **portów** (interfejsów).
-- **port** — interfejs opisujący, czego use case potrzebuje od świata (np. `CollectionStore` —
-  „umiem zapisać/usunąć/wypisać"). Nie mówi JAK.
-- **adapter** (w infrastructure) — konkretna implementacja portu: `JdbcCollectionStore` (baza),
-  `InMemoryCollectionStore` (pamięć, do testów). Zamieniasz adapter → zmieniasz technologię bez
-  ruszania logiki.
+- **domain** — czysty model (`ItemRef`, `Comment`, `Driver`), bez jednej linijki o bazie czy HTTP.
+- **application** — use case'y zależne wyłącznie od **portów** (np. `CollectionStore` — „umiem
+  zapisać/usunąć/wypisać", nie mówi JAK).
+- **infrastructure** — adaptery: `JdbcCollectionStore` (produkcja), `InMemoryCollectionStore`
+  (testy). Podmieniasz adapter → zmieniasz technologię bez ruszania logiki.
 
-**Po co to?** Logika biznesowa jest **odseparowana od technologii**. Testujesz use case'y na
-adapterze in-memory (szybko, bez bazy), a na produkcji wpinasz JDBC. To jest sedno „hexagonal".
+`microservice-security` dzieli to jeszcze drobniej, na **sześć modułów-warstw**:
+`security-domain` → `security-config` → `security-system` → `security-application` →
+`security-infrastructure` → `security-ui`. Warstwa **config** to osobliwość projektu: wszystkie
+„pokrętła" (limity, TTL-e, polityki) są **framework-free rekordami** w `security-config`;
+infrastruktura tylko binduje na nie properties. Dzięki temu konfiguracja jest testowalna
+jednostkowo.
 
-### Spec-first / Gherkin
-Zanim napiszemy kod, opisujemy zachowanie w **Gherkinie** — języku „Given/When/Then" czytelnym dla
-człowieka (pliki `.feature`). Potem **Cucumber** (o nim niżej) wykonuje te scenariusze jako testy.
-Przykład z `user-collections`:
+**Decyzje są spisane w ADR-ach** — `docs/adr/` w workspace (0001: domena nie broni się przed
+null, pilnuje tego warstwa aplikacji; 0002: prefiks `_` dla kroków use case'ów; 0003–0005 —
+sekcje 9–10). Zanim zakwestionujesz coś „dziwnego", sprawdź, czy nie ma o tym ADR-a.
+
+### Spec-first: Gherkin i Cucumber
+
+> 🏷️ **Tagi:**
+> **Gherkin** — język scenariuszy `Given/When/Then` czytelny dla człowieka (pliki `.feature`);
+> **Cucumber** — silnik wykonujący scenariusze Gherkina jako testy; **glue/kroki** — kod łączący zdania scenariusza z wywołaniami aplikacji;
+> **spec-first** — najpierw wykonywalna specyfikacja, potem kod.
+
+Zachowanie opisujemy **najpierw** w plikach `.feature`, potem Cucumber wykonuje je jako testy:
+
 ```gherkin
 Scenario: Saving the same reference twice is idempotent
   Given alice has saved meme 42 into "favourites"
   When alice saves meme 42 into "favourites"
   Then the save reports it was already there
 ```
-Zaleta: **specyfikacja = test**. Dokumentacja nigdy się nie rozjedzie z kodem, bo jak się rozjedzie,
-test świeci na czerwono.
+
+Specyfikacja = test: jak dokumentacja rozjedzie się z kodem, test świeci na czerwono.
+Sztandarowy zabieg projektu: **ten sam scenariusz prowadzony przez kilka wejść** — raz przez
+warstwę aplikacji (szybko), raz przez czarną skrzynkę HTTP, raz przez prawdziwe UI w przeglądarce.
+W `microservice-security/specs/` leży 16 plików `.feature` — to najlepszy katalog „co ten serwis
+umie".
 
 ---
 
-## 9. Testy — czym się je pisze
+## 5. Mapa systemu
 
-| Narzędzie | Za co odpowiada |
+> 🏷️ **Tagi:**
+> **smak (flavour)** — framework, w którym zrealizowano dany serwis; **BCE (Boundary-Control-Entity)** — alternatywny podział na warstwy używany w microservice-email;
+> **PWA** — strona instalowalna jak aplikacja mobilna; **SSE (Server-Sent Events)** — strumień zdarzeń z serwera do przeglądarki po HTTP.
+
+### Serwisy
+
+| Serwis | Smak | Port | Za co odpowiada |
+|---|---|---|---|
+| `microservice-security` | **Micronaut** (hexagonal, 6 warstw) | 8080 | Konta, logowanie, JWT, MFA, OAuth, sesje, saga usuwania konta |
+| `microservice-email` | **Quarkus** (BCE, szablony Qute) | 8082 | Wysyłka maili (`POST /mails*`, X-Api-Key), konsument `mail-requests` |
+| `microservice-memes` | **Spring Boot** (wielomodułowy, layered) | 8083 | Galeria memów: upload, miniatury, głosy, moderacja/NSFW, UI na `/` |
+| `microservice-comments` | **Spring Boot** (jednomodułowy) | 8085 | Wątki komentarzy pod memami + głosy |
+| `microservice-paddock` | **Javalin** (vertical slices, PWA) | 8086 | Hub społecznościowy: serwery gry, członkostwa, wydarzenia z RSVP |
+| `formula-simulator` | **bez frameworka** (JDK HttpServer) | 8084 | Menedżer F1 z autonomicznymi kierowcami; SSE; osobny świat — sekcja 16 |
+| `microservice-user-collections` | **Helidon 4 SE** (virtual threads) | 8092 | Generyczne kolekcje referencji usera (ulubione); 3. uczestnik sagi |
+| `collections-ui` | React Native Web + nginx | 8093 | UI ulubionych na WŁASNYM originie (celowo, dla ćwiczenia CORS) |
+| `microservice-idp` | Python | 8091 | **Stub OIDC** — „Zaloguj przez Google" bez Google (dev/testy) |
+| `microservice-image` | Python + Pillow | wewn. (8087) | Konwersja PNG→WebP dla memów |
+| `microservice-sms` / `-push` | Python | wewn. (8088/8089) | Kanały powiadomień paddocka (stub-send) |
+| `race-sim` | Python (stdlib) | wewn. (8090) | Moduł symulacji wyścigu formuły — **bez portu na hosta** (sekcja 16) |
+
+### Biblioteki współdzielone (osobne repa, konsumowane głównie przez security)
+
+| Biblioteka | Co daje |
 |---|---|
-| **JUnit 5** | Podstawowy framework testów jednostkowych (`@Test`, asercje) |
-| **Cucumber** | Wykonuje scenariusze Gherkina (`.feature`) jako testy — „glue" (kroki) w Javie łączy zdania z kodem |
-| **Testcontainers** | Odpala **prawdziwą** bazę/MinIO w Dockerze na czas testu (np. test S3 na realnym MinIO) — wymaga Dockera |
-| **RestAssured** | Testy HTTP „po drucie" — wysyła prawdziwe żądania i sprawdza odpowiedzi |
-| **Playwright** | Testy E2E przez **prawdziwą przeglądarkę** (klika w UI jak człowiek), sterowany przez cucumber-js |
-| **Allure** | Ładne raporty z testów (agregowane przez `aggregate_allure.py`) |
-
-**Piramida testów**: dużo szybkich jednostkowych (domain/application), mniej integracyjnych
-(HTTP/baza), najmniej wolnych E2E (przeglądarka). Ten sam scenariusz Gherkina bywa uruchamiany na
-kilku poziomach (logika / HTTP / UI).
+| `test-starter` | Zestawy zależności testowych: `unit-`/`bdd-`/`system-test-starter` |
+| `constraint` | Prymitywy walidacji/ograniczeń |
+| `config` | Prymitywy konfiguracji (`PropertiesConfigPort`/`Source`) |
+| `email` | Value objects adresu e-mail + email-security |
+| `password` | Value objects hasła, algorytmy haszowania (**Argon2**), password-security |
+| `adjustable-clock` (+ `infrastructure-micronaut-clock`) | Sterowalny zegar do testów + adapter Micronauta |
+| `voting` | Bounded context głosowania jako libka (toggle + tally nad portem `Ballots`) — używa memes i comments |
+| `offline-jwt` | **Nowość 2026-07-10:** wspólna weryfikacja JWT offline (sekcja 7) |
 
 ---
 
-## 10. Frontend (interfejsy użytkownika)
+## 6. microservice-security w głąb
 
-| Narzędzie | Za co odpowiada |
+> 🏷️ **Tagi:**
+> **JWT (JSON Web Token)** — podpisany „bilet" tożsamości noszony w nagłówku `Authorization: Bearer ...`; **EdDSA** — algorytm podpisu tokenów;
+> **JWKS** — publiczne klucze pod `/.well-known/jwks.json`, którymi inni weryfikują podpis; **introspekcja** — pytanie security `/me` o token przy każdym żądaniu;
+> **refresh token + reuse detection** — odnawianie sesji i wykrywanie kradzieży (użycie zużytego tokenu ubija całą rodzinę sesji);
+> **brute-force lockout** — czasowa blokada źródła po serii nieudanych logowań; **anty-enumeracja** — odpowiedzi nie zdradzają, czy adres istnieje;
+> **OAuth2 / OIDC** — logowanie przez zewnętrznego dostawcę; **PKCE** — zabezpieczenie wymiany kodu; **MFA** — dodatkowe czynniki logowania;
+> **TOTP** — kody z aplikacji typu Authenticator; **WebAuthn / passkey** — logowanie podpisem klucza sprzętowego/telefonu; **recovery codes** — jednorazowe kody zapasowe;
+> **step-up** — ponowne uwierzytelnienie przed wrażliwą operacją; **GDPR delete** — pełne usunięcie konta wraz z treściami.
+
+Najbogatszy serwis — rdzeń tożsamości dla całej reszty. Katalog możliwości = `specs/*.feature`:
+register, authenticate, verify-email, reset-password, change-email, change-password, logout,
+list/revoke sessions, refresh + reuse-detection, federated-sign-in, authorize, mfa,
+mfa-webauthn, delete-account.
+
+Co trzeba rozumieć:
+
+- **Tokeny.** Po zalogowaniu dostajesz JWT podpisany EdDSA (w claimach: kto, role,
+  `mfaCompliant`). Inne serwisy weryfikują go **na dwa sposoby — celowo oba w stacku**:
+  *introspekcja* (memes pyta `/me` — wolniej, ale natychmiast widzi unieważnienie) i *offline*
+  (comments/paddock/formula/collections weryfikują podpis same przez JWKS — szybciej, ale ślepe
+  na unieważnienie do `exp`). To świadomy pokaz trade-offu.
+- **Logowanie jest bramkowane weryfikacją adresu** — świeże konto musi kliknąć link z maila.
+  Link z maila otwiera **galerię** (`:8083/?verify=...`), która POST-uje token do security —
+  celowo nie GET na API, bo prefetchery klientów pocztowych konsumowałyby tokeny.
+- **OAuth/OIDC**: przycisk „Google"/„GitHub" w galerii. W dev oba wskazują **stub IdP** (:8091);
+  produkcja podmienia tylko env-y (przepisy: `microservice-security/docs/oauth-providers.md`,
+  łącznie z przetestowanym Keycloakiem). Dwa źródła tożsamości: ID_TOKEN (kształt Google)
+  i USERINFO (kształt GitHub/Facebook). Konta federacyjne są bezhasłowe; linki federacyjne
+  **podążają za kontem** przy zmianie adresu (`relinkAll`).
+- **MFA — temat zamknięty w całości**: łańcuch czynników (hasło ALBO provider jako ogniwo #1),
+  kody e-mail/SMS, TOTP, WebAuthn/passkeys, recovery codes jako czynnik alternatywny (batch
+  pokazany raz, konsumpcja atomowa). **Step-up**: polityki per akcja (delete konta = FULL_CHAIN,
+  zmiana hasła = SECOND_FACTORS); dialog usunięcia konta w galerii robi step-up naprawdę.
+- **Podłoga MFA u konsumentów**: token niesie claim `mfaCompliant`; moderator/admin bez
+  dopełnionego MFA jest w memes/comments traktowany jak zwykły USER (`Caller.withMfaFloor`) —
+  fail-closed.
+- **Higiena**: throttle rejestracji per IP (w compose podniesiony, żeby smoke nie wpadał),
+  lockout po nieudanych logowaniach, zajęty adres przy zmianie e-maila odpowiada tak samo jak
+  wolny (202 + notka mailem), `DeleteAccount` czyści sesje → czynniki → kody → linki federacyjne
+  → user, i uruchamia sagę treści (sekcja 8).
+
+---
+
+## 7. offline-jwt — lekcja o duplikacji
+
+> 🏷️ **Tagi:**
+> **wspólna biblioteka vs kopiowanie kodu** — duplikacja zwykle wygrywa z couplingiem między serwisami, z wyjątkiem kodu krytycznego dla bezpieczeństwa;
+> **dryf kopii** — kopie tego samego kodu rozjeżdżają się w czasie.
+
+Weryfikacja JWT offline żyła jako **pięć identycznych kopii** (memes, comments, paddock,
+user-collections, formula) z komentarzem „change one, change both". Konwergencja do libki
+`offline-jwt` (2026-07-10) złapała **realny dryf**: kopia w memes zgubiła podłogę MFA — moderator
+bez MFA zachowywał offline uprawnienia, które introspekcja by zdjęła. Stąd reguła projektu:
+między serwisami duplikacja > coupling, **ale nie dla kodu security-critical**. Serwisy trzymają
+własne polityki (np. `Caller.withMfaFloor`) — współdzielony jest tylko rdzeń weryfikacji.
+
+```java
+OfflineJwtVerifier verifier = OfflineJwtVerifier.overHttp(securityUrl, objectMapper);
+Optional<VerifiedToken> caller = verifier.verify(bearerToken);  // empty = fail closed
+```
+
+---
+
+## 8. Komunikacja między serwisami
+
+> 🏷️ **Tagi:**
+> **REST/HTTP synchroniczny** — wołasz i czekasz na odpowiedź; **Apache Kafka** — szyna zdarzeń (event backbone); **topic** — nazwany kanał zdarzeń;
+> **transactional outbox** — tabela gwarantująca, że zmiana stanu i jej zdarzenie wyjdą razem; **poller** — wątek drenujący outbox do Kafki;
+> **at-least-once + dedup** — dostawa „co najmniej raz", konsument deduplikuje; **DLQ (dead-letter queue)** — parking dla zdarzeń nie do przetworzenia, z redrive;
+> **saga** — rozproszona sekwencja kroków z potwierdzeniami; **orkiestrator** — komponent pilnujący, kto już potwierdził;
+> **correlation-id (cid)** — identyfikator podróżujący z żądaniem przez wszystkie serwisy (nagłówek HTTP i nagłówek Kafki).
+
+Dwa sposoby, oba używane świadomie:
+
+**a) Synchronicznie (HTTP)** — np. memes pyta security `/me` przy uploadzie. Proste; jak
+odpytywany padnie, wołający czeka/degraduje.
+
+**b) Asynchronicznie (Kafka)** — publikujesz zdarzenie na topic, konsumenci czytają w swoim
+tempie. Topiki stacku: `mail-requests`, `content-commands`, `memes-events`, `comments-events`,
+`usercollections-events`.
+
+**Transactional outbox**: security zapisuje zdarzenie do tabeli `outbox_events` **w tej samej
+transakcji** co zmianę stanu; poller wypycha je do Kafki. Dzięki temu zmiana i jej zdarzenie
+nigdy się nie rozjadą. Outbox niesie też **cid** (kolumna V14) i **W3C `traceparent`** (V16) —
+dlatego log i trace jednej operacji sklejają się przez granice asynchroniczne (sekcja 14).
+
+**Saga usuwania konta** — sztandarowy przepływ:
+1. security publikuje `PURGE_USER_CONTENT` na `content-commands`,
+2. **trzej uczestnicy** sprzątają i potwierdzają (`USER_CONTENT_PURGED`): memes (wg
+   `ContentPurgePolicy` — DELETE/ANONYMIZE/KEEP), comments (jw.), user-collections (wholesale,
+   refy są nieprzezroczyste),
+3. `AccountDeletionOrchestrator` czeka na **wszystkie** potwierdzenia i dopiero wtedy kasuje konto.
+
+**Pułapka do zapamiętania:** każdy nowy serwis trzymający treści usera musi zostać dopisany jako
+uczestnik sagi (tabela `saga_participants`), inaczej saga nigdy się nie domknie albo osieroci dane.
+
+**ADR 0005 — dwa style integracji z email, celowo:** maile *należne* po zmianie stanu
+(rejestracja, reset, saga) idą przez outbox/Kafkę (nie mogą zginąć); powiadomienia *best-effort*
+paddocka (przypomnienie o evencie) idą synchronicznym fan-outem HTTP do email/sms/push (krótki
+timeout, pusty URL wyłącza kanał). Nowa integracja wybiera **po regule zobowiązania**, nie przez
+kopiowanie sąsiada.
+
+**ADR 0004 — wersjonowanie zdarzeń:** każda koperta niesie `"version": 1`. W ramach wersji zmiany
+**tylko addytywne** (pola, które ktoś czyta, nigdy nie znikają ani nie zmieniają typu); konsumenci
+to **tolerant readers** (biorą swoje pola, resztę ignorują). Zmiana łamiąca = bump wersji +
+expand/contract (stary kształt emitowany obok nowego, aż wszyscy przejdą).
+
+---
+
+## 9. Kontrakty między serwisami (CDC / Pact)
+
+> 🏷️ **Tagi:**
+> **CDC (consumer-driven contracts)** — konsument deklaruje, czego używa, producent to weryfikuje; **Pact** — standardowe narzędzie CDC;
+> **pakt** — wygenerowany plik JSON z oczekiwaniami konsumenta; **Pact broker** — centralny serwer paktów (tu ZASTĄPIONY układem workspace);
+> **provider state** — stan, który producent przygotowuje przed weryfikacją paktu HTTP; **tolerant reader** — konsument ignorujący nieznane pola.
+
+Problem: producent mógł zmienić nazwę pola, które konsument czyta, i **oba buildy zostawały
+zielone** — pękało dopiero w smoke teście całego stacku. Rozwiązanie (**ADR 0003**): Pact
+w trybie **plikowym, bez brokera** — bo w workspace każdy konsument i producent i tak stoją obok
+siebie:
+
+- **Konsument** ma test paktowy, który karmi jego REALNY kod konsumujący payloadem paktu
+  i deklaruje **tylko pola, które faktycznie czyta**. Wygenerowany pakt jest commitowany do
+  `pacts/` w repo konsumenta (pakty HTTP osobno w `pacts-http/` — plik V3 nie miesza stylów).
+- **Producent** (security) weryfikuje pakty na swoim REALNYM kodzie produkującym
+  (`@PactFolder` wskazuje sibling-checkout `../../<konsument>/pacts`). Brak siblinga = **skip,
+  nie fail** (standalone build się nie wywraca); CI zawsze checkoutuje i weryfikuje.
+- Pokryte obie strony sagi (komendy purge ORAZ potwierdzenia — security bywa i producentem,
+  i konsumentem), 6 kształtów maili, HTTP: JWKS (konsumentem jest libka `offline-jwt`!)
+  i introspekcja `/me` (pakt memes, z provider state: register→verify→authenticate).
+
+Efekt: łamiąca zmiana producenta robi się czerwona **w buildzie producenta**, z nazwą konsumenta
+w komunikacie — nie w żywym stacku.
+
+---
+
+## 10. Przechowywanie danych
+
+> 🏷️ **Tagi:**
+> **PostgreSQL** — relacyjna baza danych; **database-per-service** — każdy serwis ma WŁASNĄ bazę, nikt nie grzebie w cudzej;
+> **H2** — baza in-memory do dev/testów (tryb zgodności z Postgresem → jeden adapter); **Flyway** — wersjonowane migracje schematu plikami `V1__*.sql`;
+> **MinIO / S3** — obiektowy magazyn na binaria (obrazki), lokalny serwer mówiący protokołem S3.
+
+- Trwałe dane ma 6 serwisów i **każdy własnego Postgresa** (security, memes, comments, paddock,
+  formula, collections).
+- Bez `DB_URL` serwis wstaje na **H2 w pamięci** — tak biegną testy i szybki dev.
+- Schemat wersjonuje **Flyway**: przy starcie serwis wykonuje brakujące migracje
+  (`src/main/resources/db/migration/V*.sql`). W security migracje doszły do V16 — numery
+  zobaczysz w todo jako „V13 recovery codes", „V14 cid w outboxie" itd.
+- `memes` trzyma metadane w Postgresie, a **bajty obrazków w MinIO** (adapter `S3ObjectStore`
+  działa i z MinIO, i z prawdziwym S3). Uwaga: memes **deduplikuje identyczne bajty** po hashu —
+  dwa uploady tego samego PNG to jeden mem (raz ugryzło to testy e2e).
+
+---
+
+## 11. Uruchamianie całości: Docker i Compose
+
+> 🏷️ **Tagi:**
+> **Docker** — pakuje aplikację ze środowiskiem w izolowany kontener; **obraz vs kontener** — szablon vs działająca instancja; **Dockerfile** — przepis na obraz;
+> **Docker Compose** — jeden plik YAML opisujący wszystkie kontenery, sieć i zmienne; **healthcheck** — sonda „czy serwis NAPRAWDĘ gotowy", na którą czekają zależni;
+> **smoke test** — szybki test end-to-end „czy podstawy żyją"; **Mailpit** — fałszywy serwer SMTP z webowym podglądem maili.
+
+Nie odpalasz Compose ręcznie — są skrypty w korzeniu workspace:
+
+| Skrypt | Co robi |
 |---|---|
-| **React** | Biblioteka do budowania UI z komponentów |
-| **TypeScript** | JavaScript z typami — łapie błędy zanim odpalisz |
-| **Vite** | Szybki bundler/dev-server dla frontu (buduje `security-ui`, `memes-ui`) |
-| **Material UI** | Gotowe komponenty graficzne (przyciski, dialogi) dla galerii memów |
-| **Expo / React Native** | Aplikacja mobilna (`formula-simulator/app`) — jeden kod na iOS/Android |
-| **PWA** | „Progressive Web App" — strona, którą da się zainstalować jak apkę (paddock) |
+| `./infra-up.sh` | Buduje jary na hoście, ściąga agenta OTel, podnosi cały stack |
+| `./infra-smoke.sh` | Dowodzi przepływów end-to-end (rejestracja→mail→weryfikacja→logowanie→upload→saga usunięcia konta→CORS ulubionych) |
+| `./infra-down.sh` | Zatrzymuje i sprząta (`-v` kasuje też wolumeny baz) |
+| `./memes-up.sh` / `./formula-up.sh` | Wycinki stacku (galeria / formuła z dev drive-ui przez `docker-compose.dev.yml`) |
 
-Zbudowany front jest **pakowany do jara** serwisu (np. `memes-ui` → serwowane przez Spring pod `/`).
+Wszystkie kontenery mają **healthchecki** (gołe sondy TCP — obrazy temurin/python nie mają curla),
+a zależni czekają na `service_healthy` zamiast ścigać się ze startem Kafki/security.
 
----
+**Porty, które warto znać na pamięć:**
 
-## 11. Observability — „widzieć, co się dzieje"
+| Port | Co |
+|---|---|
+| 8080 | security (API) |
+| 8082 | email (API, X-Api-Key) |
+| 8083 | **galeria memów** (UI; tu też przycisk Google i gwiazdki ulubionych) |
+| 8084 | formula-simulator (viewer wyścigu) |
+| 8085 / 8086 | comments / paddock (PWA) |
+| 8091 | stub IdP (formularz „logowania Google") |
+| 8092 / 8093 | user-collections (API) / collections-ui (UI ulubionych) |
+| 8025 | **Mailpit** — skrzynka odbiorcza dev (tu lądują wszystkie maile) |
+| 3000 / 9090 | Grafana / Prometheus |
 
-Gdy masz kilkanaście serwisów, musisz **widzieć**, jak działają. Trzy filary:
-
-### a) Metryki — Prometheus + Grafana
-- **Prometheus** co chwilę „skrobie" (scrape) z każdego serwisu liczby: ile żądań, jak szybko, ile
-  pamięci. Trzyma je jako szeregi czasowe. Endpoint metryk to np. `/actuator/prometheus`.
-- **Grafana** (**http://localhost:3000**) rysuje z tego wykresy i dashboardy.
-- **cAdvisor** i **node-exporter** dokładają metryki kontenerów i hosta (CPU, RAM) bez zmiany kodu.
-
-### b) Logi — Loki + Promtail
-- **Loki** to „baza logów" (jak Prometheus, ale dla tekstu logów).
-- **Promtail** zbiera logi ze **wszystkich** kontenerów (przez gniazdo Dockera) i wysyła do Loki.
-- W Grafanie robisz zapytanie `{service="email"} |= "abc123"` i widzisz logi wszystkich serwisów
-  naraz, przefiltrowane.
-
-### c) Traces (ślady) — OpenTelemetry + Tempo
-- **Trace** to „oś czasu" pojedynczego żądania **przez wiele serwisów** — widzisz, że upload zajął
-  200 ms, z czego 50 ms to wywołanie security.
-- **Agent OpenTelemetry** doczepia się do serwisu JVM przez `JAVA_TOOL_OPTIONS` (bez zmiany kodu!)
-  i wysyła „spany" (odcinki) do **Tempo**. Grafana rysuje z nich wodospad.
-- **Uwaga praktyczna:** agent musi być w wersji **2.29.0+**, bo starszy (2.11.0) ładuje się na
-  JDK 25, ale nic nie instrumentuje.
-
-### Correlation-id (cid) — nić przez wszystko
-Każde żądanie dostaje **identyfikator korelacji** (`cid`) na wejściu (nagłówek `X-Correlation-Id`).
-Ten cid:
-- ląduje w **każdej linijce logu** (`[cid=abc123]`),
-- jest **przekazywany dalej** — po HTTP do innych serwisów **i w nagłówku Kafki** przez sagę/outbox.
-
-Dzięki temu w Loki wpisujesz jeden cid i widzisz **całą podróż** żądania przez wszystkie serwisy.
-(Ciekawostka: żeby cid przetrwał outbox, jest zapisywany w kolumnie tabeli outbox i wysyłany jako
-nagłówek Kafki przy drenażu — bo MDC/wątek się gubi na granicy asynchronicznej.)
+Kafka (KRaft, single-node), MinIO, Loki, Tempo, Promtail, cAdvisor, node-exporter biegną
+wewnątrz sieci compose. `race-sim` **celowo nie ma portu na hosta** (sekcja 16).
 
 ---
 
-## 12. CI — automatyczne testy przy każdym push
+## 12. Frontendy
 
-**CI (Continuous Integration)** = serwer, który **przy każdym wypchnięciu kodu** buduje projekt i
-uruchamia testy. Tu robi to **GitHub Actions** (pliki `.github/workflows/ci.yml`). Workflow w
-workspace checkoutuje wszystkie sub-repa i odpala `./mvnw clean install` — jak nie przejdzie,
-dostajesz czerwony znaczek i wiesz, że coś zepsułeś, **zanim** trafi to dalej.
+> 🏷️ **Tagi:**
+> **React** — biblioteka UI z komponentów; **TypeScript** — JavaScript z typami; **Vite** — bundler/dev-server frontu;
+> **Material UI** — gotowe komponenty (galeria); **React Native Web** — komponenty React Native renderowane w przeglądarce;
+> **nginx** — serwer statycznych plików (serwuje collections-ui); **CORS** — mechanizm przeglądarki kontrolujący żądania między originami; **preflight** — próbne żądanie OPTIONS przed właściwym;
+> **Expo / React Native** — aplikacja mobilna formuły; **PWA** — instalowalna strona paddocka.
+
+- **security-ui** (w repo security) — React + TS (przepisane z Angulara; preferencja: React).
+  Ekrany konta, MFA, sesji; rozcięte na komponenty prezentacyjne + stan w `App`.
+- **memes-ui** (moduł memes) — React + TS + Material UI, budowane Vite przez
+  frontend-maven-plugin i **pakowane do jara** (Spring serwuje pod `/`). Dev:
+  `cd memes-ui && npm run dev`.
+- **collections-ui** (w repo user-collections) — React Native **Web** + Vite, serwowane nginxem
+  na **własnym originie :8093 celowo**: przeglądarka woła security i collections **cross-origin**,
+  więc ćwiczymy prawdziwy CORS (ręczny `CorsFilter` w Helidonie, allowlista originów, preflight
+  204). Gwiazdka na kafelku galerii zapisuje ulubione wprost do collections; ściana „Favourites"
+  hydratuje refy, a skasowany mem pokazuje kafelek „unavailable" — **degradacja cicha**: gdy
+  collections leży, galeria działa bez gwiazdek.
+- **paddock** — PWA mobile-first serwowana przez sam serwis.
+- **formula-simulator/app** — aplikacja mobilna (Expo/React Native); viewer wyścigu na :8084 to
+  osobny, wbudowany front (SVG + SSE).
 
 ---
 
-## 13. Jak zacząć — krok po kroku
+## 13. Testy — poziomy i narzędzia
+
+> 🏷️ **Tagi:**
+> **JUnit 5** — podstawowy framework testów (`@Test`); **piramida testów** — dużo szybkich jednostkowych, mniej integracyjnych, najmniej E2E;
+> **Testcontainers** — prawdziwa baza/MinIO w Dockerze na czas testu; **RestAssured** — testy HTTP „po drucie";
+> **cucumber-js + Playwright** — scenariusze Gherkina wykonywane w PRAWDZIWEJ przeglądarce (Chromium), z wirtualnym authenticatorem do passkeys;
+> **Allure** — raporty z testów; **glosariusz UL** — generowany słownik języka wszechobecnego (ubiquitous language) z adnotacji testów.
+
+Piętra (od dołu):
+1. **Jednostkowe** (JUnit 5) — domain/config/system, sekundy.
+2. **Use case'y przez Cucumbera** — scenariusze `.feature` na adapterach in-memory.
+3. **Integracyjne/wire** (RestAssured, Testcontainers) — czarna skrzynka HTTP, prawdziwa baza.
+4. **Kontraktowe (Pact)** — sekcja 9.
+5. **E2E przez przeglądarkę** (cucumber-js + Playwright) — security-ui 36 scenariuszy, memes-ui,
+   e2e galerii z ulubionymi; **te same specyfikacje Gherkina co niżej**, tylko wejście inne.
+6. **Smoke żywego stacku** — `./infra-smoke.sh`.
+
+Raporty i dokumentacja z testów:
+- `aggregate_allure.py` + `allure-serve.sh` — zbiorczy raport Allure ze wszystkich projektów;
+  `create-documentation.sh` generuje `Documentation.md` security z raportów.
+- `build_glossary.py` + `glossary-serve.sh` — **interaktywny glosariusz** pojęć domenowych
+  zbudowany ze źródeł testów (Allure: domain/config/system; Cucumber: system/app/infra/UI).
+- `allure-summary.md` — bieżące podsumowanie pokrycia.
+
+---
+
+## 14. Observability — widzieć, co się dzieje
+
+> 🏷️ **Tagi:**
+> **Prometheus** — zbiera metryki (liczby: RPS, czasy, heap) przez scrape endpointów `/metrics`; **Grafana** — dashboardy nad wszystkimi źródłami;
+> **cAdvisor / node-exporter** — metryki kontenerów i hosta bez zmian w kodzie; **Loki + Promtail** — baza logów + zbieracz stdout wszystkich kontenerów;
+> **OpenTelemetry (OTel)** — standard telemetrii; **agent OTel** — doczepiany do JVM przez `JAVA_TOOL_OPTIONS`, instrumentuje HTTP i Kafkę bez zmiany kodu;
+> **Tempo** — baza trace'ów; **trace / span** — oś czasu żądania przez wiele serwisów / jej odcinek; **alerting** — reguły Prometheusa (TargetDown, Http5xxBurst).
+
+Trzy sygnały, wszystko w **Grafanie (http://localhost:3000)**:
+
+- **Metryki**: Prometheus skrobie 10+ targetów (każdy serwis wystawia `/metrics` w swoim smaku:
+  micrometer, actuator, quarkus-micrometer, ręczne endpointy w paddock/formula). Dashboardy:
+  „Stack — kontenery", „Serwisy — HTTP, JVM i logi", „Stack — dostępność i zdrowie" + alerty.
+- **Logi**: Promtail zbiera stdout **wszystkich** kontenerów przez gniazdo Dockera → Loki.
+- **Trace'y**: agent OTel (**musi być 2.29.0+** — 2.11.0 ładuje się na JDK 25, ale nic nie
+  instrumentuje) eksportuje spany do Tempo. Usunięcie konta = **jeden trace** przez security,
+  memes, comments, collections i email, bo outbox przenosi `traceparent`.
+
+**Nić przez wszystko — cid**: każde żądanie dostaje `X-Correlation-Id`, cid ląduje w każdej linii
+logu, jedzie po HTTP i w nagłówkach Kafki. W Grafanie: `{service=~".+"} |= "<cid>"` pokazuje
+całą podróż jednego żądania przez wszystkie serwisy; klik w `trace=<id>` w logu otwiera waterfall
+w Tempo. **Gotcha z życia:** MDC nie przechodzi przez granice wątków/async — dlatego cid jest
+wożony w kolumnie outboxa i atrybucie żądania, nie „w wątku".
+
+---
+
+## 15. CI — GitHub Actions
+
+> 🏷️ **Tagi:**
+> **CI (Continuous Integration)** — automatyczny build+testy przy każdym pushu; **GitHub Actions** — silnik CI GitHuba (pliki `.github/workflows/*.yml`);
+> **independent deployability** — każdy serwis testowalny i wdrażalny osobno, stąd CI per repo.
+
+Dwa poziomy:
+- **Workspace** (`.github/workflows/ci.yml`): checkoutuje 13 sub-repo, buduje cały reaktor
+  jednym `./mvnw clean install`, a drugi job **e2e** prowadzi specyfikacje przez prawdziwe
+  Chromium (oba UI, passkeys na wirtualnym authenticatorze).
+- **Per repo** (od 2026-07-10 wszystkie serwisy mają własne `ci.yml`): buduje serwis
+  samodzielnie; CI security checkoutuje dodatkowo repa konsumentów, żeby weryfikacja paktów
+  biegła też u producenta. Uwaga: repo prywatne wymaga PAT w sekretach (domyślny GITHUB_TOKEN
+  czyta tylko publiczne repo właściciela).
+
+---
+
+## 16. formula-simulator — osobny świat
+
+> 🏷️ **Tagi:**
+> **JDK HttpServer** — serwer HTTP wbudowany w Javę, zero frameworka; **contract-first** — schematy JSON w `contracts/` jako umowa Java↔Python↔boty;
+> **SSE** — transmisja wyścigu do widzów; **determinizm per seed** — ta sama symulacja przy tym samym ziarnie;
+> **sandbox / egzamin botów** — user-supplied code uruchamiany w kontrolowanych warunkach; **defense in depth** — limit czasu + cache werdyktów + brak dostępu z sieci;
+> **ery jako dane** — pakiety regulacji/fizyki jako pliki, nie kod.
+
+Gra menedżerska F1 inspirowana Jagged Alliance 2 (kierowcy mają atrybuty i osobowość; historia
+emerguje z symulacji). **Repo PRYWATNE**, ma własny, obszerny świat dokumentów —
+**kanon: `formula-simulator/docs/zalozenia-projektu.md`**, plan rozbudowy:
+`docs/expansion-plan.md`, backlog: `todo.md` (historia sesji: `todo-archiwum.md`).
+
+- **Backend Java** (bez frameworka) jest autorytatywny: buduje żądanie symulacji, woła moduł
+  Pythona, przechowuje timeline i replayuje klientom przez SSE — serwer wysyła STAN, nie piksele.
+- **Moduł wyścigu** (`sim/race/`, Python stdlib): fizyka ticków, opony, dirty air, safety car,
+  kontrolery kierowców za kontraktem `DriverController`.
+- **Boty użytkowników**: gracze wgrywają własne kontrolery; przed dopuszczeniem bot przechodzi
+  **egzamin**. Zabezpieczenia (świeże, 2026-07-10): twardy limit czasu egzaminu (wrogi bot nie
+  weźmie egzaminatora jako zakładnika), werdykty keszowane po sha pliku (te same bajty nie mielą
+  się dwa razy), a **race-sim nie ma portu na hosta** — silnik z sekretami żyje tylko w sieci
+  wewnętrznej, świat rozmawia z nim wyłącznie przez bramkę gry z JWT.
+- **Aktywny kierunek rozwoju**: „ery jako dane" — 6 pakietów er (CIGAR/WINGS/TURBO/V10/V8/HYBRID)
+  z fizyką per podzespół (turbolag, ERS, fade hamulców, opony crossply/radial...), fazy F0–F9
+  (F0 zrobiona) oraz **dwa niezależne mistrzostwa** na wspólnym silniku: branch agentów
+  (benchmark AI) i branch użytkowników (persona JA2).
+- Jazda manualna właściciela (drive-ui) wymaga `docker-compose.dev.yml` → `./formula-up.sh`.
+
+---
+
+## 17. Jak zacząć — pierwszy dzień
 
 ```bash
-# 0. Wymagania: JDK 25, Docker, git. (Maven NIE musisz mieć — jest wrapper ./mvnw.)
+# 0. Wymagania: JDK 25, Docker, git. Mavena NIE instalujesz — jest ./mvnw.
 
-# 1. Zbuduj cały backend (reaktor zbuduje wszystkie serwisy w kolejności):
 cd ~/Documents/git/security
-./mvnw clean install            # pierwszy raz potrwa (ściąga zależności)
+./mvnw clean install        # 1. cały reaktor (pierwszy raz potrwa)
+./infra-up.sh               # 2. cały stack w Dockerze
+./infra-smoke.sh            # 3. dowód, że przepływy działają (zielony = OK)
 
-# 2. Podnieś cały stack w Dockerze (bazy, Kafka, serwisy, observability):
-./infra-up.sh                   # poczekaj aż wszystko wstanie
-
-# 3. Sprawdź, że kluczowe przepływy działają:
-./infra-smoke.sh                # powinno przejść na zielono
-
-# 4. Zajrzyj do środka:
-#    Grafana (metryki/logi/trace): http://localhost:3000
-#    Mailpit (podgląd maili):       http://localhost:8025
-#    Galeria memów:                 http://localhost:8083
-#    Prometheus:                    http://localhost:9090
-
-# 5. Gdy skończysz:
-./infra-down.sh
+# 4. Poklikaj w żywy system:
+#    http://localhost:8083  galeria: załóż konto, kliknij link w Mailpicie (:8025),
+#                           zaloguj się, wrzuć mema, daj gwiazdkę
+#    http://localhost:8093  ściana ulubionych (cross-origin!)
+#    http://localhost:3000  Grafana: metryki, logi, trace'y
+./infra-down.sh             # 5. sprzątanie
 ```
 
-Chcesz zbudować/przetestować **jeden** serwis (szybciej)? Wejdź w jego katalog:
-```bash
-cd microservice-user-collections
-mvn test                        # ten serwis jest samodzielny (Helidon, własny parent)
-```
-(`microservice-security` zależy od bibliotek-sióstr — jego buduj z workspace przez reaktor.)
+Potem, w tej kolejności:
+1. Przeczytaj `microservice-security/specs/*.feature` — katalog zachowań rdzenia.
+2. Prześledź w `microservice-user-collections` układ domain → application → infrastructure —
+   to najmniejszy i najczystszy przykład hexagonu.
+3. Otwórz `docs/adr/` — pięć krótkich decyzji, które tłumaczą „dziwności".
+4. Zrób jedno żądanie z własnym `X-Correlation-Id` i odszukaj je w Loki + Tempo.
+5. Zmień coś małego w jednym serwisie, odpal jego testy w jego katalogu i zobacz w `pacts/`,
+   czy nie ruszyłeś kontraktu.
 
----
+## 18. Gdzie szukać odpowiedzi
 
-## 14. Jak pracować z kodem (konwencje)
+| Pytanie | Miejsce |
+|---|---|
+| Jak serwisy się ze sobą łączą? | [`docs/c4-architecture.md`](c4-architecture.md) — diagramy C4 **generowane** z compose + paktów (`python3 build_c4.py`) |
+| Co się ostatnio działo / co dalej? | `todo.md` (workspace) + `todo.md` sub-repo + `git log` sub-repo |
+| Dlaczego tak zdecydowano? | `docs/adr/`, `formula-simulator/docs/zalozenia-projektu.md` |
+| Co umie security? | `microservice-security/specs/`, `Readme.md`, `docs/mfa-design.md`, `docs/oauth-providers.md` |
+| Jak podpiąć prawdziwego Google'a? | `microservice-security/docs/oauth-providers.md` |
+| Plany wdrożeniowe (VPS, k3s)? | `docs/deployment-plan.md` |
+| Słownik pojęć domenowych | `./glossary-serve.sh` (generowany z testów) |
+| Komendy Mavena | `maven-cheatsheet.md` |
 
-- **Commity trafiają do konkretnego sub-repo.** Workspace jest tylko spinaczem — żeby zmienić kod
-  serwisu, wejdź do jego katalogu (`cd microservice-...`) i commituj tam, względem JEGO historii.
-  Commit w workspace **nie** rusza sub-repów.
-- **Autor:** `Robert Gardziński <jrobertgardzinski@gmail.com>`.
-- **Komentarze i Javadoc po angielsku**, dokumentacja/todo po polsku.
-- **Backlog** (co do zrobienia) jest w `todo.md` — w workspace (przekrojowe) i w każdym sub-repo.
-- **Nie zamieniaj agregatora w rodzica** sub-repów — każdy serwis musi być budowalny samodzielnie.
+## 19. Słowniczek (minimum do rozmowy)
 
----
-
-## 15. Gdzie co leży (mapa)
-
-```
-security/                         <- WORKSPACE (repo-spinacz)
-├── pom.xml                       <- agregator: lista wszystkich modułów
-├── docker-compose.yml            <- definicja całego stacku
-├── infra-up.sh / down / smoke    <- skrypty uruchomieniowe
-├── observability/                <- configi Prometheus/Grafana/Loki/Tempo/Promtail
-├── docs/                         <- dokumentacja (m.in. ten plik)
-├── todo.md                       <- backlog przekrojowy
-│
-├── microservice-security/        <- (własne repo git) Micronaut
-│   ├── security-domain/          <- warstwa domain
-│   ├── security-system/          <- warstwa application (use case'y)
-│   ├── security-infrastructure/  <- adaptery: HTTP, JDBC, Kafka
-│   └── security-ui/              <- front React
-├── microservice-memes/           <- (własne repo) Spring Boot, wielomodułowy
-├── microservice-comments/        <- (własne repo) Spring Boot
-├── microservice-user-collections/<- (własne repo) Helidon 4 SE
-│   ├── src/main/java/.../domain
-│   ├── src/main/java/.../application
-│   ├── src/main/java/.../infrastructure
-│   └── src/main/resources/db/migration  <- migracje Flyway
-└── ...pozostałe serwisy i biblioteki
-```
-
-W każdym serwisie szukaj tego samego układu: **domain → application → infrastructure**. Jak to
-zrozumiesz w jednym, zrozumiesz we wszystkich — bo o to w tym portfolio chodzi.
-
----
-
-## 16. Słowniczek (szybkie definicje)
-
-- **Mikroserwis** — mały, niezależnie wdrażany serwis odpowiedzialny za jeden obszar.
-- **Hexagonal / porty i adaptery** — architektura oddzielająca logikę od technologii.
-- **Use case** — jeden przypadek użycia aplikacji (klasa z `execute`).
-- **Port** — interfejs (czego logika potrzebuje). **Adapter** — implementacja portu (jak).
-- **Domain** — czyste reguły biznesowe, bez technologii.
-- **JWT** — podpisany token tożsamości. **JWKS** — publiczne klucze do jego weryfikacji.
-- **OAuth/OIDC** — logowanie przez zewnętrznego dostawcę.
-- **MFA** — drugi składnik logowania (kod/TOTP/passkey).
-- **Kafka / topic / event** — szyna zdarzeń; kanał; wiadomość na kanale.
-- **Outbox** — tabela gwarantująca, że zmiana i jej zdarzenie wyjdą razem.
-- **Saga** — rozproszona sekwencja kroków z potwierdzeniami (np. usuwanie konta).
+- **Hexagonal / porty i adaptery** — logika oddzielona od technologii; port = interfejs, adapter = implementacja.
+- **Use case** — jedna operacja aplikacji jako klasa z `execute`.
+- **JWT / JWKS** — podpisany token tożsamości / publiczne klucze do jego weryfikacji.
+- **Introspekcja vs offline** — pytać security o token vs weryfikować podpis samemu.
+- **MFA / TOTP / passkey / step-up** — dodatkowe czynniki logowania i ponowne uwierzytelnienie przed wrażliwą operacją.
+- **Kafka / topic / event** — szyna zdarzeń; kanał; wiadomość.
+- **Outbox** — zdarzenie zapisane w tej samej transakcji co zmiana stanu; poller wypycha do Kafki.
+- **Saga** — rozproszona sekwencja z potwierdzeniami (usuwanie konta: 3 uczestników).
+- **Pact / pakt / CDC** — konsument deklaruje pola, które czyta; producent weryfikuje to w swoim buildzie.
+- **Tolerant reader** — konsument ignoruje nieznane pola (dlatego zmiany addytywne są bezpieczne).
+- **Koperta z wersją** — każdy event niesie `version: 1`; łamiąca zmiana = bump + expand/contract.
 - **Flyway / migracja** — wersjonowane zmiany schematu bazy plikami SQL.
 - **Testcontainers** — prawdziwa baza w Dockerze na czas testu.
-- **Gherkin / Cucumber** — język Given/When/Then i silnik wykonujący go jako testy.
-- **Metryki / logi / traces** — trzy filary observability (liczby / tekst / oś czasu żądania).
-- **cid (correlation-id)** — identyfikator śledzący jedno żądanie przez wszystkie serwisy.
-- **Reaktor** — Mavenowe budowanie wielu modułów naraz w kolejności zależności.
-- **Smoke test** — szybki test „czy podstawy działają" po uruchomieniu.
-- **Virtual threads (Loom)** — tanie wątki JVM; miliony naraz (używa Helidon SE).
+- **Gherkin / Cucumber / spec-first** — wykonywalne specyfikacje Given/When/Then, pisane przed kodem.
+- **cid** — correlation-id; jeden identyfikator przez logi wszystkich serwisów.
+- **Trace / span (OTel, Tempo)** — oś czasu żądania przez serwisy; agent instrumentuje JVM bez zmian w kodzie.
+- **Healthcheck** — sonda gotowości kontenera; zależni czekają na `service_healthy`.
+- **Smoke test** — szybki test end-to-end żywego stacku.
+- **Reaktor** — Mavenowe budowanie wielu modułów w kolejności zależności.
+- **Virtual threads (Loom)** — tanie wątki JVM (Helidon SE, formula).
+- **CORS / preflight** — kontrola żądań między originami w przeglądarce (collections-ui ćwiczy to naprawdę).
 
 ---
 
-Jak przeczytasz to od góry do dołu, będziesz rozumiał **po co jest każdy klocek** i **jak je razem
-uruchomić**. Następny krok praktyczny: odpal sekcję 13, otwórz Grafanę i poklikaj — najwięcej
-zrozumiesz, patrząc na żywy system.
+Jak przeczytasz to od góry do dołu, wiesz **po co jest każdy klocek**. Najwięcej i tak zrozumiesz
+z sekcji 17: odpal stack, klikaj i podglądaj w Grafanie, co się dzieje pod spodem.
+
+---
+
+# Aneks A — microservice-memes pod mikroskop (przygotowanie do rekrutacji)
+
+Memy to serwis-wizytówka: publiczne repo, widowiskowe UI, a pod spodem komplet „dorosłych"
+technik. Ten aneks daje Ci głębię na rozmowę: anatomię, **decyzje z uzasadnieniem** (rekruterzy
+pytają „dlaczego", nie „co") i listę pytań, które prawdopodobnie padną.
+
+## A.1 Anatomia — 7 modułów
+
+> 🏷️ **Tagi:**
+> **layered modules** — podział na moduły Mavena per warstwa (spokrewniony z hexagonem, mniej rozdrobniony niż w security);
+> **frontend-maven-plugin** — Maven buduje front (własny przypięty Node) i pakuje do jara.
+
+| Moduł | Zawartość | Technologie |
+|---|---|---|
+| `memes-domain` | Encje: `Meme`, `RankedMeme`, `VoteDirection` | czysta Java |
+| `memes-config` | Typowane pokrętła: `ImageLimits`, `ThumbnailSize`, `ContentPurgePolicy`, `RateLimit`, `TagLimits` | czysta Java |
+| `memes-image` | `WebImageOptimizer`: re-enkodowanie dowolnego obrazka do PNG w limitach | czysty JDK (`java.desktop`) |
+| `memes-tags` | VO `Tag` (normalizacja: lowercase/trim, 2–30 znaków `[a-z0-9-]`) | czysta Java |
+| `memes-application` | Use case'y (`PublishMeme`, `ServeMeme`, `MakeThumbnail`, `CastVote`, `RankMemes`, `TagMeme`, `SearchMemesByTag`, `FlagMeme`, `PurgeUserContent`) + porty (`MemeRepository`, `VoteRepository`, `MemeContentIndex`, `ObjectStore`, `ImageEncoder`, `PublicationLog`, `PurgePolicyOverride`) | bez frameworka |
+| `memes-ui` | Galeria: React + TS + Material UI, Vite; dist w jarze jako `META-INF/resources` | frontend-maven-plugin |
+| `memes-infrastructure` | Aplikacja Spring Boot: kontrolery, brama sign-in, adaptery JDBC/S3/HTTP, Flyway, Kafka | Spring Boot 3.5 |
+
+**Puenta na rozmowę:** framework występuje w JEDNYM module z siedmiu. Domena, use case'y,
+obróbka obrazu i tagi kompilują się i testują bez Springa — Spring to wymienialny detal
+infrastruktury.
+
+## A.2 Przepływ uploadu — bezpieczeństwo obrazków
+
+> 🏷️ **Tagi:**
+> **re-encoding** — obrazek jest dekodowany i kodowany od nowa (PNG), co niszczy metadane i ładunki w pliku;
+> **EXIF stripping** — usunięcie metadanych (GPS!) z plików; **rate limiting** — 429 + `Retry-After`;
+> **dedup po treści** — SHA-256 bajtów; **operacja atomowa / putIfAbsent** — wyścig rozstrzyga jedna operacja, nie „check-then-act".
+
+1. `POST /memes` (multipart) wymaga Bearer tokena; autor = **potwierdzona tożsamość z security**,
+   nigdy pole z requesta (niemożliwa impersonacja przez body).
+2. **Rate limit** per uploader (domyślnie 12/min, env) → 429 + `Retry-After`.
+3. `WebImageOptimizer` re-enkoduje wszystko, co czyta ImageIO (BMP, JPEG…), do PNG w limitach
+   rozmiaru. **Efekt uboczny = feature bezpieczeństwa:** re-encoding gubi EXIF (jest test ze
+   spreparowanym JPEG-iem z segmentem GPS — wchodzi z lokalizacją, wychodzi czysty) i unieważnia
+   ewentualne ładunki doklejone do pliku.
+4. **Dedup:** SHA-256 bajtów *po* optymalizacji; drugi upload tych samych bajtów zwraca
+   istniejące id. Współbieżność rozwiązana **atomowym `claim(data, candidateId)`**
+   (putIfAbsent w pamięci; w Postgresie wyścig rozstrzyga constraint PK) — zapis następuje
+   dopiero PO wygranym claimie, więc nic osieroconego nie ląduje w bazie. Jest test z dwoma
+   wątkami na jednej bramce.
+
+## A.3 Gdzie żyją bajty — port `ObjectStore` z trzema adapterami
+
+> 🏷️ **Tagi:**
+> **port z wieloma adapterami** — podręcznikowy hexagon w praktyce; **bytea vs object storage** — blob w bazie vs S3;
+> **path-style S3** — adresowanie kubełków zgodne z MinIO; **path traversal** — atak `../../` na adapter plikowy;
+> **`@Primary` gotcha** — bezwarunkowy bean-domyślny potrafi zepsuć przełączanie adapterów.
+
+Metadane zawsze w bazie; bajty za portem `ObjectStore` z adapterami wybieranymi env-em
+`MEMES_BLOB_STORE`: `db` (tabela blobów — spójność transakcyjna z metadanymi), `filesystem`
+(z testem ochrony przed path traversal) i `s3` (AWS SDK, path-style dla MinIO, bucket tworzony
+idempotentnie na starcie; round-trip na żywym MinIO przez Testcontainers). W compose stack jedzie
+na MinIO.
+
+**Historia na rozmowę (real bug):** `DbObjectStore` był bezwarunkowo `@Primary`, więc
+`memes.blob-store=filesystem` niczego nie przełączał — wyszło przy podpinaniu S3. Naprawa:
+dokładnie jeden bean per tryb, **przypięte testem** `BlobStoreSelectionTest`. Drugi real bug:
+`S3ObjectStore` z dwoma konstruktorami bez `@Autowired` = śmierć na starcie tylko w trybie s3.
+
+## A.4 Serwowanie: WebP, miniatury, ranking
+
+> 🏷️ **Tagi:**
+> **content negotiation** — wybór formatu po nagłówku `Accept`; **degradacja jakości, nie dostępności** — padnięty enkoder = PNG zamiast błędu;
+> **cache-once** — WebP kodowany raz i trzymany w ObjectStore; **hot ranking z decay** — świeżość ważona wiekiem (wzór Reddit-like).
+
+- `ServeMeme` negocjuje po `Accept: image/webp`: WebP kodowany **raz** przez osobny mikroserwis
+  `microservice-image` (Python + Pillow) i cache'owany w ObjectStore pod `{id}.webp`; enkoder
+  padł → serwujemy PNG (**degradacja jakości, nie dostępności**). Zmierzone: PNG 1790 B → WebP 900 B.
+- Miniatury generowane **na żądanie** (`MakeThumbnail`), nie przy uploadzie.
+- Ranking hot: `score / (ageHours+2)^1.5` — decay tylko **porządkuje**, zwracany score bez zmian,
+  więc kontrakt `GET /memes/hot` nie drgnął. Czas publikacji zna port `PublicationLog`
+  (mem nieznany = świeży, fail-safe); czas płynie przez bean `java.time.Clock` (testowalność).
+- Głosy: semantyka z libki `voting` — jeden głos na usera per mem/komentarz, ponowny głos
+  **zastępuje** poprzedni (nigdy nie kumuluje).
+
+## A.5 Integracja z security — dwie bramy i podłoga MFA
+
+> 🏷️ **Tagi:**
+> **RequireSignInFilter / brama** — jedno miejsce egzekwujące tożsamość; **introspekcja vs offline JWT** — trade-off świeżości unieważnienia vs hop sieciowy;
+> **RBAC** — role MODERATOR/ADMIN z security; **MFA floor** — zdjęcie ról uprzywilejowanych, gdy `mfaCompliant=false`, fail-closed.
+
+- Odczyty publiczne; każdy zapis wymaga `Authorization: Bearer` — inaczej
+  `401 {"status":"SIGN_IN_REQUIRED"}`.
+- Brama ma **dwie implementacje**: introspekcja (`GET /me` — natychmiast widzi logout; tak jedzie
+  compose) i offline JWT po JWKS (mniej ruchu, ślepa na unieważnienie do `exp`). Umiesz
+  opowiedzieć ten trade-off = duży plus na rozmowie.
+- Moderacja: MODERATOR/ADMIN kasuje cudze memy i flaguje **NSFW** (blur w galerii; `FlagMeme`,
+  tabela V3). Panel admina ustawia default polityki czystki (`/admin/purge-policy`, rola ADMIN).
+- **Podłoga MFA:** uprzywilejowany bez dopełnionego MFA jest w bramie ścinany do USER
+  (`Caller.withMfaFloor`, fail-closed). Anegdota do opowiedzenia: kopia offline gate'a **zgubiła
+  kiedyś ten floor** i wykryła to dopiero konwergencja pięciu kopii do libki `offline-jwt` +
+  test regresyjny — argument, czemu kod security-critical nie może żyć w kopiach.
+
+## A.6 Memy w sadze i kaskadzie zdarzeń
+
+> 🏷️ **Tagi:**
+> **uczestnik sagi** — memes konsumuje `PURGE_USER_CONTENT`, potwierdza na `memes-events`;
+> **polityka per oś** — los treści jako reguła DELETE / ANONYMIZE_AUTHOR / KEEP_POPULAR_ANONYMIZED:n;
+> **precedens rozstrzygania** — wybór usera z wizarda > ustawienie w bazie (`settings`, V4) > env; **fail-safe** — niesparsowana reguła = default, saga nigdy się nie klinuje;
+> **kaskada zdarzeń** — skasowany mem ogłasza `MEME_DELETED`, comments kasuje wątek.
+
+Przy usunięciu konta memes decyduje o losie treści odchodzącego **regułą per oś**:
+`DELETE` (mem znika z wątkiem i głosami), `ANONYMIZE_AUTHOR` („deleted account"),
+`KEEP_POPULAR_ANONYMIZED:n` (score ≥ n przeżywa zanonimizowany — „społeczność na to zapracowała").
+Głosy odchodzącego są wycofywane **zawsze** — dane kluczowane tożsamością nie mają furtki
+w polityce (argument GDPR). Wybór usera z wizarda usuwania (niesiony w komendzie sagi) nadpisuje
+default. Potwierdzenie idzie na `memes-events` z cid i `version: 1`.
+
+Osobno: skasowanie pojedynczego mema publikuje `MEME_DELETED`, na co `microservice-comments`
+kasuje wątek — przykład, czemu komentarze wydzielono do osobnego serwisu (inny cykl życia,
+własna baza), a spójność między nimi jest **ostateczna** (eventual), nie transakcyjna.
+
+## A.7 Jak memes dowodzi, że działa
+
+> 🏷️ **Tagi:**
+> **testy per warstwa** — unit (image/config/application), MockMvc, Cucumber czarna skrzynka HTTP, e2e Playwright;
+> **pakty konsumenckie** — memes deklaruje, co czyta z komendy sagi (`pacts/`) i z `GET /me` (`pacts-http/`);
+> **Testcontainers** — round-trip S3 na żywym MinIO; **Allure + glosariusz UL** — dokumentacja generowana z testów.
+
+- Feature'y Cucumbera (`upload`, `vote`, `tag-meme`, `moderate-meme`, `admin-purge-policy`) to
+  **żywy kontrakt** — czarna skrzynka po HTTP, zielone w każdym buildzie.
+- Suita przeglądarkowa (cucumber-js + Playwright) klika galerię na realnym trio
+  security+memes+comments; konta i seed przez API, UI tylko w to, o czym scenariusz.
+- **Pakty:** memes jako konsument deklaruje pola, które czyta z komendy purge (pakt message
+  w `pacts/`) i z introspekcji `/me` (pakt HTTP w `pacts-http/` — osobny katalog, bo plik Pact V3
+  nie miesza stylów); security weryfikuje oba na realnym kodzie.
+- Metryki `/actuator/prometheus`, trace'y przez agenta OTel, logi z cid — upload widać w Tempo
+  jako trace `[memes, security]`.
+
+## A.8 Pytania, które prawdopodobnie usłyszysz (z sednem odpowiedzi)
+
+1. **„Czemu Spring Boot tutaj, skoro gdzie indziej Micronaut?"** — Portfolio celowo realizuje ten
+   sam wzorzec w wielu frameworkach; memes pokazuje, że warstwy nie zależą od frameworka
+   (Spring żyje w 1 module z 7).
+2. **„Co się dzieje, gdy dwóch userów wgra ten sam obrazek jednocześnie?"** — Dedup po SHA-256
+   z atomowym claim; w bazie rozstrzyga constraint, zapis po wygranym claimie; test z dwoma wątkami.
+3. **„Gdzie trzymasz obrazki i czemu?"** — Port ObjectStore, 3 adaptery (db/filesystem/S3);
+   metadane zawsze w Postgresie; wybór to kwestia wdrożenia, nie kodu. Bonus: historia buga z `@Primary`.
+4. **„Jak chronisz się przed złośliwym uploadem?"** — Re-encoding do PNG (niszczy EXIF i ładunki,
+   test z GPS-em w JPEG), limity rozmiaru, rate limit 429, moderacja NSFW, autor z tokenu nie z body.
+5. **„Skąd wiesz, że nie zepsułeś integracji z security?"** — Pakty: łamiąca zmiana robi się
+   czerwona w buildzie producenta z nazwą konsumenta; do tego e2e i smoke żywego stacku.
+6. **„Introspekcja czy weryfikacja offline?"** — Mam obie i umiem wskazać kiedy którą: introspekcja
+   = świeżość unieważnienia, offline = brak hopa i odporność na awarię security; offline wymaga
+   przeniesienia werdyktów do claimów (`mfaCompliant`).
+7. **„Co się dzieje z treściami po usunięciu konta?"** — Saga z potwierdzeniami; polityka per oś
+   z precedensem wizard > baza > env; głosy zawsze wycofane; niesparsowana reguła nie klinuje sagi.
+8. **„Jak byś to skalował?"** — Bajty już za portem (S3), WebP zmniejsza transfer, miniatury on
+   demand, ranking liczony z decay bez zmiany kontraktu; odczyty publiczne = łatwy cache/CDN przed serwisem.
+9. **„Czemu komentarze to osobny serwis?"** — Inny cykl życia i model danych; spójność ostateczna
+   przez `MEME_DELETED`; wspólna semantyka głosów wyciągnięta do libki `voting` zamiast kopii.
+10. **„Jak testujesz?"** — Piramida z tym samym scenariuszem na kilku wejściach: unit → use case'y →
+    MockMvc/HTTP czarna skrzynka → pakty → Playwright w przeglądarce → smoke stacku.
+
+**Przed rozmowami przećwicz demo (15 minut):** `./infra-up.sh` → rejestracja → link w Mailpicie →
+upload → gwiazdka (cross-origin do collections) → flaga NSFW moderatorem → usunięcie konta
+wizardem → pokaż w Tempo JEDEN trace sagi przez 5 serwisów. To robi większe wrażenie niż slajdy.

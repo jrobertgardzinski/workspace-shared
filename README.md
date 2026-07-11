@@ -71,6 +71,7 @@ Ports: security 8080, email 8082, memes 8083 (gallery UI), comments 8085, Mailpi
 
 | Script | Purpose |
 |--------|---------|
+| `build_c4.py` | Generate C4 diagrams (`docs/c4-architecture.md`) from docker-compose.yml + the Pact files |
 | `aggregate_allure.py` | Merge Allure results across projects |
 | `allure-serve.sh` | Serve the aggregated Allure report |
 | `create-documentation.sh` | Generate project documentation |
