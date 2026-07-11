@@ -175,7 +175,15 @@ Scenario: Saving the same reference twice is idempotent
   Given alice has saved meme 42 into "favourites"
   When alice saves meme 42 into "favourites"
   Then the save reports it was already there
+  And alice's "favourites" contains meme 42 once
 ```
+
+Uwaga do czytania: idempotencję niesie OSTATNIA linia (**stan**: po drugim zapisie
+dokładnie jeden egzemplarz — bez niej scenariusz byłby bez sensu); linia „reports it
+was already there" to osobny kontrakt ODPOWIEDZI (UI wie, że nic nowego nie powstało).
+Różna odpowiedź nie łamie idempotencji — jak PUT: pierwszy raz 201, drugi 200, stan
+ten sam. `Given has saved` vs `When saves` to idiom Gherkina: stan zastany vs badana
+akcja.
 
 Specyfikacja = test: jak dokumentacja rozjedzie się z kodem, test świeci na czerwono.
 Sztandarowy zabieg projektu: **ten sam scenariusz prowadzony przez kilka wejść** — raz przez
