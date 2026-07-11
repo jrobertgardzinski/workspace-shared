@@ -148,6 +148,7 @@ różnorodność jest celowa (portfolio!). Kto jak mówi:
 | `formula-simulator` | `domain / config / system / application / infrastructure` (te same warstwy, JEDEN moduł) | ten sam dialekt co security — pakietami zamiast modułami; sprawdzone: zero importów `infrastructure` z wewnętrznych warstw |
 | `microservice-comments` | `domain / application / config / infrastructure` | hexagon 4-pakietowy (bez osobnego `system` — use case'y w `application`) |
 | `microservice-user-collections` | `domain / application / infrastructure` | hexagon minimalny, 3 pakiety |
+| `microservice-offboarding` | `application / infrastructure` | hexagon BEZ domeny — saga to PROCES, nie model: use case'y nad portem `SagaStore`, cały JSON/Kafka w infrastrukturze (`EventsRouter` czysty = prowadzą go scenariusze i pakty) |
 | `microservice-memes` | `domain / application / config / infrastructure` + `image`, `tags` (7 modułów) | „layered modules": warstwy + wydzielone zdolności; framework w JEDNYM module z siedmiu |
 | `microservice-email` | `boundary / control / entity` | **BCE** — świadomie INNY wzorzec z tej samej rodziny (Quarkus); boundary≈adapter, control≈use case, entity≈domena |
 | `microservice-paddock` | `events / feed / myservers / notifications / registry / workshop / infra` | **package-by-feature**: pionowe ficzery zamiast poziomych warstw — trzeci sposób krojenia |
