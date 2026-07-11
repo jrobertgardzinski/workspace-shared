@@ -17,9 +17,18 @@ z jednozdaniowym wyjaśnieniem. Jak szukasz konkretnego narzędzia, skanuj same 
 > **multi-repo** — każdy serwis w osobnym repozytorium git (przeciwieństwo monorepo);
 > **workspace / agregator** — repo-spinacz, które nie zawiera kodu serwisów, tylko skleja je do wspólnej pracy.
 
-To **nie jest jeden program**. To **portfolio mikroserwisów** — kilkanaście niezależnych serwisów,
-które razem tworzą backend serwisu społecznościowego wokół gry (galeria memów, komentarze,
-konta, gra F1). Kluczowa idea:
+To **nie jest jeden program**. To **portfolio mikroserwisów** — kilkanaście niezależnych
+serwisów składających się na **DWA OSOBNE PRODUKTY** (werdykt właściciela 2026-07-11 —
+nie sklejać ich w opisach!):
+
+1. **portal społecznościowy** — galeria memów, komentarze, ulubione, hub „paddock"
+   (serwery/ludzie/wydarzenia; F1 tylko z nazwy);
+2. **gra F1** (`formula-simulator` + `race-sim`) — menedżer z autorytatywną symulacją,
+   osobny byt z własną bazą i własnym modelem wdrożenia (serwery grupowe per liga).
+
+Produkty dzielą wyłącznie **TOŻSAMOŚĆ** (jedno konto + MFA w `microservice-security`,
+jeden token działa w obu) oraz ten dev-compose; gra nie ma ani jednej krawędzi do
+memów/komentarzy/Kafki (dowód: diagramy C4 generowane z compose). Kluczowa idea portfolio:
 
 > **Ta sama architektura (hexagonalna) zrealizowana w RÓŻNYCH frameworkach — sześciu „smakach".**
 

@@ -7,17 +7,24 @@
 
 ## C1 — kontekst systemu
 
+**Dwa produkty, nie jeden** (werdykt właściciela 2026-07-11): portal społecznościowy i gra F1 to osobne byty. Dzielą wyłącznie TOŻSAMOŚĆ (wspólne konto + MFA) i ten dev-compose; gra nie ma ani jednej krawędzi do memów/komentarzy/Kafki, a produkcyjnie wyjeżdża osobno (hosting/ per liga).
+
 ```mermaid
 flowchart LR
   member(["👤 Użytkownik<br/>(gość / member / moderator / admin)"])
-  subgraph portfolio ["Portfolio stack (ten workspace)"]
-    stack["Serwis społecznościowy wokół gry:<br/>konta+MFA, galeria memów, komentarze,<br/>ulubione, paddock, menedżer F1"]
+  subgraph portfolio ["Ten workspace — dwa produkty na wspólnych kontach"]
+    portal["PORTAL społecznościowy:<br/>galeria memów, komentarze, ulubione,<br/>hub paddock (serwery/ludzie/wydarzenia)"]
+    game["GRA F1 (osobny byt):<br/>menedżer + autorytatywna symulacja,<br/>ligi prywatne / serwery grupowe"]
+    idp["Wspólna tożsamość:<br/>konta + MFA<br/>(microservice-security)"]
   end
   oauth["Zewnętrzni dostawcy OIDC<br/>(Google/GitHub… — w dev: stub idp)"]
   smtp["Realny serwer SMTP<br/>(w dev: Mailpit)"]
-  member -->|przeglądarka / PWA / apka mobilna| stack
-  stack -->|logowanie federacyjne| oauth
-  stack -->|maile transakcyjne| smtp
+  member -->|przeglądarka / PWA| portal
+  member -->|przeglądarka / PWA / apka mobilna| game
+  portal -->|jeden token| idp
+  game -->|jeden token| idp
+  idp -->|logowanie federacyjne| oauth
+  idp -->|maile transakcyjne kont| smtp
 ```
 
 ## C2 — kontenery: krawędzie synchroniczne (HTTP) i magazyny

@@ -194,19 +194,34 @@ def render(services, sync, stores, kafka_attached, contracts, async_edges):
     w("")
 
     # ---- C1
+    # The owner's verdict (2026-07-11): the workspace ships TWO products, not one — the
+    # social portal and the F1 game are SEPARATE beings that only share identity (and this
+    # dev compose). The compose edges agree: formula talks to race-sim, security and its
+    # own Postgres — never to memes/comments/Kafka. "paddock" is the PORTAL's social hub
+    # (servers/people/events), F1-flavoured in name only.
     w("## C1 — kontekst systemu")
+    w("")
+    w("**Dwa produkty, nie jeden** (werdykt właściciela 2026-07-11): portal społecznościowy"
+      " i gra F1 to osobne byty. Dzielą wyłącznie TOŻSAMOŚĆ (wspólne konto + MFA) i ten"
+      " dev-compose; gra nie ma ani jednej krawędzi do memów/komentarzy/Kafki, a produkcyjnie"
+      " wyjeżdża osobno (hosting/ per liga).")
     w("")
     w("```mermaid")
     w("flowchart LR")
     w('  member(["👤 Użytkownik<br/>(gość / member / moderator / admin)"])')
-    w('  subgraph portfolio ["Portfolio stack (ten workspace)"]')
-    w('    stack["Serwis społecznościowy wokół gry:<br/>konta+MFA, galeria memów, komentarze,<br/>ulubione, paddock, menedżer F1"]')
+    w('  subgraph portfolio ["Ten workspace — dwa produkty na wspólnych kontach"]')
+    w('    portal["PORTAL społecznościowy:<br/>galeria memów, komentarze, ulubione,<br/>hub paddock (serwery/ludzie/wydarzenia)"]')
+    w('    game["GRA F1 (osobny byt):<br/>menedżer + autorytatywna symulacja,<br/>ligi prywatne / serwery grupowe"]')
+    w('    idp["Wspólna tożsamość:<br/>konta + MFA<br/>(microservice-security)"]')
     w("  end")
     w('  oauth["Zewnętrzni dostawcy OIDC<br/>(Google/GitHub… — w dev: stub idp)"]')
     w('  smtp["Realny serwer SMTP<br/>(w dev: Mailpit)"]')
-    w("  member -->|przeglądarka / PWA / apka mobilna| stack")
-    w("  stack -->|logowanie federacyjne| oauth")
-    w("  stack -->|maile transakcyjne| smtp")
+    w("  member -->|przeglądarka / PWA| portal")
+    w("  member -->|przeglądarka / PWA / apka mobilna| game")
+    w("  portal -->|jeden token| idp")
+    w("  game -->|jeden token| idp")
+    w("  idp -->|logowanie federacyjne| oauth")
+    w("  idp -->|maile transakcyjne kont| smtp")
     w("```")
     w("")
 
