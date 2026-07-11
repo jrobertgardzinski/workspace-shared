@@ -207,7 +207,7 @@ umie".
 
 | Serwis | Smak | Port | Za co odpowiada |
 |---|---|---|---|
-| `microservice-security` | **Micronaut** (hexagonal, 6 warstw) | 8080 | Konta, logowanie, JWT, MFA, OAuth, sesje, saga usuwania konta |
+| `microservice-security` | **Micronaut** (hexagonal, 6 warstw) | 8080 | Konta, logowanie, JWT, MFA, OAuth, sesje; **orkiestruje** sagę usuwania konta (⚠ uczestnicy dziś wpisani NA SZTYWNO — memes/comments/collections; znany dług reużywalności, drogi naprawy w `todo.md` workspace'u) |
 | `microservice-email` | **Quarkus** (BCE, szablony Qute) | 8082 | Wysyłka maili (`POST /mails*`, X-Api-Key), konsument `mail-requests` |
 | `microservice-memes` | **Spring Boot** (wielomodułowy, layered) | 8083 | Galeria memów: upload, miniatury, głosy, moderacja/NSFW, UI na `/` |
 | `microservice-comments` | **Spring Boot** (jednomodułowy) | 8085 | Wątki komentarzy pod memami + głosy |

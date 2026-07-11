@@ -2,6 +2,33 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## OTWARTE — saga usuwania konta vs reużywalność security (właściciel 2026-07-11)
+
+Pytanie właściciela: „czy to security kieruje sagą?! zależało mi na reużywalności".
+DIAGNOZA (fakty z kodu i paktów): TAK — security ORKIESTRUJE (AccountDeletionOrchestrator:
+outbox+lock+timeout 2m+kompensacja — mechanicznie wzorowo), ALE reużywalność złamana
+w trzech miejscach: (1) PurgeConfirmationsListener ma NA SZTYWNO trzech uczestników
+(topici memes/comments/usercollections-events; domyka po KOMPLECIE trzech potwierdzeń);
+(2) DOMENA security zna osie treści portalu imiennie (`PurgeChoices.memesRule()/
+commentsRule()` — cudza domena w VO tożsamości); (3) konsekwencja praktyczna:
+wdrożenie „security + sama GRA F1" (kanoniczny scenariusz dwóch produktów!) NIE UMIE
+usunąć konta — każda saga kończy się timeoutem i kompensacją, bo nikt nie wyśle
+potwierdzeń. Drobiazg przy okazji: Javadoc orchestratora mówi „memes confirmation
+drives completePurge", a listener czeka na trzech — do wyrównania przy naprawie.
+
+DROGI (dekret właściciela):
+- **A (rekomendowana): uczestnicy sagi = KONFIGURACJA** — `account-deletion.participants`
+  jako framework-free rekord w security-config (konwencja projektu); listener/orchestrator
+  czekają na ZADEKLAROWANYCH; pusta lista = domknięcie od razu (czysta tożsamość);
+  `PurgeChoices` z nazwanych pól na generyczną mapę {participant→rule} (kontrakt komendy
+  rozszerzyć ADDYTYWNIE — pakty konsumentów bez zmian, stare pola zostają aliasami).
+  Zachowuje orkiestrację, domknięcie i pakty; przywraca pełną reużywalność.
+- **B: choreografia** — security publikuje FAKT (AccountDeleted), nie zna nikogo;
+  treściowi sprzątają eventualnie. Maksymalna czystość, ale znika twarde „posprzątano
+  zanim konto znikło" i pożegnalny mail traci gwarancję. Nie polecam przy obecnych
+  oczekiwaniach (raportowalność sprzątania).
+Kaliber: osobna skupiona sesja w microservice-security (protokół+domena+testy+pakty).
+
 ## Rozstrzygnięte
 
 - **Null safety w domenie** — DECYZJA: domena NIE broni się przed `null`, infra
