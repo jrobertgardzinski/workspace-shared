@@ -249,7 +249,13 @@ umie".
 Najbogatszy serwis — rdzeń tożsamości dla całej reszty. Katalog możliwości = `specs/*.feature`:
 register, authenticate, verify-email, reset-password, change-email, change-password, logout,
 list/revoke sessions, refresh + reuse-detection, federated-sign-in, authorize, mfa,
-mfa-webauthn, delete-account.
+mfa-passkey, delete-account.
+
+**Reguła poziomu abstrakcji (werdykt właściciela 2026-07-11, „reguła argon2"):** feature
+mówi językiem UŻYTKOWNIKA, nigdy protokołu. `authenticate.feature` nie zna argon2 —
+haszowanie to detal pod maską; tak samo spec passkeya nie zna „WebAuthn" ani „challenge"
+(mówi: „urządzenie trzymające passkey musi dowieść obecności") — nazwa protokołu wolno
+mieszkać wyłącznie w glue (`webauthn.steps.mjs`), bo glue JEST maską.
 
 Co trzeba rozumieć:
 
