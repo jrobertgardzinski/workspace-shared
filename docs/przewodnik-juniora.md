@@ -159,7 +159,9 @@ mieszkają osobno.
 
 **Decyzje są spisane w ADR-ach** — `docs/adr/` w workspace (0001: domena nie broni się przed
 null, pilnuje tego warstwa aplikacji; 0002: prefiks `_` dla kroków use case'ów; 0003–0005 —
-sekcje 9–10). Zanim zakwestionujesz coś „dziwnego", sprawdź, czy nie ma o tym ADR-a.
+sekcje 9–10; **0006: komendy idempotentne DOMYŚLNIE** — prawo egzekwuje generyczny test,
+scenariusze BDD zostają dla wyjątków i kontraktów odpowiedzi). Zanim zakwestionujesz coś
+„dziwnego", sprawdź, czy nie ma o tym ADR-a.
 
 ### Spec-first: Gherkin i Cucumber
 
@@ -171,19 +173,21 @@ sekcje 9–10). Zanim zakwestionujesz coś „dziwnego", sprawdź, czy nie ma o 
 Zachowanie opisujemy **najpierw** w plikach `.feature`, potem Cucumber wykonuje je jako testy:
 
 ```gherkin
-Scenario: Saving the same reference twice is idempotent
+Scenario: Saving twice tells the caller it was already there
   Given alice has saved meme 42 into "favourites"
   When alice saves meme 42 into "favourites"
   Then the save reports it was already there
   And alice's "favourites" contains meme 42 once
 ```
 
-Uwaga do czytania: idempotencję niesie OSTATNIA linia (**stan**: po drugim zapisie
-dokładnie jeden egzemplarz — bez niej scenariusz byłby bez sensu); linia „reports it
-was already there" to osobny kontrakt ODPOWIEDZI (UI wie, że nic nowego nie powstało).
-Różna odpowiedź nie łamie idempotencji — jak PUT: pierwszy raz 201, drugi 200, stan
-ten sam. `Given has saved` vs `When saves` to idiom Gherkina: stan zastany vs badana
-akcja.
+Uwaga do czytania (i **ADR 0006**, werdykt właściciela): scenariusz NIE testuje
+idempotencji — **idempotencja komend obowiązuje domyślnie, jako prawo**, egzekwowane
+JEDNYM generycznym testem per serwis (`IdempotentCommandsTest`: każda komenda 2× =
+stan jak po 1×), a nie szablonowym scenariuszem per operacja. Scenariusz wyżej pinuje
+to, co jest naprawdę per-operacyjne: **kontrakt ODPOWIEDZI** („already there" — UI wie,
+że nic nowego nie powstało). Różna odpowiedź nie łamie idempotencji — jak PUT: pierwszy
+raz 201, drugi 200, stan ten sam. `Given has saved` vs `When saves` to idiom Gherkina:
+stan zastany vs badana akcja.
 
 Specyfikacja = test: jak dokumentacja rozjedzie się z kodem, test świeci na czerwono.
 Sztandarowy zabieg projektu: **ten sam scenariusz prowadzony przez kilka wejść** — raz przez
