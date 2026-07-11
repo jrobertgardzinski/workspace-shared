@@ -18,6 +18,10 @@ fi
 # runtime-only); sms/push/image/idp are Python and need nothing
 ./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,microservice-memes/memes-infrastructure,microservice-comments,microservice-paddock,microservice-user-collections \
     -am package -DskipTests
+# the F1 game is a SEPARATE PRODUCT outside the reactor (the owner's verdict 2026-07-11):
+# its workspace library installs first, then its jar builds standalone off its own pom
+./mvnw -q -pl offline-jwt -am install -DskipTests
+./mvnw -q -f formula-simulator/pom.xml package -DskipTests
 
 docker compose up --build -d "$@"
 echo

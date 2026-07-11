@@ -38,7 +38,10 @@
         <module>microservice-email</module>
         <module>microservice-memes</module>
         <module>microservice-comments</module>
-        <module>formula-simulator</module>
+        <!-- formula-simulator is deliberately NOT a module (the owner's verdict, 2026-07-11):
+             the F1 game is a SEPARATE PRODUCT from the social portal — they share only
+             identity. Build it in its own directory (needs offline-jwt installed once:
+             ./mvnw -pl offline-jwt -am install); formula-up.sh and CI do exactly that. -->
         <module>microservice-paddock</module>
         <module>microservice-user-collections</module>
     </modules>

@@ -117,6 +117,13 @@ jobs:
       - name: Build and test the whole reactor
         run: ./mvnw -B --no-transfer-progress clean install
 
+      # The F1 game is a SEPARATE PRODUCT (the owner's verdict, 2026-07-11), deliberately
+      # NOT a reactor module — but it has no CI of its own, so it builds and tests here as
+      # its own step, standalone, against the workspace libraries the reactor just installed
+      # (offline-jwt lands in ~/.m2 above).
+      - name: Build and test the game (separate product, outside the reactor)
+        run: ./mvnw -B --no-transfer-progress -f formula-simulator/pom.xml clean verify
+
   # The third entry point in CI: the SAME Gherkin specs, driven through a real browser
   # (cucumber-js + Playwright) against the security service and its React UI. Only the modules
   # the security jar needs are built (-am closure), tests skipped — the reactor job owns those.

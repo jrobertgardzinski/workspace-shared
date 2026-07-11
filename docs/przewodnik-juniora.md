@@ -68,12 +68,17 @@ wypisuje serwisy jako `<module>`, ale **nie jest ich rodzicem** (każdy serwis m
 i buduje się samodzielnie; nie zmieniaj tego, bo to edycja wielu osobnych repozytoriów).
 
 Reaktor sam rozwiązuje zależności między projektami — `./mvnw clean install` w workspace buduje
-wszystkie ~43 moduły w dobrej kolejności, bez wcześniejszego instalowania czegokolwiek do `~/.m2`.
+moduły PORTALU w dobrej kolejności, bez wcześniejszego instalowania czegokolwiek do `~/.m2`.
 Wszystkie moduły mają wspólne współrzędne `com.jrobertgardzinski:*:1.0.0-SNAPSHOT`.
+
+**Wyjątek — gra F1 (osobny produkt!):** `formula-simulator` celowo NIE jest modułem
+reaktora (werdykt 2026-07-11). Budujesz ją standalone, na jej własnym pomie:
+`./mvnw -f formula-simulator/pom.xml clean verify` — a jedyną bibliotekę workspace'u,
+której potrzebuje, instalujesz raz: `./mvnw -pl offline-jwt -am install`.
 
 | Komenda | Co robi |
 |---|---|
-| `./mvnw clean install` | Zbuduj wszystko (pierwszy raz długo — ściąga zależności) |
+| `./mvnw clean install` | Zbuduj cały PORTAL (pierwszy raz długo — ściąga zależności); gra buduje się osobno (wyjątek wyżej) |
 | `./mvnw -pl microservice-security -am clean verify` | Jeden projekt + to, od czego zależy (`-am` = also make) |
 | `./mvnw test` / `verify` / `package` | testy jednostkowe / +integracyjne / zbuduj jar |
 | `-DskipTests` | pomiń testy (gdy chcesz tylko jar) |
@@ -175,7 +180,7 @@ umie".
 | `microservice-memes` | **Spring Boot** (wielomodułowy, layered) | 8083 | Galeria memów: upload, miniatury, głosy, moderacja/NSFW, UI na `/` |
 | `microservice-comments` | **Spring Boot** (jednomodułowy) | 8085 | Wątki komentarzy pod memami + głosy |
 | `microservice-paddock` | **Javalin** (vertical slices, PWA) | 8086 | Hub społecznościowy: serwery gry, członkostwa, wydarzenia z RSVP |
-| `formula-simulator` | **bez frameworka** (JDK HttpServer) | 8084 | Menedżer F1 z autonomicznymi kierowcami; SSE; osobny świat — sekcja 16 |
+| `formula-simulator` | **bez frameworka** (JDK HttpServer) | 8084 | Menedżer F1 z autonomicznymi kierowcami; SSE; OSOBNY PRODUKT poza reaktorem (buduje się standalone) — sekcja 16 |
 | `microservice-user-collections` | **Helidon 4 SE** (virtual threads) | 8092 | Generyczne kolekcje referencji usera (ulubione); 3. uczestnik sagi |
 | `collections-ui` | React Native Web + nginx | 8093 | UI ulubionych na WŁASNYM originie (celowo, dla ćwiczenia CORS) |
 | `microservice-idp` | Python | 8091 | **Stub OIDC** — „Zaloguj przez Google" bez Google (dev/testy) |
@@ -478,9 +483,11 @@ wożony w kolumnie outboxa i atrybucie żądania, nie „w wątku".
 
 Dwa poziomy:
 - **Workspace** (`.github/workflows/ci.yml`): checkoutuje 13 sub-repo, buduje cały reaktor
-  jednym `./mvnw clean install`, a drugi job **e2e** prowadzi specyfikacje przez prawdziwe
-  Chromium (oba UI, passkeys na wirtualnym authenticatorze).
-- **Per repo** (od 2026-07-10 wszystkie serwisy mają własne `ci.yml`): buduje serwis
+  jednym `./mvnw clean install` **plus grę F1 osobnym krokiem** (osobny produkt poza
+  reaktorem, bez własnego CI — workspace ją testuje standalone), a drugi job **e2e**
+  prowadzi specyfikacje przez prawdziwe Chromium (oba UI, passkeys na wirtualnym
+  authenticatorze).
+- **Per repo** (od 2026-07-10 serwisy PORTALU mają własne `ci.yml`; gra nie ma): buduje serwis
   samodzielnie; CI security checkoutuje dodatkowo repa konsumentów, żeby weryfikacja paktów
   biegła też u producenta. Uwaga: repo prywatne wymaga PAT w sekretach (domyślny GITHUB_TOKEN
   czyta tylko publiczne repo właściciela).
@@ -523,7 +530,8 @@ emerguje z symulacji). **Repo PRYWATNE**, ma własny, obszerny świat dokumentó
 # 0. Wymagania: JDK 25, Docker, git. Mavena NIE instalujesz — jest ./mvnw.
 
 cd ~/Documents/git/security
-./mvnw clean install        # 1. cały reaktor (pierwszy raz potrwa)
+./mvnw clean install        # 1. cały reaktor PORTALU (pierwszy raz potrwa)
+./mvnw -f formula-simulator/pom.xml package -DskipTests   # 1b. gra F1 (osobny produkt)
 ./infra-up.sh               # 2. cały stack w Dockerze
 ./infra-smoke.sh            # 3. dowód, że przepływy działają (zielony = OK)
 

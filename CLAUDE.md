@@ -11,7 +11,14 @@ auth service (`microservice-security`), and standalone services in other
 flavours — `microservice-email` (BCE, Quarkus), `microservice-memes` (layered modules,
 Spring Boot), `microservice-comments` (Spring Boot + Postgres) and
 `formula-simulator` (no framework, JDK HTTP server). Each sub-directory has its **own `.git`, history and remote**
-and is gitignored here. This repo versions only:
+and is gitignored here.
+
+**TWO PRODUCTS, not one (the owner's verdict, 2026-07-11):** the social PORTAL
+(memes, comments, favourites, the paddock hub) and the F1 GAME (`formula-simulator`
++ its Python `race-sim`) are separate beings that share ONLY identity
+(`microservice-security` — one account, one token). Never conflate them in docs
+or diagrams; `microservice-paddock` is the PORTAL's social hub, F1-flavoured in
+name only. This repo versions only:
 
 - the aggregating `pom.xml` (a pure aggregator, **not** a parent pom),
 - shared scripts / docs (`aggregate_allure.py`, `allure-serve.sh`,
@@ -27,8 +34,12 @@ and is gitignored here. This repo versions only:
   `cd` into the relevant sub-repo and commit there against **its** history.
 - All modules share `com.jrobertgardzinski:*:1.0.0-SNAPSHOT`.
 - The reactor resolves inter-project dependencies from the reactor itself, so
-  `./mvnw install` at the root builds everything in dependency order without
+  `./mvnw install` at the root builds the PORTAL in dependency order without
   needing each project pre-installed into `~/.m2`.
+- **`formula-simulator` is deliberately NOT a reactor module** (separate product):
+  build it standalone — `./mvnw -f formula-simulator/pom.xml clean verify` — after
+  a one-time `./mvnw -pl offline-jwt -am install` (its only workspace dependency).
+  `infra-up.sh` / `formula-up.sh` / workspace CI already do this.
 - Every sub-project stays buildable standalone (own parent preserved). Do not
   convert the aggregator into their parent — that would edit several separate
   repos.
@@ -36,8 +47,9 @@ and is gitignored here. This repo versions only:
 ## Build & test
 
 ```bash
-./mvnw clean install          # whole reactor
+./mvnw clean install          # the whole PORTAL reactor
 ./mvnw -pl microservice-security -am clean verify   # one project + its deps
+./mvnw -f formula-simulator/pom.xml clean verify    # the game (separate product)
 ```
 
 JDK 25. Wrapper pinned to Maven 3.9.9.

@@ -7,8 +7,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-./mvnw -q -pl microservice-security/security-infrastructure,microservice-email,formula-simulator \
+# the game is a SEPARATE PRODUCT (not a reactor module — the owner's verdict 2026-07-11):
+# install its workspace library, build the portal services it signs in through, then
+# build the game standalone against its own pom
+./mvnw -q -pl offline-jwt -am install -DskipTests
+./mvnw -q -pl microservice-security/security-infrastructure,microservice-email \
     -am package -DskipTests
+./mvnw -q -f formula-simulator/pom.xml package -DskipTests
 
 # the dev override re-opens race-sim's host port (8090) for the owner's manual drive —
 # the base compose keeps the sim internal-only (A4: engine code never faces the network)
