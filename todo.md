@@ -2,6 +2,62 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## OTWARTE — przeprowadzka: trzy workspace'y `shared/` + `portal/` + `formula/` (werdykt właściciela 2026-07-12/4, wariant C)
+
+**Werdykt:** katalogi per produkt, pełna czystość dwóch produktów. Właściciel wybrał
+wariant C z trzech przedstawionych: każdy katalog = osobne małe repo workspace
+z własnym pomem/compose/skryptami (odrzucone: A — grupy wewnątrz jednego workspace'u,
+B — katalogi-siostry z pomem sięgającym przez `../`). Ryzyko ocenione wspólnie jako
+niskie: operacja czysto lokalna + podział JEDNEGO repo (workspace), zero zmian nazw
+repo dzieci/artifactId/pakietów; odwracalna do momentu podziału repo workspace.
+
+Docelowo:
+
+```
+Documents/git/
+├── shared/    ← repo workspace-shared (WSPÓLNE JĄDRO: tożsamość + biblioteki)
+│   pom reaktora + microservice-security, offline-jwt, email, password, voting,
+│   config, constraint, adjustable-clock, infrastructure-micronaut-clock,
+│   test-starter, microservice-idp (stub tożsamości — służy obu produktom)
+│   + docker-compose.identity.yml (security+postgres+mailpit+email-serwis+idp)
+│   + narzędzia przekrojowe: aggregate_allure, build_glossary, build_c4 (skanują
+│     rodzeństwo przez ../ — świadomy wyjątek, narzędzia dev-only)
+├── portal/    ← repo workspace-portal (PRODUKT 1)
+│   pom reaktora + memes, comments, paddock, user-collections, offboarding,
+│   microservice-email?, sms, push, image + compose portalu (include: identity)
+│   + infra-smoke.sh (dowodzi przepływów portal+tożsamość) + memes-up.sh
+└── formula/   ← repo workspace-formula (PRODUKT 2)
+    formula-simulator (z race-sim) + formula-up.sh + compose gry (include: identity)
+```
+
+Kolejność budowy: `shared` → `~/.m2` → `portal`/`formula` (sprzężenie produktów przez
+artefakty Mavena i uruchomione serwisy — NIE przez układ źródeł; tak jest już dziś).
+
+Etapy:
+
+0. **Warunek wstępny**: właściciel domyka trwającą robotę w workspace (README, build_c4,
+   docs/c4-architecture, deployment-plan, przewodniki→onboarding — dziś niezacommitowane).
+1. **Podział repo workspace `security`**: rename na GitHubie `security`→`workspace-shared`
+   (historia skryptów/doków zostaje tu) + `gh repo create workspace-portal`,
+   `workspace-formula`; rozdzielić pliki wg przynależności (pom, compose, skrypty,
+   docs/, todo.md → sekcje per produkt).
+2. **`mv` katalogów dzieci** do shared/portal/formula (osobne .gity — bezbolesne).
+3. **Reaktory**: pom shared (biblioteki+security), pom portalu (serwisy; zależności
+   z ~/.m2), formula bez reaktora (jak dziś, standalone verify).
+4. **Compose**: stack tożsamości definiowany RAZ w shared (`include:` composa v2.20+
+   w portal/formula) — koniec z jednym 25-kB composem na wszystko.
+5. **CI**: trzy workflow'y (shared: build+install; portal: checkout shared+portal,
+   build po instalacji shared; formula: jak dziś + checkout offline-jwt).
+6. **Dokumentacja i ścieżki**: README per workspace, CLAUDE.md ×3 (agregatorowy
+   dzielony), maven-cheatsheet zostaje w shared; pamięć sesji Claude przenieść pod
+   nowy klucz ścieżki formula-simulatora.
+7. **Regresja**: shared install → portal install → formula verify → smoke → CI ×3
+   zielone. Rollback do etapu 1 włącznie: `mv` z powrotem + checkout.
+
+Decyzje w trakcie (zapisać werdykty): dom `microservice-email` (serwis pocztowy —
+używany przez tożsamość do maili weryfikacyjnych → kandydat do shared zamiast
+portalu); domy stubów sms/push/image (portal?); los starego `docker-compose.dev.yml`.
+
 ## ~~OTWARTE~~ ODPUSZCZONE (2026-07-12/3) — wielki rename: taksonomia `lib-*`/`util-*`
 
 **Werdykt końcowy właściciela:** „jest ryzyko, że zrobimy większy bałagan niż jest —
