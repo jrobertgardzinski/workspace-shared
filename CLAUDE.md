@@ -13,12 +13,15 @@ Spring Boot), `microservice-comments` (Spring Boot + Postgres) and
 `formula-simulator` (no framework, JDK HTTP server). Each sub-directory has its **own `.git`, history and remote**
 and is gitignored here.
 
-**TWO PRODUCTS, not one (the owner's verdict, 2026-07-11):** the social PORTAL
-(memes, comments, favourites, the paddock hub) and the F1 GAME (`formula-simulator`
-+ its Python `race-sim`) are separate beings that share ONLY identity
+**TWO PRODUCTS, not one (the owner's verdict, 2026-07-11; amended 2026-07-12):**
+the social PORTAL (memes, comments, favourites) and the F1 GAME (`formula-simulator`
++ its Python `race-sim` + `microservice-paddock`, the game's social hub: the servers
+you race on, campaigns, events) are separate beings that share ONLY identity
 (`microservice-security` — one account, one token). Never conflate them in docs
-or diagrams; `microservice-paddock` is the PORTAL's social hub, F1-flavoured in
-name only. This repo versions only:
+or diagrams. The 2026-07-12 amendment moved paddock to the GAME: its users are
+players and its `infra` pulls live game state from the instances — the earlier
+"portal's hub, F1-flavoured in name only" line was the naming trap biting its
+own author. This repo versions only:
 
 - the aggregating `pom.xml` (a pure aggregator, **not** a parent pom),
 - shared scripts / docs (`aggregate_allure.py`, `allure-serve.sh`,

@@ -23,11 +23,14 @@ Documents/git/
 │   + narzędzia przekrojowe: aggregate_allure, build_glossary, build_c4 (skanują
 │     rodzeństwo przez ../ — świadomy wyjątek, narzędzia dev-only)
 ├── portal/    ← repo workspace-portal (PRODUKT 1)
-│   pom reaktora + memes, comments, paddock, user-collections, offboarding,
+│   pom reaktora + memes, comments, user-collections, offboarding,
 │   microservice-email?, sms, push, image + compose portalu (include: identity)
 │   + infra-smoke.sh (dowodzi przepływów portal+tożsamość) + memes-up.sh
 └── formula/   ← repo workspace-formula (PRODUKT 2)
-    formula-simulator (z race-sim) + formula-up.sh + compose gry (include: identity)
+    formula-simulator (z race-sim) + microservice-paddock (hub gry — werdykt
+    2026-07-12/5: paddock NALEŻY DO GRY, poprawka wczorajszego „hub portalu";
+    użytkownicy=gracze, infra ciągnie stan z instancji gry) + formula-up.sh
+    (rozważyć dołożenie paddocka do startu) + compose gry (include: identity)
 ```
 
 Kolejność budowy: `shared` → `~/.m2` → `portal`/`formula` (sprzężenie produktów przez
