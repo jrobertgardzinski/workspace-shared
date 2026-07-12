@@ -2,9 +2,18 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
-## OTWARTE — wielki rename: taksonomia `lib-*`/`util-*` + `system`→`usecase` (werdykt właściciela 2026-07-12)
+## ~~OTWARTE~~ ODPUSZCZONE (2026-07-12/3) — wielki rename: taksonomia `lib-*`/`util-*`
 
-**Werdykt:** prefiksy rodzin w PEŁNEJ głębokości — katalog + nazwa repo na GitHubie +
+**Werdykt końcowy właściciela:** „jest ryzyko, że zrobimy większy bałagan niż jest —
+odpuśćmy". Z całego planu WYKONANO tylko etap 1 (`system`→`usecase` w libkach:
+`email-security-usecase`, `password-security-usecase` + konsumenci w microservice-security).
+Reszta (prefiksy katalogów/repo/artifactId, pakiety util) — świadomie zaniechana; taksonomia
+lib/util zostaje jako mapa mentalna, nie jako nazwy. Plan poniżej zostaje na wypadek
+powrotu tematu.
+
+--- Plan historyczny (nie wykonywać bez nowego dekretu) ---
+
+**Werdykt (uchylony):** prefiksy rodzin w PEŁNEJ głębokości — katalog + nazwa repo na GitHubie +
 artifactId + finalnie pakiety. Reguła granicy: **util** = przeszedłby test „Maven Central
 dla obcych" (generyczne, zero kontekstu projektu); **lib** = niesie decyzje domenowe.
 `offline-jwt` = lib DECYZJĄ właściciela (koduje kontrakt tożsamości dwóch produktów,
@@ -372,11 +381,18 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
   Podman i pełny k8s odrzucone z uzasadnieniem (plusy/minusy + wyzwalacze przejść).
 - **Go-live portalu pod kampanię IX–X 2026** → [docs/go-live-2026.md](docs/go-live-2026.md):
   ocena gotowości (funkcjonalnie TAK, brakuje `deploy/` z Etapu 1), checklist publikacji
-  (SMTP = blocker #1, sekrety/URL-e, OAuth bez stub IdP, TLS, tylko portal), sizing VPS
-  (10–14 GB RAM; Hetzner CAX31 ~45 € / 3 mies.), opcje alternatywne. Timing wyzwalany
-  gotowością, nie datą: FAZA 0 = wdrożenie właściciela (przewodnik-juniora.md), go-live
-  dopiero po niej (naturalne okno: początek IX — hosting IX–XI pokrywa całą kampanię),
-  wideo po fazie 0 jako trwały dowód.
+  (SMTP = blocker #1, sekrety/URL-e, OAuth bez stub IdP, TLS, tylko portal), kosztorys
+  (10–14 GB RAM; Hetzner CAX31 ~50–60 € / 3 mies. + warianty). **Target = praca zdalna
+  ZA GRANICĄ (werdykt 2026-07-12)** → plan przestawiony: FAZA 0 = wdrożenie właściciela
+  (docs/onboarding-guide.md), potem anglojęzyczna warstwa publiczna + wideo + `deploy/`
+  jako artefakt + demo na żądanie (VPS godzinowy przed rozmową); stały 3-mies. hosting
+  ZDEGRADOWANY do wariantu opcjonalnego (target lokalny / frajda).
+- **Anglicyzacja docs/ — ZROBIONE (2026-07-12)**: przewodnik-juniora.md →
+  `docs/onboarding-guide.md`, przewodnik.md → `docs/onboarding-guide-legacy.md`
+  (archiwum), deployment-plan.md i go-live-2026.md przetłumaczone in place,
+  `build_c4.py` generuje c4-architecture.md po angielsku (zregenerowane). ADR-y były
+  angielskie od zawsze. Po polsku ZOSTAJĄ celowo: todo.md (backlog roboczy, nie
+  wizytówka) i docs gry F1 (produkt prywatny).
 
 ### (USER, zewnętrzne)
 

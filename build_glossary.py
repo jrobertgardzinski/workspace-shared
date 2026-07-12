@@ -133,7 +133,7 @@ def parse_java(path: Path):
 def _layer(parts):
     # hexagonal layers (security & libs) win first, so a DDD domain/entity package is not
     # mistaken for a BCE entity; BCE layers (email) are matched only when none of those apply.
-    if any(p.endswith("-system") for p in parts):
+    if any(p.endswith(("-system", "-usecase")) for p in parts):
         return "system"
     if "config" in parts:
         return "config"
@@ -150,7 +150,7 @@ def _layer(parts):
 
 def collect_terms():
     """Every public type (class/record/interface/enum) from the domain, config
-    and *-system layers is a glossary term. Noun/verb is a role a word plays in a
+    and *-system/*-usecase layers is a glossary term. Noun/verb is a role a word plays in a
     Gherkin sentence, not a property of a class, so it is NOT recorded here."""
     terms = []
     for java in ROOT.glob("**/src/main/java/**/*.java"):
@@ -159,7 +159,7 @@ def collect_terms():
         parts = java.parts
         if not ("domain" in parts or "config" in parts or "boundary" in parts
                 or "control" in parts or "entity" in parts or "tags" in parts
-                or any(p.endswith("-system") for p in parts)):
+                or any(p.endswith(("-system", "-usecase")) for p in parts)):
             continue
         layer = _layer(parts)
         for ty in parse_java(java):
@@ -353,7 +353,7 @@ def feat_anchor(feat):
 
 def render_markdown(terms, usage):
     lines = ["# Ubiquitous-Language glossary", "",
-             "_Generated from the domain, config and *-system layers by "
+             "_Generated from the domain, config and *-system/*-usecase layers by "
              "`build_glossary.py` — do not edit by hand._", "",
              f"{len(terms)} classes · {len(usage)} feature files tagged.", ""]
     for layer in ("domain", "config", "system", "boundary", "control", "entity"):
@@ -547,7 +547,7 @@ def render_glossary_page(terms, usage, reports, feature_pages):
     slug_of = {f: sl for sl, _, f in feature_pages}
     title_of = {f: t for _, t, f in feature_pages}
     body = ["<h1>Ubiquitous-Language glossary</h1>",
-            f"<p>All {len(terms)} classes from the domain, config and *-system layers, "
+            f"<p>All {len(terms)} classes from the domain, config and *-system/*-usecase layers, "
             "alphabetical. A class used in a feature or covered by unit tests links out.</p>",
             '<input id=q class=filter placeholder="Filter classes…" autocomplete=off>']
     for t in terms:                                    # already sorted by name
