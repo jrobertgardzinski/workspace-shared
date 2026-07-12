@@ -2,6 +2,39 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## OTWARTE — sprzątanie pomów wg wzorca „czysty pom" (dyktando właściciela 2026-07-12/6)
+
+**Wzorzec = `email/email-security/pom.xml`** (wklejony przez właściciela jako ideał):
+rodzic rodziny trzyma `dependencyManagement` (swoje artefakty przez `${project.version}`,
+cudze przypięte jawnie), dzieci deklarują zależności BEZ wersji, zero pluginów-fikołków
+w liściach; pluginy wspólne rodziny na szczycie rodziny. **Przymknięte oko (jawnie):**
+copy-paste bloków pluginów MIĘDZY rodzinami (agregatory nie są rodzicami — werdykt C1)
+oraz pluginy specyficzne modułu (shade/micronaut/quarkus/frontend w liściu = realny
+krok builda, nie fikołek).
+
+Audyt (skan 31 pomów, 2026-07-12) — PRAWDZIWE odstępstwa:
+
+1. **memes** (portal): rodzic MA depMgmt (BOM-y), ale bez własnych modułów —
+   `memes-application` (memes-domain/tags/image z wersją), `memes-image` (memes-config),
+   `memes-infrastructure` (memes-application + offline-jwt + junit5 z wersją) →
+   dodać własne moduły + offline-jwt/junit5 do depMgmt rodzica, zdjąć wersje z dzieci.
+2. **microservice-security** (shared): `allure-maven` Z WERSJĄ 2.17.0 zadeklarowany
+   per liść (domain/config/system/application/infrastructure) → wersja do
+   pluginManagement rodzica (albo cały plugin do <plugins> rodzica, skoro używają
+   wszyscy); specyficzne pluginy infrastructure zostają.
+3. **password/hash-algorithms**: liść `argon2` niesie wersje argon2-jvm* → do depMgmt
+   rodzica podrodziny.
+
+NIE odstępstwa (świadomie zostają): jednomodułowe repa (voting, offline-jwt,
+comments, offboarding, collections, paddock, formula-simulator, adjustable-clock,
+config, constraint, microservice-email) = WIERZCHOŁKI rodzin — wersje inline
+dopuszczalne, własny depMgmt byłby ceremonią; aktywacje pluginów bez wersji
+w dzieciach (spring-boot/surefire w memes) — wersja i tak z pluginManagement.
+
+Do rozstrzygnięcia przy „k": czy wspólne pluginy rodziny (allure/surefire) wciągać
+do <plugins> RODZICA (dzieci czyste do zera), czy zostawić aktywację per dziecko
+z wersją w pluginManagement (bardziej jawnie, więcej linii).
+
 ## ~~OTWARTE~~ WYKONANE (2026-07-12/5) — przeprowadzka: trzy workspace'y `shared/` + `portal/` + `formula/` (wariant C)
 
 **Wykonane w całości tego samego dnia** („zacznij już robić"): katalogi przeniesione
