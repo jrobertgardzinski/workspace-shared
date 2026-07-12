@@ -2,6 +2,70 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## OTWARTE — wielki rename: taksonomia `lib-*`/`util-*` + `system`→`usecase` (werdykt właściciela 2026-07-12)
+
+**Werdykt:** prefiksy rodzin w PEŁNEJ głębokości — katalog + nazwa repo na GitHubie +
+artifactId + finalnie pakiety. Reguła granicy: **util** = przeszedłby test „Maven Central
+dla obcych" (generyczne, zero kontekstu projektu); **lib** = niesie decyzje domenowe.
+`offline-jwt` = lib DECYZJĄ właściciela (koduje kontrakt tożsamości dwóch produktów,
+mimo generycznego brzmienia). `test-starter` BEZ prefiksu (nazwa mówi wszystko).
+
+| po staremu | po nowemu | uwagi |
+|---|---|---|
+| `email` | `lib-email` | znika kolizja z `microservice-email` |
+| `password` | `lib-password` | |
+| `voting` | `lib-voting` | |
+| `offline-jwt` | `lib-offline-jwt` | konsument także formula-simulator (OSOBNY produkt!) |
+| `config` | `util-config` | |
+| `constraint` | `util-constraint` | UWAGA: na GitHubie żyje w repo **`libs`** — rename repo `libs`→`util-constraint` |
+| `adjustable-clock` | `util-adjustable-clock` | |
+
+Etapy (kolejność wg promienia rażenia; każdy etap = commity per repo, reactor zielony na końcu etapu):
+
+1. **`system` → `usecase`** — niezależne od prefiksów, zrobić NAJPIERW; przy okazji znika
+   kolizja znaczeniowa z `system-test-starter` (tam „system" = testy systemowe):
+   - `microservice-security`: moduł `security-system` → `security-usecase`, pakiety
+     `security.system.*` → `security.usecase.*`; konsumenci wewnętrzni: pom główny,
+     `security-infrastructure`, `security-application`; doki (`Documentation.md`, docs/).
+   - `email`: `email-security-system` → `email-security-usecase` (tylko moduł/artifactId —
+     pakiety nie mają segmentu `system`).
+   - `password`: `password-security-system` → `password-security-usecase` (jw.).
+2. **`util-*`** (mniejszy promień): `config`, `constraint`, `adjustable-clock` —
+   `gh repo rename` (redirecty zostają, ale poprawić `repository:` w CI), artifactId
+   top-level poma; konsumenci pomów: `microservice-security` (wszystkie trzy),
+   `infrastructure-micronaut-clock` (adjustable-clock); grep repo-wide przed zmianą
+   (lekcja: implementatorów/konsumentów szukać w CAŁYM workspace).
+3. **`lib-*`** (największy promień): `email`, `password`, `voting`, `offline-jwt` —
+   konsumenci pomów: `microservice-security`, `microservice-memes` (voting+offline-jwt),
+   `microservice-comments` (voting+offline-jwt), `microservice-paddock`,
+   `microservice-user-collections`, **`formula-simulator`** (offline-jwt; osobny produkt —
+   osobny commit). CI sub-repo z checkoutem lib-repos do poprawy (`repository:` + `path:`):
+   security, memes, comments, paddock, user-collections.
+4. **Workspace jednym zamachem** (tu dopiero `mv` katalogów lokalnych, żeby ścieżki
+   zmieniły się razem z plikami, które na nie patrzą): pom agregatora (`<module>`),
+   `.gitignore` (lista katalogów dzieci), `.github/workflows/ci.yml` (OBA joby:
+   `repository:`+`path:`), `README.md` (tabela modułów), `CLAUDE.md`,
+   `-pl offline-jwt` w `infra-up.sh`/`formula-up.sh`, `build_c4.py`/`build_glossary.py`/
+   `aggregate_allure.py` (grep list modułów), `formula-simulator/CLAUDE.md`+workspace docs.
+5. **Pakiety** (finał, per repo): `com.jrobertgardzinski.config` → `util.config`,
+   `...clock` → `util.clock` — wyrównanie do już istniejącego `util.constraint`;
+   pakiety lib-ów BEZ zmian (lib = kategoria domyślna: `email`, `password`, `voting`,
+   `offlinejwt` zostają).
+6. **Regresja pełna**: wyczyścić stare artefakty z `~/.m2/repository/com/jrobertgardzinski`
+   (stary artifactId w cache potrafi maskować niedokończony rename!), potem
+   `./mvnw clean install` + `./mvnw -f formula-simulator/pom.xml clean verify` +
+   `infra-smoke.sh` + zielone CI KAŻDEGO ruszonego repo (REPO_PAT — sprawdzić ważność).
+
+Decyzje do podjęcia w trakcie (zapisać werdykty tutaj):
+- `infrastructure-micronaut-clock` — `util-`? (test „Maven Central" przechodzi) czy zostaje
+  (nazwa już samoopisowa, prefiks wydłuża do granic czytelności)?
+- artifactId dzieci — rekomendacja: BEZ prefiksu (`email-domain` zostaje `email-domain`;
+  prefiks tylko na top-level pomie), do potwierdzenia przez właściciela;
+- pakty — ścieżki używają nazw serwisów, nie libów; zweryfikować grep-em przed etapem 3.
+
+Odłożona świadomie (nie „bałagan", tylko decyzja): dalsza rozbiórka korzenia workspace
+(artefakty `brochure-*` won/do `docs/`, skrypty do `scripts/`) — osobne zadanie, czeka na „k".
+
 ## ~~OTWARTE~~ ZROBIONE (2026-07-11/2) — saga wyprowadzona do `microservice-offboarding` (opcja D usera)
 
 Właściciel wybrał mocniejszą drogę niż A/B poniżej: **orkiestracja sagi wyprowadzona do NOWEGO
@@ -306,6 +370,13 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
 - **Wdrożenie/orkiestracja** → [docs/deployment-plan.md](docs/deployment-plan.md):
   Compose dziś → VPS+Compose+Traefik na publikację → k3s przy piramidzie dywizji;
   Podman i pełny k8s odrzucone z uzasadnieniem (plusy/minusy + wyzwalacze przejść).
+- **Go-live portalu pod kampanię IX–X 2026** → [docs/go-live-2026.md](docs/go-live-2026.md):
+  ocena gotowości (funkcjonalnie TAK, brakuje `deploy/` z Etapu 1), checklist publikacji
+  (SMTP = blocker #1, sekrety/URL-e, OAuth bez stub IdP, TLS, tylko portal), sizing VPS
+  (10–14 GB RAM; Hetzner CAX31 ~45 € / 3 mies.), opcje alternatywne. Timing wyzwalany
+  gotowością, nie datą: FAZA 0 = wdrożenie właściciela (przewodnik-juniora.md), go-live
+  dopiero po niej (naturalne okno: początek IX — hosting IX–XI pokrywa całą kampanię),
+  wideo po fazie 0 jako trwały dowód.
 
 ### (USER, zewnętrzne)
 
