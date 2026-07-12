@@ -22,14 +22,14 @@ mimo generycznego brzmienia). `test-starter` BEZ prefiksu (nazwa mówi wszystko)
 
 Etapy (kolejność wg promienia rażenia; każdy etap = commity per repo, reactor zielony na końcu etapu):
 
-1. **`system` → `usecase`** — niezależne od prefiksów, zrobić NAJPIERW; przy okazji znika
-   kolizja znaczeniowa z `system-test-starter` (tam „system" = testy systemowe):
-   - `microservice-security`: moduł `security-system` → `security-usecase`, pakiety
-     `security.system.*` → `security.usecase.*`; konsumenci wewnętrzni: pom główny,
-     `security-infrastructure`, `security-application`; doki (`Documentation.md`, docs/).
+1. **`system` → `usecase` TYLKO w lib-\*** (werdykt właściciela 2026-07-12/2:
+   `security-system` w microservice-security ZOSTAJE) — niezależne od prefiksów,
+   zrobić NAJPIERW:
    - `email`: `email-security-system` → `email-security-usecase` (tylko moduł/artifactId —
      pakiety nie mają segmentu `system`).
    - `password`: `password-security-system` → `password-security-usecase` (jw.).
+   - Konsekwencja przyjęta świadomie: kolizja znaczeniowa `security-system` vs
+     `system-test-starter` zostaje w microservice-security.
 2. **`util-*`** (mniejszy promień): `config`, `constraint`, `adjustable-clock` —
    `gh repo rename` (redirecty zostają, ale poprawić `repository:` w CI), artifactId
    top-level poma; konsumenci pomów: `microservice-security` (wszystkie trzy),
