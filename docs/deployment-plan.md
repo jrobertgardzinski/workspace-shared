@@ -1,72 +1,73 @@
-# Plan wdrożeniowy — zarządzanie kontenerami (spisany 2026-07-07)
+# Deployment plan — container management (written 2026-07-07)
 
-Rekomendacja z przeglądu: **Compose na dev, VPS+Compose na pierwszy publiczny serwer,
-k3s dopiero na kamieniu milowym „publiczna piramida dywizji"**. Podman odpuszczony.
-Poniżej opcje z plusami/minusami i wyzwalaczami przejścia.
+Recommendation from the review: **Compose for dev, VPS+Compose for the first public
+server, k3s only at the "public division pyramid" milestone**. Podman passed over.
+Below: the options with pros/cons and the triggers for moving between stages.
 
-## Etap 0 — DZIŚ: docker compose (bez zmian)
+## Stage 0 — TODAY: docker compose (no changes)
 
-Stan: ~20+ kontenerów w jednym pliku, `depends_on` + healthchecki, launchery per świat
-(`memes-up.sh` / `formula-up.sh`), `infra-up.sh` jako włącznik wszystkiego, smoke E2E,
-observability (Prometheus/Grafana/cAdvisor/node-exporter, 10/10 targetów).
+State: ~20+ containers in one file, `depends_on` + healthchecks, per-world launchers
+(`memes-up.sh` / `formula-up.sh`), `infra-up.sh` as the everything-switch, E2E smoke,
+observability (Prometheus/Grafana/cAdvisor/node-exporter, 10/10 targets).
 
-**Plusy:** zero podatku operacyjnego; jeden plik = jedna prawda; szybka pętla dev;
-smoke dowodzi całości; skala idealna dla Compose.
-**Minusy:** brak rolling deploys, brak sekretów lepszych niż env, jednohostowość.
-**Werdykt:** właściwe narzędzie na tę fazę — nie ruszać.
+**Pros:** zero operational tax; one file = one truth; fast dev loop; the smoke test
+proves the whole; the scale is ideal for Compose.
+**Cons:** no rolling deploys, no secrets better than env, single-host.
+**Verdict:** the right tool for this phase — don't touch it.
 
-## Podman — ODRZUCONY (na teraz)
+## Podman — REJECTED (for now)
 
-**Plusy:** rootless (mniejsza powierzchnia ataku), daemonless, drop-in CLI.
-**Minusy (u nas konkretne):** serwery grupowe i sandbox botów jadą po **sokecie Dockera**
-(`--bot-docker`, kontenery-rodzeństwo, tłumaczenie ścieżek — kompromis opisany w README
-race-sim) — pod rootless wymaga przeróbki; cAdvisor/compose bywają kapryśne; przełączka
-kosztuje robotę, nie dając funkcji, których brakuje.
-**Wyzwalacz rewizji:** wymóg rootless od hostingu/compliance albo porzucenie soketa
-Dockera w sandboxie botów.
+**Pros:** rootless (smaller attack surface), daemonless, drop-in CLI.
+**Cons (concrete for us):** the group servers and the bot sandbox ride the **Docker
+socket** (`--bot-docker`, sibling containers, path translation — the trade-off is
+described in the race-sim README) — under rootless that needs rework; cAdvisor/compose
+can be temperamental; the switch costs work while adding no missing feature.
+**Revision trigger:** a rootless requirement from hosting/compliance, or dropping the
+Docker socket in the bot sandbox.
 
-## Etap 1 — PIERWSZY PUBLICZNY SERWER: VPS + Compose + systemd + Traefik/Caddy
+## Stage 1 — FIRST PUBLIC SERVER: VPS + Compose + systemd + Traefik/Caddy
 
-Kształt: jeden VPS; ten sam `docker-compose.yml` + nakładka prod (porty za reverse proxy,
-`GRAFANA_ANON=false` + hasło — env już przygotowane, sekrety w `.env` poza repo); Traefik
-albo Caddy z przodu (TLS z Let's Encrypt, routing per subdomena: gra/galeria/grafana);
-systemd unit na autostart; backup wolumenów Postgresa (cron + `pg_dump`); ligi = serwery
-grupowe przez istniejący `provision.sh` na kolejnych VPS-ach.
+Shape: one VPS; the same `docker-compose.yml` + a prod overlay (ports behind a reverse
+proxy, `GRAFANA_ANON=false` + password — env already prepared, secrets in `.env`
+outside the repo); Traefik or Caddy in front (TLS via Let's Encrypt, routing per
+subdomain: game/gallery/grafana); a systemd unit for autostart; Postgres volume
+backups (cron + `pg_dump`); leagues = group servers via the existing `provision.sh`
+on further VPSes.
 
-**Plusy:** jeden wieczór roboty; zero nowych technologii do nauki; awaria = jeden host
-do debugowania; koszt stały minimalny (jeden VPS); istniejący model prowizjonowania lig
-działa bez zmian.
-**Minusy:** deploy = restart (krótka przerwa); brak samoleczenia poza `restart: always`;
-skalowanie = ręczne dokładanie VPS-ów; sekrety nadal w env.
-**Wyzwalacz wejścia:** decyzja o pokazaniu gry światu (domena + VPS).
-**Do przygotowania wtedy:** katalog `deploy/` (compose.prod.yml + traefik + systemd unit
-+ skrypt backupu).
+**Pros:** one evening of work; zero new technologies to learn; an outage = one host to
+debug; minimal fixed cost (one VPS); the existing league-provisioning model works
+unchanged.
+**Cons:** deploy = restart (short downtime); no self-healing beyond `restart: always`;
+scaling = adding VPSes by hand; secrets still in env.
+**Entry trigger:** the decision to show the game to the world (domain + VPS).
+**To prepare then:** a `deploy/` directory (compose.prod.yml + traefik + systemd unit
++ backup script).
 
-## Etap 2 — TRAKCJA / PIRAMIDA DYWIZJI: k3s (lekki Kubernetes)
+## Stage 2 — TRACTION / THE DIVISION PYRAMID: k3s (lightweight Kubernetes)
 
-Wyzwalacz: publiczna piramida + rejestr→provision (backlog paddocka) — moment, w którym
-„liga" staje się jednostką WDROŻENIA (namespace/Deployment per liga), a `provision.sh`
-wymienia się na wywołanie API klastra. k3s: pojedynczy binarek, działa na jednym VPS-ie
-i rośnie do wielu node'ów, manifesty = zwykły k8s.
+Trigger: a public pyramid + registry→provision (the paddock backlog) — the moment
+a "league" becomes the unit of DEPLOYMENT (namespace/Deployment per league) and
+`provision.sh` is replaced by a cluster API call. k3s: a single binary, runs on one
+VPS and grows to many nodes, manifests = plain k8s.
 
-**Plusy:** rolling deploys bez przerw; samoleczenie i limity zasobów per liga; Ingress
-zamiast ręcznego Traefika; sekrety jako obiekty; observability podmienialne na
-kube-prometheus-stack; **wartość portfolio** (katalog `deploy/k8s/` z manifestami/Helmem);
-obrazy wchodzą bez zmian.
-**Minusy:** realny podatek nauki i operacji (etcd/certyfikaty/upgrade'y — w k3s mniejszy,
-ale niezerowy); debugowanie trudniejsze niż `docker compose logs`; sandbox botów po
-sokecie wymaga przemyślenia (Kaniko/DinD/gVisor — osobna decyzja); dla solo-deva to czas
-zabrany treści gry, więc wchodzić DOPIERO przy realnej potrzebie.
+**Pros:** rolling deploys without downtime; self-healing and per-league resource
+limits; Ingress instead of hand-rolled Traefik; secrets as objects; observability
+swappable for kube-prometheus-stack; **portfolio value** (a `deploy/k8s/` directory
+with manifests/Helm); the images go in unchanged.
+**Cons:** a real learning and operations tax (etcd/certificates/upgrades — smaller in
+k3s, but non-zero); debugging harder than `docker compose logs`; the socket-based bot
+sandbox needs rethinking (Kaniko/DinD/gVisor — a separate decision); for a solo dev
+this is time taken from game content, so enter ONLY on real need.
 
-## Pełny k8s (EKS/GKE/samodzielny) — ODRZUCONY do odwołania
+## Full k8s (EKS/GKE/self-managed) — REJECTED until further notice
 
-**Plusy:** standard branżowy, nieograniczona skala.
-**Minusy:** koszt (control plane / własna operacja), złożoność nieproporcjonalna do
-jednoosobowego projektu; wszystko, co daje, k3s daje taniej na naszej skali.
-**Wyzwalacz rewizji:** zespół > 1 osoby albo skala wielu regionów.
+**Pros:** the industry standard, unbounded scale.
+**Cons:** cost (control plane / self-operation), complexity disproportionate to
+a one-person project; everything it offers, k3s offers cheaper at our scale.
+**Revision trigger:** a team > 1 person or multi-region scale.
 
-## Sekwencja decyzji (TL;DR)
+## Decision sequence (TL;DR)
 
-1. Dziś: nic nie zmieniać (Compose).
-2. Publikacja: VPS + Compose + systemd + Traefik → katalog `deploy/`.
-3. Piramida: k3s, liga jako jednostka wdrożenia; manifesty do portfolio.
+1. Today: change nothing (Compose).
+2. Publication: VPS + Compose + systemd + Traefik → the `deploy/` directory.
+3. The pyramid: k3s, a league as the deployment unit; manifests into the portfolio.

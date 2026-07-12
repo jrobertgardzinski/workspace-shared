@@ -89,7 +89,7 @@ security; signed-in users upload, vote and star favourites).
 Ports: security 8080, email 8082, memes 8083 (gallery UI), formula 8084 (race
 viewer), comments 8085, paddock 8086, user-collections 8092, collections-ui 8093,
 offboarding 8094, Mailpit UI 8025, Grafana 3000. The full map lives in
-[docs/przewodnik-juniora.md](docs/przewodnik-juniora.md) and the generated
+[docs/onboarding-guide.md](docs/onboarding-guide.md) and the generated
 [C4 diagrams](docs/c4-architecture.md).
 
 ## Tooling
