@@ -2,6 +2,33 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## TODO NR 1 NASTĘPNEJ SESJI — domknąć REPO_PAT i zieleń CI nowych workspace'ów (2026-07-12)
+
+Stan zastany (dokładny, nie zgaduj od nowa):
+- `workspace-shared`: CI ZIELONE, sekret `REPO_PAT` jest (z 2026-07-07, przetrwał rename).
+- `workspace-portal`: sekret `REPO_PAT` ISTNIEJE, ALE JEST **PUSTY** — pułapka! Sesyjny
+  shell `!` nie jest interaktywny, `gh secret set` dostał pusty stdin i tak ustawił.
+  `gh secret list` pokazuje go jak zdrowy. Trzeba NADPISAĆ.
+- `workspace-formula`: sekretu brak w ogóle.
+- Oba CI padają w 7 s na pierwszym cross-repo checkoutcie: `Input required and not
+  supplied: token`.
+
+Kroki:
+1. WŁAŚCICIEL, we własnym terminalu (poza sesją Claude — tam gh pyta interaktywnie):
+   `gh secret set REPO_PAT -R jrobertgardzinski/workspace-portal`
+   `gh secret set REPO_PAT -R jrobertgardzinski/workspace-formula`
+   (wartość = ten sam fine-grained PAT co na workspace-shared; Contents:read na
+   wszystkie sub-repa. UWAGA: ma datę ważności — jak wygaśnie, staną trzy workspace'y.)
+2. Przestrzelić biegi: `gh run rerun 29192238144 -R jrobertgardzinski/workspace-portal`
+   i `gh run rerun 29192238395 -R jrobertgardzinski/workspace-formula`.
+3. Sprawdzić zieleń obu (`gh run watch ... --exit-status`); e2e portalu (memes-ui przez
+   ../../../shared) i formuły (paddock przez ../../shared) idą na świeżo przepiętych
+   harnessach — jeśli coś padnie, to najpewniej tam.
+4. Ogon przeprowadzki przy okazji: `git remote set-url origin
+   https://github.com/jrobertgardzinski/workspace-shared.git` w `shared/`
+   (push działa przez redirect, ale URL kłamie) + skasować symlink
+   `Documents/git/security -> shared` (trzymał przy życiu sesję przeprowadzkową).
+
 ## OTWARTE — sprzątanie pomów wg wzorca „czysty pom" (dyktando właściciela 2026-07-12/6)
 
 **Wzorzec = `email/email-security/pom.xml`** (wklejony przez właściciela jako ideał):
