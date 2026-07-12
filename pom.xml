@@ -5,17 +5,25 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.jrobertgardzinski</groupId>
-    <artifactId>security</artifactId>
+    <artifactId>workspace-shared</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>security</name>
+    <name>workspace-shared</name>
     <description>
-        Aggregator for the security projects. Each module is an independent git
-        repository; this pom only ties them into a single Maven reactor so the
-        whole thing builds in one command and imports as one project in the IDE.
-        It is a pure aggregator — it is NOT the parent of the modules, so the
-        sub-projects keep their own parents and remain buildable standalone.
+        Aggregator for the SHARED KERNEL: identity (microservice-security), the
+        notification channels it and both products deliver through (microservice-email,
+        plus the Python sms/push/idp stubs outside the reactor), and every shared
+        library. Each module is an independent git repository; this pom only ties
+        them into a single Maven reactor so the kernel builds in one command and
+        imports as one project in the IDE. It is a pure aggregator — it is NOT the
+        parent of the modules, so the sub-projects keep their own parents and remain
+        buildable standalone.
+
+        The two PRODUCTS live in sibling workspaces (the owner's verdict, 2026-07-12):
+        ../portal (the social portal) and ../formula (the F1 game + its paddock hub).
+        They consume this kernel through ~/.m2 (build here first: ./mvnw install)
+        and through the running identity stack (docker-compose.identity.yml).
     </description>
 
     <!--
@@ -34,17 +42,8 @@
         <module>email</module>
         <module>password</module>
         <module>microservice-security</module>
-        <!-- standalone services (own frameworks, no reactor inter-dependencies) -->
+        <!-- standalone service (own framework, no reactor inter-dependencies) -->
         <module>microservice-email</module>
-        <module>microservice-memes</module>
-        <module>microservice-comments</module>
-        <!-- formula-simulator is deliberately NOT a module (the owner's verdict, 2026-07-11):
-             the F1 game is a SEPARATE PRODUCT from the social portal — they share only
-             identity. Build it in its own directory (needs offline-jwt installed once:
-             ./mvnw -pl offline-jwt -am install); formula-up.sh and CI do exactly that. -->
-        <module>microservice-paddock</module>
-        <module>microservice-user-collections</module>
-        <module>microservice-offboarding</module>
     </modules>
 
 </project>

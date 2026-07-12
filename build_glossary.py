@@ -35,10 +35,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-OUT_MD = ROOT / "docs" / "glossary" / "glossary.md"
-SITE = ROOT / "docs" / "glossary" / "site"
-SITE_TO_ROOT = "../../.."          # docs/glossary/site -> repo root
+SHARED = Path(__file__).resolve().parent
+ROOT = SHARED.parent               # the three workspaces live side by side here
+WORKSPACES = [SHARED, ROOT / "portal", ROOT / "formula"]
+OUT_MD = SHARED / "docs" / "glossary" / "glossary.md"
+SITE = SHARED / "docs" / "glossary" / "site"
+SITE_TO_ROOT = "../../../.."       # shared/docs/glossary/site -> the workspaces' parent
 STATUS_EMOJI = {"passed": "✅", "failed": "❌", "broken": "⚠️",
                 "skipped": "⏭️", "unknown": "❓"}
 
@@ -153,7 +155,7 @@ def collect_terms():
     and *-system/*-usecase layers is a glossary term. Noun/verb is a role a word plays in a
     Gherkin sentence, not a property of a class, so it is NOT recorded here."""
     terms = []
-    for java in ROOT.glob("**/src/main/java/**/*.java"):
+    for java in (j for ws in WORKSPACES for j in ws.glob("**/src/main/java/**/*.java")):
         if "/target/" in str(java):
             continue
         parts = java.parts
@@ -194,7 +196,7 @@ def _label(data, name):
 
 def load_allure():
     tests, seen, mod_dirs = [], set(), {}
-    for rd in ROOT.glob("**/allure-results"):
+    for rd in (r for ws in WORKSPACES for r in ws.glob("**/allure-results")):
         module = str(rd.relative_to(ROOT)).replace("/target/allure-results", "") \
                                           .replace("/allure-results", "")
         mod_dirs.setdefault(module, rd)
@@ -301,9 +303,9 @@ def entry_matches(entry, token):
 
 def feature_files():
     found = []
-    for feat in list(ROOT.glob("*/specs/*.feature")) + list(
-        ROOT.glob("**/src/test/resources/**/*.feature")
-    ):
+    for feat in [f for ws in WORKSPACES for f in ws.glob("*/specs/*.feature")] + [
+        f for ws in WORKSPACES for f in ws.glob("**/src/test/resources/**/*.feature")
+    ]:
         if "/target/" not in str(feat):
             found.append(feat)
     return sorted(set(found), key=str)

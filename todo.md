@@ -2,7 +2,25 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
-## OTWARTE — przeprowadzka: trzy workspace'y `shared/` + `portal/` + `formula/` (werdykt właściciela 2026-07-12/4, wariant C)
+## ~~OTWARTE~~ WYKONANE (2026-07-12/5) — przeprowadzka: trzy workspace'y `shared/` + `portal/` + `formula/` (wariant C)
+
+**Wykonane w całości tego samego dnia** („zacznij już robić"): katalogi przeniesione
+(paddock DO GRY — werdykt /5), compose rozcięty (identity+observability w shared,
+produkty przez `include:`, projekt przypięty do `security` = ciągłość wolumenów),
+pom shared odchudzony (artifactId `workspace-shared`), portal dostał własny reaktor,
+CI ×3 (portal/formula odtwarzają układ trzech katalogów w checkoutach), skrypty
+`*-up` per produkt, `infra-smoke.sh` w shared (dowodzi CAŁEGO majątku), harnessy
+e2e memes-ui/paddock przepięte na `../../../shared`, narzędzia (glossary/allure)
+skanują trzy workspace'y. REGRESJA: shared+portal+formula+paddock zielone,
+SMOKE PASS na obu światach naraz (jedna pułapka procesu: formula-up nakłada
+dev-override otwierający port race-sima — przed smoke silnik musi wstać z bazowego
+composa, inaczej A4 słusznie krzyczy). ZOSTAŁO (USER): sekret `REPO_PAT` w
+workspace-portal i workspace-formula (private: formula-simulator, paddock) +
+domknięcie własnych brudnych plików (README/build_c4/c4-architecture/deployment-plan/
+onboarding-guide'y — wciąż opisują stary układ i starą przynależność paddocka).
+Symlink kompatybilności `Documents/git/security -> shared` do skasowania po sesji.
+
+--- Plan (wykonany) poniżej ---
 
 **Werdykt:** katalogi per produkt, pełna czystość dwóch produktów. Właściciel wybrał
 wariant C z trzech przedstawionych: każdy katalog = osobne małe repo workspace

@@ -1,0 +1,96 @@
+# Observability — metrics without touching a single service (owner's ask, 2026-07-07).
+# cAdvisor sees every container, node-exporter the host, Prometheus scrapes both and
+# Grafana comes provisioned (datasource + "Stack — kontenery" dashboard, anonymous admin
+# for dev). Per-service /metrics endpoints join observability/prometheus.yml as the
+# sub-repos grow them. Loki stores logs, Promtail ships every container's stdout, Tempo
+# receives the OTel agent's trace spans — {service="..."} |= "<cid>" in Grafana greps one
+# correlation id across all services at once.
+#
+# Included by the product composes (portal/, formula/) alongside the identity stack;
+# the config paths below are relative to THIS file, so they resolve into
+# shared/observability/ wherever the including compose lives.
+
+name: security
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.1.0
+    command: ["-config.file=/etc/loki/config.yml"]
+    volumes:
+      - ./observability/loki-config.yml:/etc/loki/config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:3.1.0
+    command: ["-config.file=/etc/promtail/config.yml"]
+    volumes:
+      - ./observability/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  # traces, the third signal: the OpenTelemetry Java agent (attached to the JVM services via
+  # JAVA_TOOL_OPTIONS in the identity/product composes) exports OTLP here; Grafana shows the
+  # span waterfall. The agent propagates W3C trace context over HTTP AND Kafka, so a request's
+  # trace spans the whole saga. The agent jar is fetched by the product up-scripts into
+  # observability/otel (gitignored, 21 MB).
+  tempo:
+    image: grafana/tempo:2.5.0
+    command: ["-config.file=/etc/tempo/config.yml"]
+    volumes:
+      - ./observability/tempo-config.yml:/etc/tempo/config.yml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"   # Tempo API (Grafana queries this)
+      - "4318:4318"   # OTLP/HTTP receiver
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      # anonymous admin is a DEV default; a public deployment flips GRAFANA_ANON=false
+      # and sets GRAFANA_ADMIN_PASSWORD
+      GF_AUTH_ANONYMOUS_ENABLED: ${GRAFANA_ANON:-true}
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: ${GRAFANA_ANON:-true}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.1
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+
+volumes:
+  loki_data:
+  tempo_data:

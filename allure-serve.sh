@@ -15,7 +15,7 @@ cleanup() {
 }
 trap cleanup SIGINT SIGTERM
 
-mapfile -t RESULTS_DIRS < <(find "$SCRIPT_DIR" -type d -name "allure-results" | sort)
+mapfile -t RESULTS_DIRS < <(find "$SCRIPT_DIR" "$SCRIPT_DIR/../portal" "$SCRIPT_DIR/../formula" -type d -name "allure-results" 2>/dev/null | sort)
 
 if [ ${#RESULTS_DIRS[@]} -eq 0 ]; then
   echo "Nie znaleziono żadnych katalogów allure-results."

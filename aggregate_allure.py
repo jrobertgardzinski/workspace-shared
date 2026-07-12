@@ -21,9 +21,15 @@ def aggregate_allure():
     all_results = []
     
     results_dirs = []
-    for root, dirs, files in os.walk('.'):
-        if 'allure-results' in dirs:
-            results_dirs.append(os.path.join(root, 'allure-results'))
+    # the three workspaces live side by side: shared (here), portal and formula
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    workspaces = [script_dir,
+                  os.path.join(script_dir, '..', 'portal'),
+                  os.path.join(script_dir, '..', 'formula')]
+    for ws in workspaces:
+        for root, dirs, files in os.walk(ws):
+            if 'allure-results' in dirs:
+                results_dirs.append(os.path.join(root, 'allure-results'))
             
     if not results_dirs:
         print("No allure-results directories found.")
@@ -33,7 +39,7 @@ def aggregate_allure():
     doc_tree = {}
 
     for results_dir in results_dirs:
-        rel_path = os.path.relpath(results_dir, '.')
+        rel_path = os.path.relpath(results_dir, os.path.join(script_dir, '..'))
         module_name = rel_path
         for suffix in ['/target/allure-results', '/allure-results']:
             if module_name.endswith(suffix):

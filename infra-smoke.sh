@@ -1,8 +1,11 @@
 #!/bin/bash
-# End-to-end smoke test of the running stack (./infra-up.sh first): registration mails a
-# verification link through microservice-email into Mailpit, the token from that mail unlocks
-# sign-in, the session works against /me, and the meme service serves an optimised upload.
+# End-to-end smoke test of the running stack — BOTH products on the shared identity kernel
+# (../portal/infra-up.sh and ../formula/formula-up.sh first): registration mails a verification
+# link through microservice-email into Mailpit, the token from that mail unlocks sign-in, the
+# session works against /me, the meme service serves an optimised upload, the deletion saga
+# purges all three portal axes, and the formula world races behind its JWT gate.
 set -euo pipefail
+cd "$(dirname "$0")"
 
 SEC=http://localhost:8080
 MAIL_UI=http://localhost:8025
@@ -16,7 +19,7 @@ PASSWORD="StrongPassword1!"
 step() { echo "== $*"; }
 
 step "resetting brute-force state (manual clicking may have tripped the source block)"
-docker compose exec -T postgres psql -q -U postgres -d security \
+docker compose -p security exec -T postgres psql -q -U postgres -d security \
     -c "DELETE FROM authentication_blocks; DELETE FROM rejected_authentications;" >/dev/null 2>&1 || true
 
 step "waiting for the services"
@@ -243,7 +246,7 @@ curl -sf "$MEMES/memes/$MEME_ID" | head -c 4 | grep -q PNG \
 curl -sf "$MEMES/memes" | grep -q "$MEME_ID" || { echo "FAIL: meme missing from the public gallery"; exit 1; }
 
 step "the image bytes live in object storage (MinIO), not in the meme row"
-docker compose exec -T minio ls "/data/memes/$MEME_ID" >/dev/null 2>&1 \
+docker compose -p security exec -T minio ls "/data/memes/$MEME_ID" >/dev/null 2>&1 \
     || { echo "FAIL: meme $MEME_ID has no object in the MinIO bucket"; exit 1; }
 COMMENT_ID=$(curl -sf -X POST "$COMMENTS/memes/$MEME_ID/comments" -H "Authorization: Bearer $ACCESS" \
     -H 'Content-Type: application/json' -d '{"text":"smoke says hi"}' | python3 -c \
@@ -417,11 +420,11 @@ done
 
 step "resilience: a mail requested while the mail service is DOWN arrives once it is back"
 RESIL_MAIL="smoke-resil-$(date +%s)@example.com"
-docker compose stop email >/dev/null 2>&1
+docker compose -p security stop email >/dev/null 2>&1
 curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
     -d "{\"email\":\"$RESIL_MAIL\",\"password\":\"$PASSWORD\"}" >/dev/null \
-    || { echo "FAIL: registration must survive a mail-service outage"; docker compose start email >/dev/null; exit 1; }
-docker compose start email >/dev/null 2>&1
+    || { echo "FAIL: registration must survive a mail-service outage"; docker compose -p security start email >/dev/null; exit 1; }
+docker compose -p security start email >/dev/null 2>&1
 FOUND=""
 for i in $(seq 1 45); do
     FOUND=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$RESIL_MAIL" | python3 -c \
@@ -465,7 +468,7 @@ BOT_DRIVER=$(curl -sf -X POST "$FORMULA/broadcast/team/drivers" -H "Authorizatio
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 UPLOAD=$(python3 - "$BOT_DRIVER" <<'PY'
 import json, sys
-code = open("formula-simulator/bots/example-bot.py").read()
+code = open("../formula/formula-simulator/bots/example-bot.py").read()
 print(json.dumps({"filename": "smoke-example-bot.py", "code": code}))
 PY
 )

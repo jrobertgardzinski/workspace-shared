@@ -1,0 +1,214 @@
+# The IDENTITY STACK — the shared kernel both products sign in through: the auth service (with
+# its Postgres), the mail chain (email service -> Mailpit, whose web UI at http://localhost:8025
+# shows every mail sent), the stub OIDC provider (social login without Google), the notification
+# channel stubs (sms — also security's MFA SMS factor — and push), and Kafka as the event
+# backbone (mail requests from the outbox, the account-deletion saga).
+#
+# Products include this file from their own compose (portal/docker-compose.yml,
+# formula/docker-compose.yml) — the identity services are defined ONCE, here.
+#
+# The project name is pinned to "security" in every entry compose so all three files land in
+# the SAME compose project: existing dev volumes (security_pgdata & friends) survive the
+# workspace split, and bringing up portal and formula together reuses one identity stack
+# instead of fighting over ports.
+#
+# Ports on the host:
+#   8080  microservice-security  (register/authenticate/verify-email/...)
+#   8082  microservice-email     (POST /mails*, X-Api-Key required)
+#   8091  idp                    (stub OIDC provider: social login without Google)
+#   8025  Mailpit web UI         (the "inbox" for verification/reset links)
+#   ----  sms / push             (internal notification channels; stub-send by default)
+
+name: security
+
+# The OpenTelemetry Java agent, attached to each JVM service through JAVA_TOOL_OPTIONS (no image
+# rebuild) — it auto-instruments HTTP and Kafka and exports trace spans to Tempo. Per service, add
+# `<<: *otel-agent` to its environment plus its own OTEL_SERVICE_NAME, and mount the agent jar.
+x-otel-agent: &otel-agent
+  JAVA_TOOL_OPTIONS: "-javaagent:/otel/opentelemetry-javaagent.jar"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+  OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: none    # metrics already flow through Prometheus scraping
+  OTEL_LOGS_EXPORTER: none       # logs already flow through Promtail -> Loki
+
+services:
+  security:
+    build:
+      context: microservice-security
+      dockerfile: security-infrastructure/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: security
+      MICRONAUT_ENVIRONMENTS: dev
+      DB_HOST: postgres
+      DB_NAME: security
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      # mails leave as events: transactional outbox -> Kafka -> microservice-email
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # links as they appear in the mails: the verify link opens the gallery UI, which POSTs the
+      # token to /verify-email (a bare GET on the API would be 405 — and side effects on GET invite
+      # mail-client prefetchers to consume tokens). No reset UI yet, so that link stays raw.
+      # (Dev convenience: the link points into the PORTAL product's gallery; without the portal
+      # up, verify by POSTing the token straight to /verify-email — infra-smoke does exactly that.)
+      VERIFY_LINK_BASE: http://localhost:8083/?verify=
+      RESET_LINK_BASE: http://localhost:8080/reset-password?token=
+      # the per-IP registration throttle (default 5/15min) would trip on the smoke test, which
+      # registers a handful of accounts from one host in minutes — keep the guard on, but roomy
+      SECURITY_REGISTRATION_MAX_PER_WINDOW: "100"
+      # social login: the provider named "google" points at the stub IdP here; production swaps
+      # these URLs/credentials for the real thing and the dance never changes. authorize-url is
+      # what the BROWSER visits (host-published port), token/userinfo are called server-side.
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_ISSUER: http://localhost:8091
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_AUTHORIZE_URL: http://localhost:8091/authorize
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_TOKEN_URL: http://idp:8091/token
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_CLIENT_ID: demo-client
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
+      SECURITY_OAUTH_PROVIDERS_GOOGLE_REDIRECT_URI: http://localhost:8080/oauth/callback
+      # second provider on the SAME stub, exercising the USERINFO identity source (the shape of
+      # Facebook/GitHub: no id_token trusted — the access token is spent on GET /userinfo)
+      SECURITY_OAUTH_PROVIDERS_GITHUB_IDENTITY_SOURCE: USERINFO
+      SECURITY_OAUTH_PROVIDERS_GITHUB_AUTHORIZE_URL: http://localhost:8091/authorize
+      SECURITY_OAUTH_PROVIDERS_GITHUB_TOKEN_URL: http://idp:8091/token
+      SECURITY_OAUTH_PROVIDERS_GITHUB_USERINFO_URL: http://idp:8091/userinfo
+      SECURITY_OAUTH_PROVIDERS_GITHUB_CLIENT_ID: demo-client
+      SECURITY_OAUTH_PROVIDERS_GITHUB_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
+      SECURITY_OAUTH_PROVIDERS_GITHUB_REDIRECT_URI: http://localhost:8080/oauth/callback
+      SECURITY_OAUTH_PROVIDERS_GITHUB_LABEL: GitHub
+      SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8084/
+      # MFA SMS factor delivers codes through the shared SMS channel service (internal)
+      SECURITY_SMS_URL: http://sms:8088
+    # Readiness, not just "process started": a JVM binds its port at the end of startup, and the
+    # temurin/python images ship no curl — so the probe is a bare TCP connect (bash /dev/tcp or a
+    # python socket). Dependents wait on service_healthy instead of racing a service mid-boot.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  email:
+    build:
+      context: microservice-email
+    ports:
+      - "8082:8080"
+    environment:
+      <<: *otel-agent
+      OTEL_SERVICE_NAME: email
+      MAIL_API_KEY: ${MAIL_API_KEY:-local-dev-key}
+      QUARKUS_MAILER_HOST: mailpit
+      QUARKUS_MAILER_PORT: "1025"
+      QUARKUS_MAILER_MOCK: "false"
+      # the prod profile defaults to STARTTLS=REQUIRED (real submission endpoints); Mailpit
+      # speaks plain SMTP only, so the local stack opts out explicitly
+      MAIL_SMTP_START_TLS: DISABLED
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+    volumes:
+      - ./observability/otel:/otel:ro   # the OpenTelemetry agent (JAVA_TOOL_OPTIONS above)
+    depends_on:
+      mailpit:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+
+  # stub OIDC provider: "Sign in with Google" without Google. The browser visits its authorize
+  # form on the published port; security exchanges codes with it service-to-service.
+  idp:
+    build:
+      context: microservice-idp
+    ports:
+      - "8091:8091"   # 8090 belongs to the race sim
+    environment:
+      PORT: "8091"
+      IDP_ISSUER: http://localhost:8091
+      IDP_CLIENT_ID: demo-client
+      IDP_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8091), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  # notification channel stubs — shared: security's MFA SMS factor and the paddock's fan-out
+  # both deliver through them; stub-send unless SMS_PROVIDER / PUSH_PROVIDER is set
+  sms:
+    build:
+      context: microservice-sms
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8088), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  push:
+    build:
+      context: microservice-push
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8089), 2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  kafka:
+    # single-node KRaft — the event backbone (mail requests, the deletion saga, thread cascades)
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"   # web UI; SMTP (1025) stays internal
+
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: security
+    volumes:
+      - security_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d security"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  security_pgdata:
