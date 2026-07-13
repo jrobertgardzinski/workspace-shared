@@ -249,19 +249,186 @@ the best catalogue of "what this service can do".
 
 ## 6. microservice-security in depth
 
-> 🏷️ **Tags:**
-> **JWT (JSON Web Token)** — a signed identity "ticket" carried in the `Authorization: Bearer ...` header; **EdDSA** — the token-signing algorithm;
-> **JWKS** — the public keys at `/.well-known/jwks.json` others use to verify the signature; **introspection** — asking security's `/me` about a token on every request;
-> **refresh token + reuse detection** — session renewal and theft detection (using a spent token kills the whole session family);
-> **brute-force lockout** — a temporary block of a source after a streak of failed sign-ins; **anti-enumeration** — responses never reveal whether an address exists;
-> **OAuth2 / OIDC** — sign-in through an external provider; **PKCE** — protection of the code exchange; **MFA** — additional sign-in factors;
-> **TOTP** — codes from an Authenticator-style app; **WebAuthn / passkey** — sign-in by a hardware-key/phone signature; **recovery codes** — one-time backup codes;
-> **step-up** — re-authentication before a sensitive operation; **GDPR delete** — full account removal together with content.
+The richest service — the identity core for everything else. Every other service, when
+it needs to know **who is talking to it**, ultimately relies on this one. This section
+walks the topic bottom-up, assuming you have never built sign-in before. Read the
+subsections in order — each builds on the previous one.
 
-The richest service — the identity core for everything else. The capability catalogue =
-`specs/*.feature`: register, authenticate, verify-email, reset-password, change-email,
-change-password, logout, list/revoke sessions, refresh + reuse-detection,
-federated-sign-in, authorize, mfa, mfa-passkey, delete-account.
+The full capability catalogue = `specs/*.feature`: register, authenticate, verify-email,
+reset-password, change-email, change-password, logout, list/revoke sessions, refresh +
+reuse-detection, federated-sign-in, authorize, mfa, mfa-passkey, delete-account.
+
+### 6.1 The problem being solved
+
+A dozen services, one user. Two things must hold:
+
+1. **Authentication** — "prove you are alice". Only security ever sees a password.
+2. **Propagating that proof** — when alice then uploads a meme to a *different* service,
+   that service must be able to trust "this really is alice" **without** seeing her
+   password and ideally without asking security every single time.
+
+The industry-standard answer to (2) is a **signed token**, and that is what security
+issues. Everything below is variations on "how do you get the token" and "how do others
+check it".
+
+### 6.2 The life of an account — the happy path
+
+> 🏷️ **Tags:**
+> **verification link** — the "click to confirm your address" mail; **prefetcher** — mail programs that pre-open links in messages (why the link must not be a plain GET);
+> **anti-enumeration** — responses never reveal whether an address already exists.
+
+Follow one user, in order (you can literally click this through — section 17):
+
+1. **Register** (`register.feature`): alice submits an address + password. Security
+   stores the password only as a **hash** (a one-way scramble; you can check a guess
+   against it but never recover the original) and sends a verification mail. In dev all
+   mail lands in **Mailpit** (http://localhost:8025) — a fake inbox for the whole stack.
+2. **Verify the address**: alice clicks the link in the mail. Subtlety: the link opens
+   the **gallery page** (`:8083/?verify=...`), and the page then POSTs the token to
+   security. Why not a simple GET link straight into the API? Because corporate mail
+   scanners and preview **prefetchers** open links automatically — a GET that verifies
+   on open would get "clicked" by a robot before alice ever sees the mail.
+3. **Sign in** (`authenticate.feature`): address + password. Until the address is
+   verified, sign-in is refused — that is the gate from step 2. On success alice
+   receives **two tokens** (next subsection).
+4. **Use the system**: every request to any service carries
+   `Authorization: Bearer <token>` — like showing a festival wristband at each tent.
+5. **Stay signed in / sign out**: tokens expire quickly on purpose; the refresh token
+   (6.5) renews them. Logout (or "revoke session" from the sessions screen) kills the
+   session server-side.
+
+### 6.3 What exactly is the token (JWT)
+
+> 🏷️ **Tags:**
+> **JWT (JSON Web Token)** — a signed identity "ticket": readable payload + a cryptographic signature; **claim** — one field of the payload (who, roles, expiry...);
+> **EdDSA** — the signature algorithm used here (asymmetric: sign with a private key, verify with a public one);
+> **JWKS** — security's public keys, published at `/.well-known/jwks.json`, that anyone can use to verify the signature.
+
+A JWT is three base64 chunks glued with dots: `header.payload.signature`. The
+**payload is not encrypted** — anyone can decode and read it (paste one into jwt.io and
+see). What makes it trustworthy is the **signature**: security signs the payload with
+its **private key**, which never leaves security. Anyone holding the matching **public
+key** can check that (a) security really issued this token and (b) nobody altered
+a single character since. Forging a token without the private key is computationally
+infeasible.
+
+The claims carried here: **who** (the user id), **roles** (USER/MODERATOR/ADMIN),
+**`mfaCompliant`** (did they complete MFA — see 6.7), and **`exp`** (expiry). Public
+keys are published at `/.well-known/jwks.json` (**JWKS**) — that endpoint is how other
+services verify signatures on their own.
+
+### 6.4 How other services check the token — two ways, both on purpose
+
+> 🏷️ **Tags:**
+> **introspection** — asking security's `/me` about a token on every request; **offline verification** — checking the signature yourself against JWKS;
+> **revocation** — invalidating a token server-side before it expires; **fail closed** — when unsure, refuse.
+
+Think of the token as an ID card. A service that receives one has two options:
+
+- **Introspection** — *phone the issuing office*: call security's `GET /me` with the
+  token. Costs a network hop per request, but security answers with the **current**
+  truth — a token revoked by logout is refused instantly. This is how **memes** runs in
+  compose.
+- **Offline verification** — *check the hologram yourself*: fetch the JWKS once, then
+  verify each token's signature and expiry locally. No network hop, and it keeps
+  working even if security is down — but a stolen-and-revoked token stays "valid" in
+  your eyes until its `exp` passes. This is how **comments, paddock, formula and
+  collections** run, via the shared `offline-jwt` library (section 7).
+
+Neither is "the right one" — it is a genuine trade-off (revocation freshness vs
+latency/resilience), and the stack deliberately keeps one live example of each so the
+trade-off can be narrated with running code. Both fail **closed**: an unverifiable
+token = an anonymous caller, never a trusted one.
+
+### 6.5 Sessions and refresh tokens
+
+> 🏷️ **Tags:**
+> **access vs refresh token** — the short-lived "wristband" vs the longer-lived "renewal coupon";
+> **reuse detection** — spending the same refresh token twice reveals theft; **session family** — all tokens descending from one sign-in.
+
+Why does the access token expire in minutes? Damage control: a leaked token is only
+useful briefly. To avoid re-typing the password every few minutes, sign-in also issues
+a **refresh token** — a longer-lived, single-use coupon exchanged at security for
+a fresh token pair. Each exchange **spends** the coupon and issues a new one.
+
+That single-use property enables **reuse detection**: if a spent refresh token shows up
+again, two parties hold the same coupon — one of them is a thief (someone copied the
+token before it was spent). Security cannot tell which one is legitimate, so it revokes
+the **whole session family** descending from that sign-in. Honest alice has to sign in
+again — mildly annoying; the thief is locked out — the point. The sessions screen in
+security-ui lists a user's active sessions and lets them revoke any one by hand.
+
+### 6.6 Sign-in with Google/GitHub (OAuth2 / OIDC)
+
+> 🏷️ **Tags:**
+> **OAuth2 / OIDC** — "sign in through an account you already have elsewhere"; **IdP (identity provider)** — the external party vouching for the user;
+> **PKCE** — protection of the code-for-token exchange; **stub IdP** — the project's fake "Google" (:8091) for dev and tests;
+> **federated account** — an account whose proof of identity comes from an IdP, not a local password.
+
+The "Google"/"GitHub" buttons in the gallery. The idea: instead of a local password,
+an external **identity provider** vouches — "Google confirms this is alice@gmail.com" —
+and security creates/signs-in the account on that basis. Such **federated** accounts
+are passwordless here.
+
+In dev **you don't need real Google**: both buttons point at the **stub IdP**
+(:8091) — a small Python service speaking just enough of the OIDC protocol to play
+Google's role (it even shows a mock consent form). Production swaps only env vars —
+recipes in `microservice-security/docs/oauth-providers.md`, including a tested
+Keycloak. Two provider shapes are supported, because the ecosystem is split: ID_TOKEN
+(identity arrives as a signed token — the Google shape) and USERINFO (identity is
+fetched from an endpoint — the GitHub/Facebook shape). One more subtlety: when a user
+changes their e-mail address, their federated links **follow the account**
+(`relinkAll`) instead of dangling on the old address.
+
+### 6.7 MFA — more than a password
+
+> 🏷️ **Tags:**
+> **MFA (multi-factor authentication)** — proving identity with more than one independent factor; **TOTP** — 6-digit codes from an Authenticator-style app;
+> **WebAuthn / passkey** — sign-in by a cryptographic signature from your phone/hardware key; **recovery codes** — one-time printed backup codes;
+> **step-up** — re-authenticating right before a sensitive operation; **MFA floor** — consumers strip privileged roles from callers without completed MFA.
+
+A password can be phished or guessed; MFA demands a second, independent proof.
+Security models sign-in as a **factor chain** — link #1 is the password (or an OAuth
+provider), then any of: a code sent by e-mail/SMS, **TOTP** (the 6-digit
+Authenticator-app codes, derived from a shared secret + the clock), **WebAuthn
+passkeys** (your phone or hardware key signs a challenge — phishing-resistant, nothing
+to retype), or **recovery codes** (a batch of one-time codes shown exactly once at
+setup, each consumed atomically — the "I lost my phone" escape hatch).
+
+Two consequences ripple beyond sign-in:
+
+- **Step-up**: some operations are too sensitive to trust an old session. Per-action
+  policies force re-authentication *right now*: account deletion = FULL_CHAIN (redo
+  everything), password change = SECOND_FACTORS. The gallery's account-deletion dialog
+  performs a real step-up — try it.
+- **The MFA floor at consumers**: the token's `mfaCompliant` claim says whether the
+  chain was completed. A moderator/admin **without** completed MFA is treated by
+  memes/comments as a plain USER (`Caller.withMfaFloor`) — privileged powers require
+  the stronger proof, and when in doubt the system fails **closed** (drops privileges
+  rather than granting them).
+
+### 6.8 Defensive hygiene
+
+> 🏷️ **Tags:**
+> **brute-force lockout** — a temporary block of a source after a streak of failed sign-ins; **throttle / rate limit** — capping request frequency per source;
+> **anti-enumeration** — responses never reveal whether an address exists; **GDPR delete** — full account removal together with the user's content.
+
+The unglamorous layer that makes the rest hold up:
+
+- **Lockout**: a streak of failed sign-ins temporarily blocks the source — a password
+  guesser gets a handful of attempts, not millions.
+- **Registration throttle**: per-IP cap on account creation (raised in compose so the
+  smoke test does not trip it).
+- **Anti-enumeration**: no response may betray whether an address is registered —
+  that alone is valuable data to an attacker (which of these 10 000 leaked addresses
+  have an account here?). Flagship example: changing your e-mail to an address that is
+  already taken answers **exactly** like a fresh one (202 + a note delivered by mail).
+  The difference plays out privately, in the inbox, never in the API response.
+- **GDPR delete**: `DeleteAccount` clears sessions → factors → codes → federated links
+  → the user, then triggers the cross-service content saga (section 8) so the user's
+  memes/comments/favourites are handled too.
+
+### 6.9 A rule for reading (and writing) the specs
 
 **The abstraction-level rule (the owner's verdict 2026-07-11, "the argon2 rule"):**
 a feature speaks the USER's language, never the protocol's. `authenticate.feature` knows
@@ -270,58 +437,47 @@ no argon2 — hashing is a detail under the hood; likewise the passkey spec know
 presence") — the protocol's name may live only in the glue (`webauthn.steps.mjs`),
 because the glue IS the mask.
 
-What you need to understand:
-
-- **Tokens.** After sign-in you get a JWT signed with EdDSA (claims: who, roles,
-  `mfaCompliant`). Other services verify it **in two ways — both in the stack on
-  purpose**: *introspection* (memes asks `/me` — slower, but sees revocation instantly)
-  and *offline* (comments/paddock/formula/collections verify the signature themselves
-  via JWKS — faster, but blind to revocation until `exp`). A deliberate display of the
-  trade-off.
-- **Sign-in is gated on address verification** — a fresh account must click the link
-  from the mail. The mail link opens the **gallery** (`:8083/?verify=...`), which POSTs
-  the token to security — deliberately not a GET on the API, because mail clients'
-  prefetchers would consume the tokens.
-- **OAuth/OIDC**: the "Google"/"GitHub" buttons in the gallery. In dev both point at the
-  **stub IdP** (:8091); production swaps only env vars (recipes:
-  `microservice-security/docs/oauth-providers.md`, incl. a tested Keycloak). Two
-  identity sources: ID_TOKEN (the Google shape) and USERINFO (the GitHub/Facebook
-  shape). Federated accounts are passwordless; federated links **follow the account**
-  on address change (`relinkAll`).
-- **MFA — the topic is fully closed**: a factor chain (password OR provider as link #1),
-  e-mail/SMS codes, TOTP, WebAuthn/passkeys, recovery codes as an alternative factor
-  (batch shown once, atomic consumption). **Step-up**: per-action policies (account
-  delete = FULL_CHAIN, password change = SECOND_FACTORS); the gallery's account-deletion
-  dialog performs a real step-up.
-- **The MFA floor at consumers**: the token carries the `mfaCompliant` claim;
-  a moderator/admin without completed MFA is treated in memes/comments as a plain USER
-  (`Caller.withMfaFloor`) — fail-closed.
-- **Hygiene**: per-IP registration throttle (raised in compose so the smoke test does
-  not trip it), lockout after failed sign-ins, a taken address on e-mail change answers
-  exactly like a fresh one (202 + a note by mail), `DeleteAccount` clears sessions →
-  factors → codes → federated links → the user, and triggers the content saga
-  (section 8).
-
 ---
 
 ## 7. offline-jwt — a lesson about duplication
 
 > 🏷️ **Tags:**
-> **shared library vs copied code** — between services duplication usually beats coupling, except for security-critical code;
-> **copy drift** — copies of the same code diverge over time.
+> **shared library vs copied code** — the two ways to reuse logic between services, each with a price;
+> **coupling** — services no longer able to change independently, because they share a moving part;
+> **copy drift** — copies of "the same" code silently diverging over time.
 
-Offline JWT verification lived as **five identical copies** (memes, comments, paddock,
-user-collections, formula) with a "change one, change both" comment. Converging them
-into the `offline-jwt` library (2026-07-10) caught **real drift**: the memes copy had
-lost the MFA floor — a moderator without MFA kept offline the privileges introspection
-would have stripped. Hence the project rule: between services duplication > coupling,
-**but not for security-critical code**. Services keep their own policies (e.g.
-`Caller.withMfaFloor`) — only the verification core is shared.
+This small library is the concrete form of the "check the hologram yourself" option
+from 6.4: it fetches security's public keys (JWKS) and then verifies each bearer
+token's signature and expiry locally. Four services use it, and its whole API is two
+lines:
 
 ```java
 OfflineJwtVerifier verifier = OfflineJwtVerifier.overHttp(securityUrl, objectMapper);
 Optional<VerifiedToken> caller = verifier.verify(bearerToken);  // empty = fail closed
 ```
+
+`verify` returns the confirmed identity (who + roles + `mfaCompliant`) or an **empty**
+Optional. Empty means "treat the caller as anonymous", never "let it through and hope" —
+fail-closed, in code form.
+
+Why the library gets its own section: it teaches a rule. When several services need the
+same logic, you can either **share a library** (one place to fix, but now every change
+ships to everyone — the services are *coupled*) or **copy the code** (each service free
+to evolve, at the cost of maintaining copies). Microservice folklore usually prefers
+copying — coupling is what microservices exist to avoid. And that is how this
+verification started: **five identical copies** (memes, comments, paddock,
+user-collections, formula) with a "change one, change both" comment.
+
+The comment did not work — it never does. Converging the copies into `offline-jwt`
+(2026-07-10) uncovered **real drift**: the memes copy had silently lost the MFA floor,
+so a moderator without MFA kept, offline, the privileges introspection would have
+stripped. Nobody had noticed, because each copy was tested only inside its own repo.
+
+Hence the project rule: between services duplication usually beats coupling, **but not
+for security-critical code** — there a silent divergence is not a style problem, it is
+a hole. Note the line drawn: only the **verification core** is shared; each service
+still keeps its own *policy* about what to do with the verified identity (e.g.
+`Caller.withMfaFloor` lives in the service, not the library).
 
 ---
 
@@ -336,21 +492,39 @@ Optional<VerifiedToken> caller = verifier.verify(bearerToken);  // empty = fail 
 
 Two ways, both used deliberately:
 
-**a) Synchronously (HTTP)** — e.g. memes asks security `/me` on upload. Simple; if the
-callee is down, the caller waits/degrades.
+**a) Synchronously (HTTP)** — a phone call: you ask and hold the line until the answer
+comes back. E.g. memes asks security `/me` on upload. Simple to reason about; the price
+is that both sides must be up at the same moment — if the callee is down, the caller
+waits or degrades.
 
-**b) Asynchronously (Kafka)** — you publish an event to a topic, consumers read at
-their own pace. The stack's topics: `mail-requests`, `content-commands`, `memes-events`,
-`comments-events`, `usercollections-events`.
+**b) Asynchronously (events on Kafka)** — a bulletin board: the sender pins a message
+("account 123 requested deletion") on a named board — a **topic** — and moves on,
+neither knowing nor caring who reads it. Consumers read at their own pace; one that was
+down catches up on the backlog when it returns. **Kafka** is the server that keeps those
+boards durable and ordered. The stack's topics: `mail-requests`, `content-commands`,
+`memes-events`, `comments-events`, `usercollections-events`.
 
-**Transactional outbox**: security writes the event into the `outbox_events` table **in
-the same transaction** as the state change; a poller pushes it to Kafka. The change and
-its event can therefore never diverge. The outbox also carries the **cid** (column,
-V14) and the **W3C `traceparent`** (V16) — which is why one operation's log and trace
-stitch together across asynchronous boundaries (section 14).
+**Transactional outbox** — the fix for a classic trap. A service that changes its
+database AND publishes an event performs two writes into two different systems, and no
+transaction spans both: crash between them and you get a state change nobody was told
+about — or an event about a change that never happened. The fix: security writes the
+event into its own `outbox_events` **table**, in the **same database transaction** as
+the state change — one transaction, so the change and its event either both happen or
+neither does. A background **poller** then drains the table to Kafka. The event may
+reach Kafka with a small delay, or even twice — but never inconsistently with the
+database (hence "at-least-once + dedup" in the tags: consumers must shrug off
+a duplicate). The outbox row also carries the **cid** (column, V14) and the **W3C
+`traceparent`** (V16) — which is why one operation's log and trace stitch together
+across asynchronous boundaries (section 14).
 
-**The account-deletion saga** — the flagship flow, after the orchestrator extraction
-(2026-07-11) driven by **`microservice-offboarding`** (the PORTAL's process manager):
+**The account-deletion saga** — the flagship flow. First, why a "saga" at all: deleting
+an account touches four services' databases (security, memes, comments, collections),
+and there is no such thing as one transaction across four databases. A **saga** is the
+distributed substitute: a sequence of local steps, each confirmed by an event, with
+a coordinator — the **orchestrator** — tracking who has confirmed and deciding the
+outcome, including the unhappy path ("someone failed → unlock, apologise"). Since the
+extraction of 2026-07-11 the orchestrator is **`microservice-offboarding`** (the
+PORTAL's process manager):
 1. security locks the account and announces the FACT `ACCOUNT_DELETION_REQUESTED` on
    `security-events` (via the outbox; the fact carries the user's wizard choices as an
    opaque map),
@@ -401,23 +575,34 @@ the new one until everyone has moved).
 > **pact** — the generated JSON file with the consumer's expectations; **Pact broker** — the central pact server (here REPLACED by the workspace layout);
 > **provider state** — the state the producer prepares before verifying an HTTP pact; **tolerant reader** — a consumer ignoring unknown fields.
 
-The problem: the producer could rename a field the consumer reads, and **both builds
-stayed green** — it only broke in the whole-stack smoke test. The solution
-(**ADR 0003**): Pact in **file mode, without a broker** — because in the workspace every
-consumer and producer stand next to each other anyway:
+The problem, concretely: memes reads the field `userId` out of security's purge
+command. One day security renames it to `accountId`. Security's build stays green (its
+own tests still pass), memes' build stays green (its tests feed it fixtures with the
+old name) — and the live stack breaks. Unit tests cannot catch this, because each side
+tests only itself, against its own *idea* of the message.
 
-- The **consumer** has a pact test that feeds its REAL consuming code with the pact's
-  payload and declares **only the fields it actually reads**. The generated pact is
-  committed into `pacts/` in the consumer's repo (HTTP pacts separately in `pacts-http/`
-  — a V3 file does not mix styles).
-- The **producer** (security) verifies the pacts against its REAL producing code
-  (`@PactFolder` pointing at the sibling checkout `../../<consumer>/pacts`). No sibling
-  = **skip, not fail** (a standalone build doesn't fall over); CI always checks out and
-  verifies.
-- Both sides of the saga are covered (the purge commands AND the confirmations —
-  security is at times producer and consumer), 6 mail shapes, HTTP: JWKS (the consumer
-  is the `offline-jwt` library!) and the `/me` introspection (the memes pact, with
-  a provider state: register→verify→authenticate).
+**CDC** closes the gap with a two-step handshake:
+
+1. The **consumer** (e.g. memes) writes a pact test: it feeds its REAL consuming code
+   an example payload and records **only the fields it actually reads** into a JSON
+   file — the **pact**. The pact is committed into `pacts/` in the consumer's repo
+   (HTTP pacts separately in `pacts-http/` — a Pact V3 file does not mix styles).
+2. The **producer** (security) replays every consumer's pact against its REAL producing
+   code: "produce the message exactly as production would — does it still satisfy what
+   memes recorded?" Renaming `userId` now fails **security's** build, with "memes" in
+   the error message.
+
+The classic setup adds a **Pact broker** — a server ferrying pact files between teams'
+CI pipelines. Here (**ADR 0003**) the workspace layout replaces it: every consumer and
+producer sit next to each other on disk, so the producer simply reads the sibling
+checkout (`@PactFolder` pointing at `../../<consumer>/pacts`). Sibling absent = **skip,
+not fail** (a standalone build doesn't fall over); CI always checks out and verifies.
+
+Coverage: both sides of the saga (the purge commands AND the confirmations — security
+is at times producer and consumer), 6 mail shapes, and two HTTP contracts: JWKS (the
+consumer is the `offline-jwt` library!) and the `/me` introspection (the memes pact,
+with a **provider state** — before verifying, the producer prepares a real signed-in
+user, register→verify→authenticate, so the check runs against reality, not a mock).
 
 The effect: a producer's breaking change goes red **in the producer's build**, with the
 consumer's name in the message — not in the live stack.
@@ -567,9 +752,11 @@ Three signals, everything in **Grafana (http://localhost:3000)**:
 **The thread through everything — the cid**: every request gets an `X-Correlation-Id`,
 the cid lands in every log line, and rides over HTTP and in Kafka headers. In Grafana:
 `{service=~".+"} |= "<cid>"` shows one request's whole journey across all services;
-clicking `trace=<id>` in a log opens the waterfall in Tempo. **A real-life gotcha:** MDC
-does not cross thread/async boundaries — which is why the cid is carried in an outbox
-column and a request attribute, not "in the thread".
+clicking `trace=<id>` in a log opens the waterfall in Tempo. **A real-life gotcha:**
+**MDC** (Mapped Diagnostic Context — the logging library's per-thread pocket: stash
+a value like the cid there once and every log line printed by that thread carries it
+automatically) does not cross thread/async boundaries — which is why the cid is carried
+in an outbox column and a request attribute, not "in the thread".
 
 ---
 
