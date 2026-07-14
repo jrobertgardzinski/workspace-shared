@@ -62,6 +62,98 @@ Do rozstrzygnięcia przy „k": czy wspólne pluginy rodziny (allure/surefire) w
 do <plugins> RODZICA (dzieci czyste do zera), czy zostawić aktywację per dziecko
 z wersją w pluginManagement (bardziej jawnie, więcej linii).
 
+## WERDYKT — dokumentacja żywa zamiast generatora UL (dyktando właściciela 2026-07-14)
+
+Ubiquitous-Language generator (`build_glossary.py`, 640 linii + ręczne legendy `Nouns:/Verbs:`
+w każdym .feature) — PORZUCONY kierunkowo. Zamiast interaktywnego site'u: mały zestaw płaskich,
+wersjonowalnych dokumentów:
+1. **Gherkin** — `build_features.py` → `docs/features.md` (NOWE 2026-07-14): katalog wszystkich
+   .feature trzech workspace'ów (191 scenariuszy), tytuły+opisy+scenariusze, legendy glosariusza
+   wycinane przy renderze; spec surface diffowalny w PR.
+2. **Allure→markdown** — JUŻ BYŁO: `aggregate_allure.py` renderuje `allure-summary.md`
+   (tabela wykonania + drzewo zachowań epic→feature→story + sekcja problemów).
+3. **Javadoc** — `build_javadocs.sh` (NOWE 2026-07-14): `javadoc:javadoc` przez reaktory
+   shared/portal/formula + wersjonowany indeks `docs/javadocs.md` (HTML w target/, gitignored —
+   indeks jest mapą, nie kopią). Definicje glosariusza i tak były javadokami — znika pośrednik.
+4. **C4** — `build_c4.py` zostaje (390 linii, działa); odświeżenie „potem może" (właściciel).
+
+OGON DO DOMKNIĘCIA (czeka na potwierdzenie właściciela przed kasacją):
+- `git rm build_glossary.py` + `docs/glossary/` (glossary.md to wersjonowana treść — kasować
+  czy zostawić jako artefakt historyczny? decyzja właściciela);
+- sprzątnięcie legend `Nouns:/Verbs:` z nagłówków .feature w sub-repach (security 16 plików,
+  memes, email, config, collections, offboarding, paddock, formula) — kosmetyka per repo,
+  commity u siebie; do czasu sprzątnięcia legendy są martwe ale nieszkodliwe (render je tnie);
+- README/onboarding-guide: sekcje wskazujące glosariusz przepiąć na nową czwórkę dokumentów.
+
+## OTWARTE — raportowanie Allure wg wzorca email/password (audyt CAŁEGO majątku 2026-07-13)
+
+**Wzorzec = `email/pom.xml` i `password/pom.xml`** (bliźniacze; wskazane przez
+właściciela jako przykład dla innych). Trzy składniki kanonu:
+1. surefire w pluginManagement rodzica przekierowuje `allure.results.directory`
+   (+ `jqwik.database`) pod `${project.build.directory}` → wyniki w
+   `target/allure-results`, sprzątane przez `mvn clean`, widziane przez
+   `aggregate_allure.py`;
+2. `allure-maven` 2.17.0 w pluginManagement („allure reports everywhere") →
+   `./mvnw allure:report` działa w każdym module;
+3. silnik Allure przychodzi TRANZYTYWNIE ze starterów (`unit-test-starter` =
+   allure-junit5 samorejestrujący się przez ServiceLoader; `bdd-test-starter` =
+   allure-cucumber7-jvm) + wyjątki `io.qameta.allure:*` w dependency-analyzer.
+Efekt u wzorca: KAŻDY moduł-liść (email-domain, email-security-config/-usecase,
+password-domain, password-security-*, argon2, argon2-config) produkuje wyniki.
+
+Audyt reszty jądra (shared) — od najlepszych:
+- **microservice-security**: pełny kanon (redirect + allure-maven) ✓ — jedyny grzech
+  to wersje per liść, już wytknięty w audycie pomów wyżej (pkt 2).
+- **voting, offline-jwt**: wyniki są ✓, ale allure-junit5 zadeklarowany WPROST
+  zamiast przez starter i brak `allure-maven` (raport per repo nie działa;
+  agregat działa).
+- **adjustable-clock, infrastructure-micronaut-clock**: redirect ✓, wyniki są ✓,
+  brak `allure-maven`.
+- **config — ODROCZONY (werdykt właściciela 2026-07-13: „nie pilnie")**: ma
+  `bdd-test-starter` (allure-cucumber7-jvm NA classpath!) i 3 suity Cucumbera,
+  ale runnery rejestrują tylko plugin `pretty` — zero wyników Allure, projekt
+  niewidzialny w agregacie. Fix gdy przyjdzie pora: dopisać
+  `io.qameta.allure.cucumber7jvm.AllureCucumber7Jvm` do PLUGIN_PROPERTY_NAME
+  w 3 runnerach + redirect surefire jak u wzorca. BONUS-brud ~~tego repo~~
+  NAPRAWIONY (2026-07-13, sprzątanie śledzonych śmieci w CZTERECH repach,
+  commity lokalne): config `b9c40cf` (22 pliki target/ odśledzone — koniec
+  fantomowych zmian inputFiles.lst po buildzie), password (2 pliki
+  maven-status), email (zastały `.jqwik-database` w email-domain), idp
+  (jedyne repo pythonowe BEZ .gitignore — dostało reguły sióstr sms/push
+  + odśledzone .pyc). Zweryfikowane: `clean test` w config → status czysty.
+- **constraint — poza skalą**: nie ma ŻADNYCH testów (samo `src/main`, zero
+  starterów) — Allure to problem wtórny; najpierw testy. Uwaga siostrzana:
+  `password/hash-algorithms` ma pusty `src/` (kod żyje w pod-modułach argon2*) —
+  szkielet do skasowania albo zostawienia świadomie.
+
+Portal (`../portal`):
+- **memes**: redirect w pluginManagement RODZICA (dziedziczony przez 8 modułów —
+  elegancko), wyniki w 5 modułach pod target/ ✓; deps wprost (nie starter), brak
+  `allure-maven`.
+- **comments**: redirect ✓, wyniki ✓; deps wprost, brak `allure-maven`.
+- **user-collections — ~~GRZESZNIK #2~~ NAPRAWIONY (2026-07-13, commit
+  `316e357`)**: dołożone allure-junit5 + allure-cucumber7-jvm (przez allure-bom
+  2.29.0, konwencja comments), redirect surefire pod target/, plugin Allure
+  w OBU suitach (Application + Http). `clean test` zielony, 82 pliki wyników.
+- **offboarding — ~~GRZESZNIK #3~~ NAPRAWIONY (2026-07-13, commit `ec2034b`)**:
+  jak wyżej (jedna suita). `clean test` zielony, 79 plików wyników. Commity
+  lokalnie, NIEWYPCHNIĘTE.
+
+Formula (`../formula`):
+- **formula-simulator**: redirect ✓, allure-junit5+cucumber ✓, wyniki ✓.
+- **paddock**: redirect ✓, allure-cucumber7-jvm ✓, wyniki ✓.
+Gra jest CZYSTA — oba repa trzymają kanon (bez `allure-maven`, jak cały portal).
+
+Python (poza zasięgiem kanonu — świadomie?): stuby idp/sms/push/image mają po
+1 pliku testów, ale **race-sim ma 65 plików testów** i w agregacie nie istnieje
+(aggregate_allure widzi tylko allure-results). Jeśli kiedyś ma być widoczny:
+allure-pytest. Decyzja właściciela, nie dług.
+
+Zostało: config (odroczony — patrz wyżej) → voting/offline-jwt/zegary/portal
+(dociągnięcie `allure-maven` przy okazji „k" z audytu pomów) → constraint
+(osobna rozmowa: co w ogóle testować) → race-sim/allure-pytest (osobna decyzja)
+→ push commitów `316e357` (user-collections) i `ec2034b` (offboarding).
+
 ## ~~OTWARTE~~ WYKONANE (2026-07-12/5) — przeprowadzka: trzy workspace'y `shared/` + `portal/` + `formula/` (wariant C)
 
 **Wykonane w całości tego samego dnia** („zacznij już robić"): katalogi przeniesione
