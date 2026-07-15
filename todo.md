@@ -2,6 +2,27 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## ~~TODO NR 1~~ WYKONANE (2026-07-15 wieczór) — REPO_PAT, zieleń CI i push zaległości
+
+Domknięte za jednym zamachem, gdy właściciel znalazł chwilę:
+- ODKRYCIE: właściciel MIAŁ już idealny token — classic PAT (`ghp_…`) w keyringu gh
+  (to nim gh jest zalogowany; `gh auth token` go zwraca), pełny scope z `repo`,
+  **BEZ daty ważności** (pułapka wygasania z tego wpisu — nieaktualna). Zero generowania.
+- Sekret `REPO_PAT` nadpisany/założony w trzech workspace'ach jedną pętlą
+  `gh secret set -b "$(gh auth token)"` (właściciel przez `!`; -b omija pułapkę
+  pustego stdina, przez którą powstał pusty sekret portalu).
+- Oba czerwone biegi przestrzelone i ZIELONE (portal 29192238144 — reactor+e2e,
+  formula 29192238395).
+- Dekret „wszystko lokalnie" zdjęty słowem „push": salwa 16 repo naraz (shared ×3,
+  10 sub-repo sharedu, 4 portalu, formula-simulator ×25 commitów — czekały tam też
+  zaległości sprzed sesji), wszędzie behind 0, zero konfliktów. CI sub-repo wystrzeliły
+  po pushach — patrz świeże biegi.
+- ZOSTAŁO WŁAŚCICIELOWI (2 komendy, wciąż nieodpalone):
+  `git -C ~/Documents/git/shared remote set-url origin https://github.com/jrobertgardzinski/workspace-shared.git`
+  (URL kłamie, push działa przez redirect) + `rm ~/Documents/git/security` (symlink).
+
+--- Oryginalny wpis poniżej (historycznie) ---
+
 ## TODO NR 1 NASTĘPNEJ SESJI — domknąć REPO_PAT i zieleń CI nowych workspace'ów (2026-07-12)
 
 Stan zastany (dokładny, nie zgaduj od nowa):
