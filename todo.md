@@ -29,6 +29,37 @@ Kroki:
    (push działa przez redirect, ale URL kłamie) + skasować symlink
    `Documents/git/security -> shared` (trzymał przy życiu sesję przeprowadzkową).
 
+AKTUALIZACJA 2026-07-15 (werdykt właściciela: „na razie wszystko lokalnie w git"):
+temat GitHuba ODROCZONY w całości — commity z 2026-07-15 (17 sztuk w 12 repach:
+shared ×2, security ×2, email, memes ×3, comments ×2, password, voting, offline-jwt,
+adjustable-clock, infrastructure-micronaut-clock, user-collections, offboarding)
+czekają lokalnie, NIE pushować bez nowego dekretu. Rekomendacja na powrót tematu:
+classic PAT bez daty ważności (fine-grained wygasa — stąd pułapka z todo) wgrany
+jedną pętlą `gh secret set -b` do trzech workspace'ów; alternatywa dalej idąca:
+upublicznić sub-repa → sekret znika w ogóle (klei się z go-live „portfolio").
+Kroki 4 (remote set-url + symlink) próbowane w sesji — zablokowane przez klasyfikator
+uprawnień; zostają dla właściciela (dwie komendy, 10 sekund).
+
+## ~~OTWARTE~~ WYKONANE (2026-07-15) — sprzątanie pomów wg wzorca „czysty pom" (dyktando właściciela 2026-07-12/6)
+
+**Trzej grzesznicy naprawieni (2026-07-15, commity lokalne, NIEWYPCHNIĘTE):**
+1. memes `c3693ad` — rodzic wziął własne moduły (`${project.version}`) + cudze przypięcia
+   (voting, offline-jwt, s3, pact junit5 ×2) do depMgmt; 11 wersji zdjętych z dzieci;
+   `clean install` zielony (76 testów). frontend-maven-plugin w memes-ui zostaje
+   (plugin specyficzny modułu — przymknięte oko).
+2. microservice-security `a5fec9b` — grzeszników było 2, nie 5 (audyt przeszacował):
+   tylko domain i config powtarzały wersję allure-maven; liście oczyszczone DO ZERA
+   (wzorzec email: plugin żyje wyłącznie w pluginManagement rodzica, liść milczy).
+3. password `69f0d55` — wersje argon2-jvm* z liścia do depMgmt hash-algorithms;
+   verify zielony.
+
+Pytanie „przy k" ROZSTRZYGNIĘTE praktyką wzorca: wspólny plugin rodziny = TYLKO
+pluginManagement rodzica, dzieci nie wspominają go wcale (tak robi email — liście
+nie mają żadnego śladu allure-maven, a `allure:report` i tak działa, bo Maven
+rozwiązuje prefiks z pluginManagement bieżącego projektu).
+
+--- Oryginalny audyt poniżej (historycznie) ---
+
 ## OTWARTE — sprzątanie pomów wg wzorca „czysty pom" (dyktando właściciela 2026-07-12/6)
 
 **Wzorzec = `email/email-security/pom.xml`** (wklejony przez właściciela jako ideał):
@@ -77,13 +108,17 @@ wersjonowalnych dokumentów:
    indeks jest mapą, nie kopią). Definicje glosariusza i tak były javadokami — znika pośrednik.
 4. **C4** — `build_c4.py` zostaje (390 linii, działa); odświeżenie „potem może" (właściciel).
 
-OGON DO DOMKNIĘCIA (czeka na potwierdzenie właściciela przed kasacją):
-- `git rm build_glossary.py` + `docs/glossary/` (glossary.md to wersjonowana treść — kasować
-  czy zostawić jako artefakt historyczny? decyzja właściciela);
-- sprzątnięcie legend `Nouns:/Verbs:` z nagłówków .feature w sub-repach (security 16 plików,
-  memes, email, config, collections, offboarding, paddock, formula) — kosmetyka per repo,
-  commity u siebie; do czasu sprzątnięcia legendy są martwe ale nieszkodliwe (render je tnie);
-- README/onboarding-guide: sekcje wskazujące glosariusz przepiąć na nową czwórkę dokumentów.
+~~OGON DO DOMKNIĘCIA~~ DOMKNIĘTY (2026-07-15, dekret „rób co w planach, bez przerw"):
+- kasacja `435fd2a` (shared): build_glossary.py + glossary-serve.sh + docs/glossary/
+  (glossary.md skasowany RAZEM z resztą — historia gita go trzyma, gdyby żal);
+  create-documentation.sh prowadzi teraz nową trójkę (allure/features/javadocs);
+- legendy `Nouns:/Verbs:` zdjęte — audyt mówił o 8 repach, legendy REALNIE były w 4:
+  security (17 plików ze specs/ + roles.feature), email (send-mail), memes (4), comments (1);
+  config/collections/offboarding/paddock/formula NIGDY ich nie miały. Commity per repo
+  (security `a70e332`, email `8f3d388`, memes `a03fa80`, comments `ffc95d8`).
+  Dowód nieszkodliwości: regenerowany features.md różni się WYŁĄCZNIE datą (191 scenariuszy);
+- CLAUDE.md / onboarding-guide / go-live przepięte z glosariusza na żywe dokumenty
+  (onboarding-guide-legacy zostaje nietknięty — archiwum).
 
 ## OTWARTE — raportowanie Allure wg wzorca email/password (audyt CAŁEGO majątku 2026-07-13)
 
@@ -149,10 +184,16 @@ Python (poza zasięgiem kanonu — świadomie?): stuby idp/sms/push/image mają 
 (aggregate_allure widzi tylko allure-results). Jeśli kiedyś ma być widoczny:
 allure-pytest. Decyzja właściciela, nie dług.
 
-Zostało: config (odroczony — patrz wyżej) → voting/offline-jwt/zegary/portal
-(dociągnięcie `allure-maven` przy okazji „k" z audytu pomów) → constraint
-(osobna rozmowa: co w ogóle testować) → race-sim/allure-pytest (osobna decyzja)
-→ push commitów `316e357` (user-collections) i `ec2034b` (offboarding).
+~~voting/offline-jwt/zegary/portal (dociągnięcie `allure-maven`)~~ — ZROBIONE (2026-07-15,
+commity lokalne): allure-maven 2.17.0 w 8 repach — voting `a294e23`, offline-jwt `4bfc1df`,
+adjustable-clock `c320e21`, infrastructure-micronaut-clock `ff3c0c0`, comments `1798d09`,
+user-collections `941059f`, offboarding `cb1b335` (liście inline — wierzchołki rodzin),
+memes `3a68cee` (pluginManagement rodzica). Dowód: `allure:report` działa w voting.
+
+Zostało: config (odroczony — werdykt „nie pilnie") → constraint (osobna rozmowa: co w ogóle
+testować) → race-sim/allure-pytest (osobna decyzja) → push commitów `316e357`
+(user-collections) i `ec2034b` (offboarding) + wszystkich z 2026-07-15 (dekret: na razie
+wszystko lokalnie).
 
 ## ~~OTWARTE~~ WYKONANE (2026-07-12/5) — przeprowadzka: trzy workspace'y `shared/` + `portal/` + `formula/` (wariant C)
 

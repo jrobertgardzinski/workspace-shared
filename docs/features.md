@@ -1,6 +1,6 @@
 # The estate's behavior, in its own words
 
-Every `.feature` across the three workspaces — collected 2026-07-14 by
+Every `.feature` across the three workspaces — collected 2026-07-15 by
 `build_features.py`. Titles and scenario names only: the steps live with
 their repos, this page is the spec surface you can diff in one glance.
 
