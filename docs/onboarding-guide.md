@@ -44,7 +44,7 @@ the services' code is gitignored in it. The workspace versions only:
 - the aggregator `pom.xml` (builds everything with one command),
 - `docker-compose.yml` + the `infra-*.sh` scripts (run the whole stack locally),
 - documentation (`docs/`, including this file), the backlog (`todo.md`), tools
-  (`aggregate_allure.py`, `build_glossary.py`).
+  (`aggregate_allure.py`, `build_features.py`, `build_javadocs.sh`).
 
 **The most important practical consequence:** a commit in the workspace **does not
 touch** the services. To change a service's code you enter its directory
@@ -704,7 +704,7 @@ inside the compose network. `race-sim` **deliberately has no host port** (sectio
 > **JUnit 5** — the base test framework (`@Test`); **test pyramid** — many fast unit tests, fewer integration, fewest E2E;
 > **Testcontainers** — a real database/MinIO in Docker for the duration of a test; **RestAssured** — "over the wire" HTTP tests;
 > **cucumber-js + Playwright** — Gherkin scenarios executed in a REAL browser (Chromium), with a virtual authenticator for passkeys;
-> **Allure** — test reports; **UL glossary** — the generated ubiquitous-language dictionary built from test annotations.
+> **Allure** — test reports; **living documentation** — flat markdown documents generated from tests and sources (`docs/features.md`, `docs/javadocs.md`, `allure-summary.md`).
 
 The floors (bottom up):
 1. **Unit** (JUnit 5) — domain/config/system, seconds.
@@ -719,12 +719,13 @@ The floors (bottom up):
 
 Reports and documentation from tests:
 - `aggregate_allure.py` + `allure-serve.sh` — the aggregate Allure report over all
-  projects; `create-documentation.sh` generates security's `Documentation.md` from the
-  reports.
-- `build_glossary.py` + `glossary-serve.sh` — the **interactive glossary** of domain
-  terms built from test sources (Allure: domain/config/system; Cucumber:
-  system/app/infra/UI).
-- `allure-summary.md` — the current coverage summary.
+  projects; `allure-summary.md` — the current coverage summary in markdown.
+- `build_features.py` → `docs/features.md` — the catalogue of every Gherkin `.feature`
+  across the three workspaces (titles, descriptions, scenarios) — the diffable spec
+  surface.
+- `build_javadocs.sh` → `docs/javadocs.md` — runs `javadoc:javadoc` through the three
+  reactors and indexes the generated HTML (in `target/`, gitignored).
+- `create-documentation.sh` — regenerates all of the above in one go.
 
 ---
 
@@ -861,7 +862,7 @@ Then, in this order:
 | What can security do? | `microservice-security/specs/`, `Readme.md`, `docs/mfa-design.md`, `docs/oauth-providers.md` |
 | How to plug in real Google? | `microservice-security/docs/oauth-providers.md` |
 | Deployment plans (VPS, k3s)? | `docs/deployment-plan.md` |
-| The domain-term dictionary | `./glossary-serve.sh` (generated from tests) |
+| What does the system do (spec surface)? | [`docs/features.md`](features.md) (all Gherkin scenarios), [`docs/javadocs.md`](javadocs.md), `allure-summary.md` |
 | Maven commands | `maven-cheatsheet.md` |
 
 ## 19. Mini-glossary (the interview minimum)
@@ -1027,7 +1028,7 @@ them **eventual**, not transactional.
 > 🏷️ **Tags:**
 > **tests per layer** — unit (image/config/application), MockMvc, Cucumber HTTP black box, Playwright e2e;
 > **consumer pacts** — memes declares what it reads from the saga command (`pacts/`) and from `GET /me` (`pacts-http/`);
-> **Testcontainers** — the S3 round-trip on live MinIO; **Allure + the UL glossary** — documentation generated from tests.
+> **Testcontainers** — the S3 round-trip on live MinIO; **Allure + `docs/features.md`** — documentation generated from tests.
 
 - The Cucumber features (`upload`, `vote`, `tag-meme`, `moderate-meme`,
   `admin-purge-policy`) are the **living contract** — an HTTP black box, green in every

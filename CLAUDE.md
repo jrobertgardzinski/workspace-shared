@@ -25,7 +25,7 @@ and the Python channel/identity stubs (`microservice-idp`, `microservice-sms`,
 remote** and is gitignored here. This repo versions only the aggregating
 `pom.xml` (a pure aggregator, **not** a parent pom), the identity/observability
 compose files, the cross-estate tooling (`infra-smoke.sh`, `aggregate_allure.py`,
-`build_glossary.py`, `build_c4.py`, `allure-serve.sh`) and shared docs
+`build_features.py`, `build_javadocs.sh`, `build_c4.py`, `allure-serve.sh`) and shared docs
 (`docs/`, `todo.md` — the cross-project backlog lives here).
 
 **TWO PRODUCTS, not one (the owner's verdict, 2026-07-11; amended 2026-07-12):**

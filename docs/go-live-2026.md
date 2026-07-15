@@ -117,8 +117,8 @@ The x86 variant above exists for that eventuality.
    TLS+domain, but availability = the home computer's uptime. Fine as a transition.
 4. **Static evidence as the base layer regardless of hosting**: the public repos
    already exist; add a 2–3 minute video walking one flow (registration → mail →
-   upload → account-deletion saga as ONE trace in Tempo) + the glossary/Allure on
-   GitHub Pages. Most recruiters never click a live demo anyway, and a video outlives
+   upload → account-deletion saga as ONE trace in Tempo) + the generated docs
+   (features catalogue, Allure summary) on GitHub Pages. Most recruiters never click a live demo anyway, and a video outlives
    the 3 months of hosting.
 
 ## The plan for the remote-abroad target (owner's verdict 2026-07-12)
@@ -131,8 +131,8 @@ recruiter might click GitHub, a live demo almost never. What converts, in order 
 0. **Phase 0 — owner onboarding (unchanged, the foundation):** the path =
    [onboarding-guide.md](onboarding-guide.md) (section by section + Annex A with
    interview questions), plus practice: `infra-up.sh` → `infra-smoke.sh`, clicking
-   through the gallery, Grafana (dashboards, the saga trace in Tempo), the UL glossary
-   and Allure. Exit test: you can narrate the flow registration → mail → upload →
+   through the gallery, Grafana (dashboards, the saga trace in Tempo), the features
+   catalogue (`docs/features.md`) and Allure. Exit test: you can narrate the flow registration → mail → upload →
    account deletion without notes. A system-design interview is de facto narrating
    your own stack.
 1. **The English-language public layer** — code and Javadoc were already English; the
