@@ -388,7 +388,20 @@ i workspace już checkoutują to repo).
 
 --- Oryginalna diagnoza i drogi A/B poniżej (historycznie) ---
 
-## OTWARTE — saga usuwania konta vs reużywalność security (właściciel 2026-07-11)
+## ~~OTWARTE~~ SKONSUMOWANE PRZEZ WYPROWADZKĘ SAGI (stwierdzone 2026-07-19) — saga usuwania konta vs reużywalność security (właściciel 2026-07-11)
+
+WERYFIKACJA 2026-07-19: wszystkie trzy złamania reużywalności z diagnozy niżej ZNIKŁY
+wraz z opcją D (saga → microservice-offboarding, wpis wyżej): (1) uczestnicy sagi są
+KONFIGURACJĄ offboardingu (`BeginOffboarding(store, participants)`, pusta lista =
+domknięcie od razu — dokładnie mechanizm z drogi A, tyle że we właściwym serwisie);
+(2) `PurgeChoices` w security to generyczna mapa {oś→reguła}, zero portalowych nazw
+w domenie tożsamości; (3) wdrożenie „security + sama gra" działa: flaga
+`account-deletion.await-portal-purge=false` kasuje konto od razu, bez czekania na
+nikogo. Javadoc orchestratora też wyrównany (mówi o JEDNYM wyniku portalu, nie
+o trzech potwierdzeniach). Nic do zrobienia — wpis zostaje jako kronika diagnozy.
+
+--- Oryginalny wpis poniżej (historycznie) ---
+
 
 Pytanie właściciela: „czy to security kieruje sagą?! zależało mi na reużywalności".
 DIAGNOZA (fakty z kodu i paktów): TAK — security ORKIESTRUJE (AccountDeletionOrchestrator:
