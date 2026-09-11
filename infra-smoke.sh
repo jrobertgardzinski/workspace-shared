@@ -309,7 +309,7 @@ SAVED=$(curl -sf "$COLLECTIONS/collections/favourites/items" -H "Authorization: 
 ELEV=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/step-up" -H "Authorization: Bearer $LACCESS" \
     -H 'Content-Type: application/json' -d "{\"action\":\"delete-account\",\"password\":\"$PASSWORD\"}")
 [ "$ELEV" = 200 ] || { echo "FAIL: step-up before deletion expected 200, got $ELEV"; exit 1; }
-STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/delete" -H "Authorization: Bearer $LACCESS")
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$SEC/account/$LEAVER" -H "Authorization: Bearer $LACCESS")
 [ "$STATUS" = 202 ] || { echo "FAIL: deletion request expected 202, got $STATUS"; exit 1; }
 STATUS=""
 for i in 1 2 3; do   # the lock is synchronous, but under load give the request a moment to be seen
@@ -353,7 +353,7 @@ for i in $(seq 1 15); do
 done
 [ "$VERIFY_MAILS" -ge 2 ] || { echo "FAIL: email not freed after full saga (verification mails: $VERIFY_MAILS)"; exit 1; }
 
-step "deletion wizard: keep-popular memes survive anonymised, comments chosen to go, go"
+step "an ADMIN closes an account keeping what the community voted up; comments go"
 KEEPER="smoke-keeper-$(date +%s)@example.com"
 curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
     -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}" >/dev/null
@@ -386,10 +386,34 @@ curl -sf -X POST "$MEMES/memes/$KEEPER_MEME/votes" -H "Authorization: Bearer $AC
     -H 'Content-Type: application/json' -d '{"direction":"UP"}' >/dev/null   # the community likes it
 curl -sf -X POST "$COMMENTS/memes/$MEME_ID/comments" -H "Authorization: Bearer $KACCESS" \
     -H 'Content-Type: application/json' -d '{"text":"chosen to vanish"}' >/dev/null
-curl -sf -X POST "$SEC/account/step-up" -H "Authorization: Bearer $KACCESS" -H 'Content-Type: application/json' \
-    -d "{\"action\":\"delete-account\",\"password\":\"$PASSWORD\"}" >/dev/null
-curl -sf -X POST "$SEC/account/delete" -H "Authorization: Bearer $KACCESS" -H 'Content-Type: application/json' \
-    -d '{"purge":{"memes":"KEEP_POPULAR_ANONYMIZED:1","comments":"DELETE"}}' >/dev/null
+# The conditions are an ADMIN's to state — the leaver's own route takes no body and destroys
+# everything, so this scenario is driven from the admin door. admin@example.com is the dev stack's
+# bootstrap admin (SECURITY_BOOTSTRAP_ADMINS), registered and verified like anybody else.
+ADMIN_EMAIL="admin@example.com"
+curl -s -X POST "$SEC/register" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}" >/dev/null
+ATOKEN=""
+for i in $(seq 1 30); do
+    MSG=$(curl -sf "$MAIL_UI/api/v1/search?query=to:$ADMIN_EMAIL" | python3 -c \
+        'import json,sys; m=json.load(sys.stdin)["messages"]; print(m[0]["ID"] if m else "")')
+    [ -n "$MSG" ] && { ATOKEN=$(curl -sf "$MAIL_UI/api/v1/message/$MSG" | python3 -c \
+        'import json,sys,re; t=re.search(r"(?:token|verify)=([A-Za-z0-9_\-]+)", json.load(sys.stdin)["Text"]); print(t.group(1) if t else "")'); break; }
+    sleep 1
+done
+[ -n "$ATOKEN" ] && curl -s -X POST "$SEC/verify-email" -H 'Content-Type: application/json' \
+    -d "{\"token\":\"$ATOKEN\"}" >/dev/null
+AACCESS=$(curl -sf -X POST "$SEC/authenticate" -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$PASSWORD\"}" | python3 -c \
+    'import json,sys; print(json.load(sys.stdin)["accessToken"])')
+[ -n "$AACCESS" ] || { echo "FAIL: could not sign the bootstrap admin in"; exit 1; }
+ELEV=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$SEC/account/step-up" \
+    -H "Authorization: Bearer $AACCESS" -H 'Content-Type: application/json' \
+    -d "{\"action\":\"admin-delete-account\",\"password\":\"$PASSWORD\"}")
+[ "$ELEV" = 200 ] || { echo "FAIL: admin step-up before closing an account expected 200, got $ELEV"; exit 1; }
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$SEC/account/$KEEPER" \
+    -H "Authorization: Bearer $AACCESS" -H 'Content-Type: application/json' \
+    -d '{"purge":{"memes":"KEEP_POPULAR_ANONYMIZED:1","comments":"DELETE"}}')
+[ "$STATUS" = 202 ] || { echo "FAIL: admin account closure expected 202, got $STATUS"; exit 1; }
 WIZ_OK=""
 for i in $(seq 1 30); do
     KEPT=$(curl -s -o /dev/null -w '%{http_code}' "$MEMES/memes/$KEEPER_MEME")
@@ -398,7 +422,7 @@ for i in $(seq 1 30); do
     if [ "$KEPT" = 200 ] && [ "$GONE" = False ]; then WIZ_OK=yes; break; fi
     sleep 2
 done
-[ -n "$WIZ_OK" ] || { echo "FAIL: wizard policy not honoured (kept:$KEPT commentGone:$GONE)"; exit 1; }
+[ -n "$WIZ_OK" ] || { echo "FAIL: the admin's purge rule was not honoured (kept:$KEPT commentGone:$GONE)"; exit 1; }
 # same freed-email proof as above: goodbye mail first, then a re-register must start a
 # brand-new verification (register alone is 201 either way — anti-enumeration)
 GOODBYE2=""
@@ -406,7 +430,7 @@ for i in $(seq 1 30); do
     curl -sf "$MAIL_UI/api/v1/search?query=to:$KEEPER" | grep -q "account is deleted" && { GOODBYE2=1; break; }
     sleep 2
 done
-[ -n "$GOODBYE2" ] || { echo "FAIL: no goodbye mail after wizard saga"; exit 1; }
+[ -n "$GOODBYE2" ] || { echo "FAIL: no goodbye mail after the admin-closed saga"; exit 1; }
 curl -sf -X POST "$SEC/register" -H 'Content-Type: application/json' \
     -d "{\"email\":\"$KEEPER\",\"password\":\"$PASSWORD\"}" >/dev/null
 VERIFY_MAILS=""
@@ -416,7 +440,7 @@ for i in $(seq 1 15); do
     [ "$VERIFY_MAILS" -ge 2 ] && break
     sleep 2
 done
-[ "$VERIFY_MAILS" -ge 2 ] || { echo "FAIL: email not freed after wizard saga (verification mails: $VERIFY_MAILS)"; exit 1; }
+[ "$VERIFY_MAILS" -ge 2 ] || { echo "FAIL: email not freed after the admin-closed saga (verification mails: $VERIFY_MAILS)"; exit 1; }
 
 step "resilience: a mail requested while the mail service is DOWN arrives once it is back"
 RESIL_MAIL="smoke-resil-$(date +%s)@example.com"

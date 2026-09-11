@@ -526,8 +526,8 @@ outcome, including the unhappy path ("someone failed → unlock, apologise"). Si
 extraction of 2026-07-11 the orchestrator is **`microservice-offboarding`** (the
 PORTAL's process manager):
 1. security locks the account and announces the FACT `ACCOUNT_DELETION_REQUESTED` on
-   `security-events` (via the outbox; the fact carries the user's wizard choices as an
-   opaque map),
+   `security-events` (via the outbox; the fact carries `initiatedBy` — `SELF` or `ADMIN` —
+   and, for an ADMIN's closure only, that admin's purge choices as an opaque map),
 2. **offboarding** opens the saga and publishes `PURGE_USER_CONTENT` on
    `content-commands`,
 3. **the three participants** clean up and confirm (`USER_CONTENT_PURGED`): memes (per
@@ -1007,16 +1007,22 @@ only in s3 mode.
 > 🏷️ **Tags:**
 > **saga participant** — memes consumes `PURGE_USER_CONTENT`, confirms on `memes-events`;
 > **per-axis policy** — content fate as a rule: DELETE / ANONYMIZE_AUTHOR / KEEP_POPULAR_ANONYMIZED:n;
-> **resolution precedence** — the user's wizard choice > the database setting (`settings`, V4) > env; **fail-safe** — an unparsable rule = the default, the saga never wedges;
+> **resolution precedence** — the ADMIN's rule from the saga command > the database setting (`settings`, V4) > env; **the art. 17 guard** — `initiatedBy` anything but `ADMIN` forces `DELETE`, over every dial; **fail-safe** — an unparsable rule = the default, the saga never wedges;
 > **event cascade** — a deleted meme announces `MEME_DELETED`, comments deletes the thread.
 
 On account deletion memes decides the leaver's content fate **by a per-axis rule**:
 `DELETE` (the meme disappears with its thread and votes), `ANONYMIZE_AUTHOR`
 ("deleted account"), `KEEP_POPULAR_ANONYMIZED:n` (score ≥ n survives anonymised — "the
 community earned it"). The leaver's votes are withdrawn **always** — identity-keyed data
-gets no policy loophole (the GDPR argument). The user's choice from the deletion wizard
-(carried in the saga command) overrides the default. The confirmation goes to
-`memes-events` with the cid and `version: 1`.
+gets no policy loophole (the GDPR argument).
+
+**Who asked decides whether any rule applies at all.** A closure the account's own owner
+requested (`initiatedBy` absent, empty, or anything but `ADMIN`) resolves to `DELETE` —
+stated, not left open — so neither the admin's runtime override nor the deployment default
+gets a say: the right to erasure has no exception for content the community liked. Only an
+ADMIN's closure (a ban, house rules) carries a rule that memes honours, and that rule
+overrides the default. The confirmation goes to `memes-events` with the cid and
+`version: 1`.
 
 Separately: deleting a single meme publishes `MEME_DELETED`, upon which
 `microservice-comments` deletes the thread — an example of why comments were split into
@@ -1064,7 +1070,8 @@ them **eventual**, not transactional.
    introspection = revocation freshness, offline = no hop and resilience to a security
    outage; offline requires moving verdicts into claims (`mfaCompliant`).
 7. **"What happens to content after account deletion?"** — A saga with confirmations;
-   a per-axis policy with the precedence wizard > database > env; votes always
+   a per-axis policy with the precedence admin's rule > database > env (and a self-requested
+   closure that outranks all three with DELETE); votes always
    withdrawn; an unparsable rule doesn't wedge the saga.
 8. **"How would you scale it?"** — The bytes are already behind a port (S3), WebP cuts
    transfer, thumbnails on demand, the ranking is computed with decay without a contract
@@ -1088,5 +1095,5 @@ them **eventual**, not transactional.
 
 **Before interviews, rehearse the demo (15 minutes):** `./infra-up.sh` → registration →
 the link in Mailpit → upload → a star (cross-origin to collections) → an NSFW flag as
-a moderator → account deletion through the wizard → show in Tempo ONE saga trace across
+a moderator → account deletion → show in Tempo ONE saga trace across
 5 services. It beats slides.

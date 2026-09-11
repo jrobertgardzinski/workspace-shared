@@ -1,6 +1,6 @@
 # The estate's behavior, in its own words
 
-Every `.feature` across the three workspaces — collected 2026-08-10 by
+Every `.feature` across the three workspaces — collected 2026-09-11 by
 `build_features.py`. Titles and scenario names only: the steps live with
 their repos, this page is the spec surface you can diff in one glance.
 
@@ -8,27 +8,64 @@ their repos, this page is the spec surface you can diff in one glance.
 
 ### config
 
-**Hardcoded configuration source** — `shared/config/src/test/resources/com/jrobertgardzinski/config/source/hardcoded/hardcoded-config.feature`
+**A deployment's configuration declares a ladder from the rule the code ships** — `shared/config/src/test/resources/com/jrobertgardzinski/config/configuration.feature`
 
-> A HardcodedKey carries its value directly in the key definition. No external dependencies are needed to resolve it — the value is always available at compile time.
+> A rule is a value object that knows its key, the value the code ships and how to hold another value through its own constructor. That is everything a ladder needs, so the deployment's configuration - its settings table and its properties - declares one from the shipped rule alone, and the two ways of reading are named after what changing the value costs: live over restart over rebuild for a rule the system asks about per use, restart over rebuild, decided at once, for a rule the system holds for its whole life. The text a source holds is parsed by the rule's type - an integer, a flag, a constant of an enum - and refused under the ladder's law.
 
-- Resolve a hardcoded scalar value
-- Resolve a hardcoded list value
+- live over the shipped rule answers with the rule holding the value in force, per question
+- nothing set anywhere - the shipped rule itself
+- a property, then a row: each question climbs the ladder again
+- a row the rule refuses is reported and fallen through, the gate being the constructor
+- bound over the shipped rule is decided at once and never asks again
+- the property is the rule for the process's life
+- a property the rule refuses refuses the declaration, naming the key and the level
+- a property that is not the rule's type refuses the declaration the same way
+- the parser comes from the rule's type
+- a flag reads true and false, any case, and nothing else
+- an enum reads its constant by name, any case
+- the keys declared live form the catalogue of what the running system may be told
+- a declared key holds text through the rule's own parser and gate
+- a key nobody declared is not in the catalogue
+- a rule bound over the shipped rule is not live and is not in the catalogue
 
-**Repository configuration source** — `shared/config/src/test/resources/com/jrobertgardzinski/config/source/repository/repository-config.feature`
+**Configuration ladder** — `shared/config/src/test/resources/com/jrobertgardzinski/config/ladder/config-ladder.feature`
 
-> A RepositoryKey resolves its value via RepositoryConfigPort, which abstracts database access. The key name is used as the identifier for the lookup. Values may be absent — the port returns Optional for scalar keys.
+> One key, one precedence law: the level bound latest in the lifecycle wins — live (a database row) over restart (a property or environment variable) over the rebuild-bound default in the code. Which rungs a key has is the key's own business: all three, live over rebuild, restart over rebuild, or rebuild alone. Every ladder ends in a rebuild default, so there is always an answer. Every candidate passes the same validation gate, but when depends on where the rung is bound: the default and the property are fixed before the process serves, so an illegal one refuses to build the ladder and the deployment fails at startup; only the live rung — written while the system runs — is skipped and the ladder falls through. The ladder remembers the climb: which level answered and what was refused on the way, so the refusal never has to stay a secret of the log.
 
-- Resolve a scalar value from the repository
-- Resolve a list value from the repository
-- Resolve a scalar value that is absent from the repository
+- the highest legal rung answers
+- a ladder over all three levels
+- a ladder without a live rung never reads the row
+- a ladder without a restart rung never reads the property
+- a ladder of the rebuild default alone is a named constant
+- the ladder reports which level answered and what it refused on the way
+- a clean climb names its level and refuses nothing
+- a refused row is reported with its value and the gate's reason
+- a text source is parsed on its rung, and text that is not the type is refused like an illegal value
+- text on every level is parsed and the latest bound wins
+- a row that is not a number is refused, reported with the text it held, and falls through
+- a property that is not a number refuses to build the ladder
+- a refused row is logged once, not once per question
+- the same illegal row asked a thousand times is one line in the log
+- what is bound before the process serves must be legal, or there is no ladder
+- an illegal default refuses to build the ladder
+- an illegal property refuses to build a ladder with a live rung
+- an illegal property refuses to build a ladder without a live rung
+- an illegal property is never rescued by a legal row above it
+- a ladder is rungs in descending order ending in the rebuild default
+- a ladder without a rebuild default is refused
+- rungs out of order are refused
+- two rungs on the same level are refused
 
-**Properties configuration source** — `shared/config/src/test/resources/com/jrobertgardzinski/config/source/properties/properties-config.feature`
+**The live level as one snapshot of the settings table** — `shared/config/src/test/resources/com/jrobertgardzinski/config/source/live/snapshot-live-config.feature`
 
-> A PropertiesKey resolves its value via PropertiesConfigPort, which abstracts application.properties, environment variables, or any other property source. The key name maps directly to the property name.
+> The live level is a copy of the whole settings table, taken when the service starts and again after each of the service's own writes: every key is answered from the same read, so a policy of five keys costs one round trip and no question ever reaches the table. A writer refreshes the snapshot after its own write and sees its decision at once. The table belongs to the service and its API is the only way in, so a row written behind the API's back is not noticed until the next start or the next write. A table that cannot be read at the start fails the start; one that cannot be read after a write fails the write and leaves the snapshot in force as it was.
 
-- Resolve a scalar value from properties
-- Resolve a list value from properties
+- the table is read once, at the start, and answers every key
+- a change behind the API's back is not seen
+- absence is part of the snapshot like a value
+- a writer sees its own decision at once
+- an unreadable table at the start fails the start
+- an unreadable table after a write fails the refresh and keeps the snapshot in force
 
 ### microservice-email
 
@@ -88,10 +125,14 @@ their repos, this page is the spec surface you can diff in one glance.
 
 **Closing the account** — `shared/microservice-security/specs/delete-account.feature`
 
-> A signed-in USER closes their account. Closure is a SAGA across services: the account locks at once (sessions revoked, sign-in refused) and identity announces the deletion to the PORTAL, whose own orchestrator (microservice-offboarding) has every content service purge the USER's content — each axis under the USER's chosen rule (delete / anonymise / keep-popular); votes are retracted. Identity waits for the portal's single outcome: only "content purged" deletes the USER for good; a failed purge — or silence past the safety net — rolls the closure back.
+> An account is closed in one of two ways, and which one it is decides what may survive it. A USER closes their OWN account and everything they ever posted goes with it: they are exercising the right to be forgotten, and there is no rule under which a portal may keep the content of somebody who asked to be forgotten because it happened to be popular. An ADMIN closes SOMEBODY ELSE's account — a ban, house rules — and nobody is exercising any right, so the ADMIN may say what happens to each kind of content: delete it, keep it without its author, or keep only what the community voted up, again without its author. Either way the closure is a SAGA across services: the account locks at once (sessions revoked, sign-in refused) and identity announces the deletion to the PORTAL, whose own orchestrator has every content service purge that person's content; votes are retracted. Identity waits for the portal's single outcome: only "content purged" deletes the account for good; a failed purge — or silence past the safety net — rolls the closure back.
 
 - Requesting closure locks the account immediately
-- The USER chooses what happens to their content
+- A USER closing their own account takes all of it with them
+- The address in the path may be spelled differently — it is still your own account
+- An ADMIN closing somebody else's account may keep what the community voted up
+- Closing somebody else's account is an ADMIN's hand alone
+- An ADMIN cannot close an account that does not exist
 - The closure completes only when the PORTAL confirmed its content purged
 - A failed portal purge rolls the closure back
 - Even total silence rolls the closure back (the safety net)
@@ -144,6 +185,16 @@ their repos, this page is the spec surface you can diff in one glance.
 - A RECOVERY CODE stands in for a FACTOR the USER cannot pass
 - each RECOVERY CODE works exactly once
 
+**Setting the minimum password length while the system runs** — `shared/microservice-security/specs/password-policy.feature`
+
+> How long a password must be is a decision, not a constant. The programmer ships a default, the operator may override it for one deployment, and an ADMIN may override both while the system runs — from that moment every place a password is established measures against the new floor. The floor has a floor of its own: a length the policy considers meaningless is refused at the door and nothing changes. And because the value in force comes from a ladder of sources, an ADMIN can always ask which source answered and what was refused on the way — the only way to learn that a row someone wrote straight into the database is not the value the system lives by.
+
+- An ADMIN sets the minimum length, and from then on the running system measures against it
+- A length below the policy's own floor is refused and nothing changes
+- A value written straight into the database is not law — the ladder refuses it, falls through, and says so
+- Every rule of the policy reads the same table, written at the console or not
+- Setting the minimum password length is an ADMIN's hand alone
+
 **Refreshing a session** — `shared/microservice-security/specs/refresh-session.feature`
 
 > A USER keeps their session alive by REFRESHING it. A session that has expired, or that no longer exists, cannot be REFRESHED — the USER must AUTHENTICATE again.
@@ -191,6 +242,21 @@ their repos, this page is the spec surface you can diff in one glance.
 - Granting ROLES is an ADMIN's hand alone
 - A ROLE cannot be pinned on a USER who does not exist
 
+**Setting any live rule while the system runs** — `shared/microservice-security/specs/settings.feature`
+
+> A rule the programmer ships with a default and the operator may override for one deployment may also be overridden by an ADMIN while the system runs — when it is declared live. The declaration is the only way onto the list: whatever an ADMIN can set is something the system reads, and the value passes the rule's own gate on the way in, exactly as it would on the way out, so a value the rule would refuse is refused at the door and nothing changes. No rule needs code of its own to be settable — the next rule declared live is on the list the moment it is declared, and a key nobody declared cannot be set, because nobody reads it.
+
+- An ADMIN sets a rule by its key, and from then on the running system lives by it
+- a flag
+- a number, in any spelling its type reads
+- A value the rule refuses is refused at the door, in the rule's words, and nothing changes
+- below the rule's own floor
+- not the rule's type
+- A key nobody declared live cannot be set, because nobody reads it
+- a typo in the key
+- The catalogue is exactly what the system declared live, with what is in force under each key
+- Setting a rule is an ADMIN's hand alone
+
 **Verifying an email address** — `shared/microservice-security/specs/verify-email.feature`
 
 > A USER proves they own their EMAIL by following a verification link sent to it. The link carries a single-use VERIFICATION TOKEN; the matching token marks the EMAIL as verified, and an unknown token is rejected.
@@ -205,10 +271,10 @@ their repos, this page is the spec surface you can diff in one glance.
 
 **The right to be forgotten — leaving the portal takes the user's traces along** — `portal/e2e/features/account-deletion.feature`
 
-> A person who asks for their account to be deleted is owed more than a dead login: the meme they posted, the comment they signed and the list of things they saved all have to be dealt with, each according to the portal's data policy. By default their memes disappear and their comments stay readable for the thread's sake — but signed by nobody. The leaver may also choose a stricter fate for their words. These scenarios speak the user's language on purpose. The choreography underneath — the deletion fact, the purge commands, the participants' confirmations — is already specified in microservice-offboarding's own features; here only the promise made to the person counts, and it is proven against the LIVE stack: real services, real broker, real mailbox.
+> A person who asks for their account to be deleted is owed more than a dead login: the meme they posted, the comment they signed and the list of things they saved all go with it. There is nothing to choose and nothing is kept back — that is what being forgotten means, and no amount of up-votes buys an exception. An ADMIN closing SOMEBODY ELSE's account is a different act: a ban, or house rules, and nobody is exercising any right. That one may say what happens to each kind of content — keep what the community voted up, keep it without its author, or destroy it like the leaver's own request would. These scenarios speak the user's language on purpose. The choreography underneath — the deletion fact, the purge commands, the participants' confirmations — is already specified in microservice-offboarding's own features; here only the promise made to the person counts, and it is proven against the LIVE stack: real services, real broker, real mailbox.
 
-- Deleting the account removes the person's traces under the default policy
-- The leaver may choose that their words go too
+- Deleting your own account takes everything you posted with it
+- An ADMIN closing an account may keep the comments, without their author
 
 **A deleted meme takes its traces along — including the ones in my favourites** — `portal/e2e/features/deletion-cascade.feature`
 
@@ -283,7 +349,7 @@ their repos, this page is the spec surface you can diff in one glance.
 
 **The purge-policy default is an ADMIN's dial** — `portal/microservice-memes/specs/admin-purge-policy.feature`
 
-> What happens to a leaver's memes is deployment policy — but policy changes faster than deployments. An ADMIN may re-dial the default at runtime; the leaver's own wizard choice still wins over everything. Everyone else is refused at the door.
+> What happens to a leaver's memes is deployment policy — but policy changes faster than deployments, so an ADMIN may re-dial the default at runtime. The dial answers one question only: what to do when the closure that took the memes away named no rule of its own. A rule stated on the closure outranks it, and a closure the account's OWN OWNER asked for outranks both — that one always deletes, because the right to be forgotten has no exception for memes the community liked. Everyone else is refused at the door.
 
 - The ADMIN's override wins over the deployment default, and the purge obeys it
 - A plain USER may not touch the dial
@@ -498,4 +564,4 @@ their repos, this page is the spec surface you can diff in one glance.
 - Joining an open server from the registry
 - An organizer plans an event and a member answers the call
 
-*198 scenarios in total.*
+*254 scenarios in total.*
