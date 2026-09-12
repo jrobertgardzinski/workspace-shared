@@ -39,6 +39,7 @@
         <module>infrastructure-spring-outbox</module>
         <module>offline-jwt</module>
         <module>voting</module>
+        <module>observation</module>
         <module>test-starter</module>
         <module>libs</module>
         <module>config</module>
