@@ -37,7 +37,7 @@ jobs:
       - name: Checkout workspace (aggregator)
         uses: actions/checkout@v7
 
-      # The 13 aggregated sub-repos, each into the directory the aggregator pom expects.
+      # The aggregated sub-repos, each into the directory the aggregator pom expects.
       # Pinned to main. A sub-repo feature branch is validated in its own repo's checks — where
       # it has any: eight of the thirteen have no workflow at all, which is what the schedule
       # trigger above is for.
@@ -65,6 +65,21 @@ jobs:
         with:
           repository: jrobertgardzinski/voting
           path: voting
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/observation
+          path: observation
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/envelope
+          path: envelope
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/account-closure
+          path: account-closure
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
@@ -189,6 +204,21 @@ jobs:
         with:
           repository: jrobertgardzinski/voting
           path: voting
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/observation
+          path: observation
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/envelope
+          path: envelope
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/account-closure
+          path: account-closure
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:

@@ -41,6 +41,7 @@
         <module>voting</module>
         <module>observation</module>
         <module>envelope</module>
+        <module>account-closure</module>
         <module>test-starter</module>
         <module>libs</module>
         <module>config</module>
