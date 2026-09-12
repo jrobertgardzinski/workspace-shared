@@ -9,6 +9,7 @@ infrastructure-spring-outbox    https://github.com/jrobertgardzinski/infrastruct
 offline-jwt                     https://github.com/jrobertgardzinski/offline-jwt.git
 voting                          https://github.com/jrobertgardzinski/voting.git
 observation                     https://github.com/jrobertgardzinski/observation.git
+envelope                        https://github.com/jrobertgardzinski/envelope.git
 email                           https://github.com/jrobertgardzinski/email.git
 password                        https://github.com/jrobertgardzinski/password.git
 microservice-security           https://github.com/jrobertgardzinski/microservice-security.git
