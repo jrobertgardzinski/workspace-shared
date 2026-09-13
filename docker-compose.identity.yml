@@ -115,7 +115,11 @@ services:
       SECURITY_OAUTH_PROVIDERS_GITHUB_CLIENT_SECRET: ${IDP_CLIENT_SECRET:-demo-secret}
       SECURITY_OAUTH_PROVIDERS_GITHUB_REDIRECT_URI: http://localhost:8080/oauth/callback
       SECURITY_OAUTH_PROVIDERS_GITHUB_LABEL: GitHub
-      SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8088/
+      # Where a federated sign-in may send the browser back to: the two PRODUCT UIs that share this
+      # identity — the portal's gallery (8083) and the formula game (8084). It used to name 8088,
+      # which since 2c4b320 is the Adminer database console, and to omit 8084 entirely: the one
+      # place a returning player actually needs was refused, and a database console was allowed.
+      SECURITY_OAUTH_ALLOWED_RETURN_PREFIXES: http://localhost:8083/,http://localhost:8084/
       # MFA SMS factor delivers codes through the shared SMS channel service (internal)
       SECURITY_SMS_URL: http://sms:8088
       # ... and authenticates to it when a key is configured. Harmless when none is: the header is
