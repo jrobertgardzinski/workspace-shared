@@ -22,6 +22,11 @@ scrape_configs:
       - targets: ["node-exporter:9100"]
 
   # --- the services' own /metrics, as the sub-repos grow them (workspace todo.md, etap 2)
+  # A deployment that sets security.metrics.token (required outside dev/test — /prometheus is served
+  # on the API's own connector, so it is otherwise open to whoever can reach the service) gives the
+  # same value to this job:
+  #     authorization: { type: Bearer, credentials: "<the token>" }
+  # The dev stack leaves it unset and scrapes over the private compose network.
   - job_name: security
     metrics_path: /prometheus
     static_configs:
