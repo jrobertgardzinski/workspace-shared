@@ -93,6 +93,14 @@ services:
       # scenarios from one host tripped it at 429 and the suite blocked ITSELF, exactly as the
       # brute-force counter once did. The guard stays on, roomy, and only in the dev stack.
       SECURITY_STEP_UP_MAX_PER_WINDOW: "100"
+      # and the THIRD door, found the same way the other two were — by the suite blocking itself.
+      # /authenticate and /authenticate/factor share one window of 30 per source per 15 minutes,
+      # and the gallery's browser suite spends several on every scenario: one to seed the account
+      # over the API, one to sign in through the panel, one more for each factor step. Eighteen
+      # scenarios crossed 30 somewhere around the seventeenth and the last two failed with
+      # TOO_MANY_ATTEMPTS — which read as "no token and no ticket" until the suite was taught to
+      # print the status. Same treatment as its neighbours: the guard stays on, roomy, dev only.
+      SECURITY_AUTHENTICATION_MAX_PER_WINDOW: "300"
       # the first ADMIN: nobody can grant a role until someone holds one, and the dev stack has no
       # console to hand it out — the bootstrap list is the only way in (register + verify as usual)
       SECURITY_BOOTSTRAP_ADMINS: admin@example.com
