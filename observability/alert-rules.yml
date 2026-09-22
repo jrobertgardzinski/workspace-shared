@@ -62,6 +62,32 @@ groups:
             wyzwalane stanem sagi, nigdy upływem czasu (ADR 0007). Przepchnąć sagę
             z microservice-offboarding albo ją skompensować. To obowiązek prawny, nie porządki.
 
+      - alert: ErasureLeftSomethingBehind
+        # Inny alarm niż ErasureBacklogStuck i o czymś DOKŁADNIE odwrotnym. Tamten liczy
+        # OZNACZENIA, które czekają za długo — sprawa nierozstrzygnięta, saga da się dopchnąć.
+        # Ten liczy wiersze, które stały pod adresem JUŻ WYMAZANEGO konta w chwili domknięcia:
+        # sagi nad nimi nie ma i nigdy nie będzie, bo domknięcie kasuje wyłącznie to, co
+        # oznaczenie zarezerwowało. Backlog ich nie widzi — nie mają oznaczenia do policzenia.
+        #
+        # Skąd się biorą: bramka uczestnika jest OFFLINE, a token dostępu żyje jeszcze do godziny
+        # po rozpoczęciu usuwania, więc karta otwarta w drugiej zakładce potrafi zapisać coś po
+        # domknięciu. Trwałą odpowiedzią jest sygnał unieważnienia sesji z security; do tego czasu
+        # jedyne, co system może zrobić, to policzyć i powiedzieć.
+        #
+        # Sufiks, nie pełna nazwa — jak wyżej: collections ma to dziś, memes i comments dostaną,
+        # jeśli kiedyś zaczną liczyć to samo.
+        expr: sum by (job) (increase({__name__=~".+_erasure_residue_total"}[15m])) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }}: po wymazaniu konta ZOSTAŁY jego wiersze"
+          description: >-
+            Domknięcie sagi skasowało to, co zarezerwowało oznaczenie, i zastało pod tym samym
+            adresem wiersze bez oznaczenia — zapisane już PO starcie usuwania, przez token, który
+            jeszcze nie wygasł. Żadna saga ich nie ruszy: kasowanie jest wyzwalane stanem sagi
+            (ADR 0007), a te wiersze do żadnej nie należą. Trzeba je usunąć ręcznie i zapisać
+            wynik. To obowiązek prawny, nie porządki.
+
       - alert: OffboardingSagaCompensated
         # kompensacja jest od 2026-08-08 UCZCIWA (treść naprawdę wraca), ale nadal znaczy:
         # usunięcie konta się NIE udało, użytkownik dostał przeprosiny i musi poprosić jeszcze raz.
