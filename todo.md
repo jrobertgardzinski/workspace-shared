@@ -573,7 +573,11 @@ submitFactor — fetch `r.ok` true dla 202). **Temat MFA zamknięty w całości.
    oczekiwane potwierdzenie (nowy topic `usercollections-events`, uczestnik w `SagaParticipants`
    / tabeli saga_participants). To jednak uczestnik PROSTY: kasuje wszystkie referencje usera
    wholesale (nie parsuje `PurgeRule` — refy są opaque, bez DELETE/ANONYMIZE/KEEP), więc NIE
-   jest to „trzeci konsument PurgeRule" i nie wyzwala ekstrakcji wspólnej libki. Bez tej zmiany
+   jest to „trzeci konsument PurgeRule" i nie wyzwala ekstrakcji wspólnej libki.
+   **2026-09-24: to zdanie dalej jest prawdziwe, a libka i tak powstała (`shared/purge-rule`).**
+   Wyzwalaczem nie był trzeci konsument, tylko trzecia i czwarta PISOWNIA gramatyki w regeksach
+   uczestników sagi — patrz microservice-comments/todo.md. Collections do dziś jej nie zna i nie
+   powinno. Bez tej zmiany
    saga albo nigdy się nie domknie (czeka na uczestnika, który nie odpowiada), albo kolekcje
    usuniętego usera osierocą się.
 2. **Observability (zlecone 2026-07-07: „Grafana itd.")** — ETAP 1 ZROBIONY tej samej
