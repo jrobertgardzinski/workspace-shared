@@ -37,7 +37,7 @@
 #   8025  Mailpit web UI         (the "inbox" for verification/reset links)
 #   5433  Postgres (security)    (psql -h localhost -p 5433 -U postgres security; 5432 is left
 #                                 to a host-installed Postgres)
-#   29092 Kafka (HOST listener)  8088 sms   8089 push   1025 Mailpit SMTP
+#   29092 Kafka (HOST listener)  18088 sms  8089 push   1025 Mailpit SMTP  8088 adminer
 #         — the internal wiring, published so ONE service can run from the IDE against the rest
 #         of the stack: ./dev-swap.sh <service> (env files under dev/local/)
 #   ----  sms / push             (internal notification channels; stub-send by default)
@@ -240,7 +240,11 @@ services:
     build:
       context: microservice-sms
     ports:
-      - "8088:8088"   # for a security started from the IDE (dev/local/security.env)
+      # 18088, not 8088: the adminer console has published 8088 on the host since 2c4b320, and
+      # security's own return-URL allow-list names that address. Inside the network this service
+      # is still sms:8088 — only the HOST side moves, and only so a security started from the IDE
+      # can reach it (dev/local/security.env).
+      - "18088:8088"
     environment:
       # NOT set by default, and that is a correction of the same day it was added.
       #
