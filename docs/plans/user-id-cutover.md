@@ -51,7 +51,7 @@ Order matters: each step must build green and be committed **before** the next s
 - [x] **1d anonymisation writes `author_id = NULL`.** `reassignAuthor(id, DeletedAccount.AUTHOR)`
       in memes and comments also clears `author_id`, so kept content of a closed account is not
       groupable by id. One test each.
-- [ ] **1e retire the address as a key** — only after 2 below has run the backfill and every
+- [x] **1e retire the address as a key** — only after 2 below has run the backfill and every
       `still_without_id` is 0 or explained: `NOT NULL` on the id columns, drop the `author`/`voter`/
       `user_email` indexes' role as keys (`activeOf(String)` overloads go), delete the rekey
       machinery (`UserContentRekey`, `RekeyUserContent`, `JdbcUserContentRekey`, the
@@ -108,3 +108,4 @@ Order matters: each step must build green and be committed **before** the next s
   - NOT STARTED: security (delete EmailChangedAnnouncer, its use in ConfirmEmailChangeController, EmailChangeIsAnnouncedTest, SecurityEventPacts.anEmailChangedFact, the three *FactsPactProviderTest), specs (HeapMemes/HeapComments/HeapFavourites heldBy/visibleOf via idOf, participant tests: givenLeaverHolds with the UserId LEAVER, drop givenLeaverHoldsUnderId, PortalInOneProcess confirmations by userId), backfill script (drop collection_items line), full builds in order collections → offboarding → security → specs, then step 2 again on the stack, then push all.
   - Points 3 and 4 the owner asked for do not exist in this plan (only sections 1 and 2); the analysis doc §9 stages 3–4 are superseded by the decisions above — needs the owner's word on what 3 and 4 mean.
 - 1e code DONE, all six green locally (not pushed yet): account-closure 2eb06b7, memes 47282a3, comments c1b4c78, collections 0d1d410, offboarding e3070dc, security 08d0a7c, portal 7f2ae68 (specs + backfill); stack being rebuilt for the step-2 re-run
+- 1e DONE and proven on the rebuilt stack (2026-09-27): scenario OK, backfill memes 0 / comments 0 (collections no longer backfilled), e2e-saga 4/4, Playwright 18/18, notebook OK, SELF and ADMIN closures OK ('deleted account', author_id NULL). Everything pushed. Left deliberately: memes/comments author_id stays nullable (NULL = anonymised); ballots keyed by the voter's id in wire form (Ballots API unchanged); no source-level guard for the dropped columns.
