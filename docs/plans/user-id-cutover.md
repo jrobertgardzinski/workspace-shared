@@ -36,7 +36,7 @@ Order matters: each step must build green and be committed **before** the next s
       `Caller` record like memes'); `CollectionsApi` passes it on save. Extend
       `dev/backfill-author-ids.sh` with `collection_items (user_email → user_id)`. Build:
       `portal/mvnw -f portal/microservice-user-collections/pom.xml clean verify`.
-- [ ] **1b ownership by id.** memes `own` (`/meta`) and `DeleteMeme`'s "may this caller delete",
+- [x] **1b ownership by id.** memes `own` (`/meta`) and `DeleteMeme`'s "may this caller delete",
       comments `viewerIsAuthor` and `DeleteComment`: compare `authorId` with the caller's id when
       both are present, fall back to the address while either is missing. Tests for both branches.
 - [ ] **1c the saga carries the id.** `shared/account-closure`: `Field.USER_ID`, `ClosureCommand.userId`
@@ -95,3 +95,4 @@ Order matters: each step must build green and be committed **before** the next s
 
 (append lines: `- 1a done — memes 0123abc, portal 4567def`)
 - 1a done — collections 6310d8c, portal be6315c (add(user, Optional<UserId>, collection, ref) + default overload)
+- 1b done — memes 150be8c, comments 6635da1
