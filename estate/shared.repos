@@ -12,6 +12,7 @@ purge-rule                      https://github.com/jrobertgardzinski/purge-rule.
 observation                     https://github.com/jrobertgardzinski/observation.git
 account-closure                 https://github.com/jrobertgardzinski/account-closure.git
 user-id                         https://github.com/jrobertgardzinski/user-id.git
+author-directory                https://github.com/jrobertgardzinski/author-directory.git
 envelope                        https://github.com/jrobertgardzinski/envelope.git
 email                           https://github.com/jrobertgardzinski/email.git
 password                        https://github.com/jrobertgardzinski/password.git

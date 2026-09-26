@@ -44,6 +44,7 @@
         <module>envelope</module>
         <module>account-closure</module>
         <module>user-id</module>
+        <module>author-directory</module>
         <module>test-starter</module>
         <module>libs</module>
         <module>config</module>
