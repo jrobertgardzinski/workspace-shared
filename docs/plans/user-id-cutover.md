@@ -48,7 +48,7 @@ Order matters: each step must build green and be committed **before** the next s
       (provider side) — the list is in the CI workflows (`*PactProviderTest`, `*ContractTest`).
       Runner: `PortalInOneProcess` addresses the leaver by id; `account-closure.feature` keeps
       its literal address (the step maps it to an id once).
-- [ ] **1d anonymisation writes `author_id = NULL`.** `reassignAuthor(id, DeletedAccount.AUTHOR)`
+- [x] **1d anonymisation writes `author_id = NULL`.** `reassignAuthor(id, DeletedAccount.AUTHOR)`
       in memes and comments also clears `author_id`, so kept content of a closed account is not
       groupable by id. One test each.
 - [ ] **1e retire the address as a key** — only after 2 below has run the backfill and every
@@ -97,3 +97,5 @@ Order matters: each step must build green and be committed **before** the next s
 - 1a done — collections 6310d8c, portal be6315c (add(user, Optional<UserId>, collection, ref) + default overload)
 - 1b done — memes 150be8c, comments 6635da1
 - 1c done — account-closure b6b4d13 (pushed), memes 8bc4d09, comments a41e409, collections 33a5bad, offboarding 68c90f4, security 0d6c3be, portal af2a863; pacts regenerated + provider-verified (offboarding 4+4+3, security 2)
+- 1d done — memes d2e479b, comments 25d1cb6, portal 2d4c9e2
+- 1e not started — gated on step 2's backfill (still_without_id must be 0 first)
