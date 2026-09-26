@@ -68,9 +68,9 @@ Order matters: each step must build green and be committed **before** the next s
 - [x] Register two users through the UI or Newman, upload a meme, comment, save a favourite;
       check `/memes/{id}/meta` shows `a***@…` from the directory (security logs show `GET /users`).
 - [x] Run `portal/dev/backfill-author-ids.sh`; every table reports `still_without_id = 0`.
-- [ ] Nightly gates by hand: `portal/e2e` (Playwright) and the Newman collections in
+- [x] Nightly gates by hand: `portal/e2e` (Playwright) and the Newman collections in
       `shared/demo/` — green, or the failure fixed in code, never in the test.
-- [ ] Close one account end to end (SELF and ADMIN with `comments=ANONYMIZE_AUTHOR`); the kept
+- [x] Close one account end to end (SELF and ADMIN with `comments=ANONYMIZE_AUTHOR`); the kept
       comments render "deleted account".
 
 ## Rules for the session
@@ -100,3 +100,4 @@ Order matters: each step must build green and be committed **before** the next s
 - 1d done — memes d2e479b, comments 25d1cb6, portal 2d4c9e2
 - 1e not started — gated on step 2's backfill (still_without_id must be 0 first)
 - step 2: down -v, infra-up.sh (21/21 healthy), scenario on the live stack OK (/meta = c***@…, security log 2× GET /users), backfill: memes 0 / comments 0 / collection_items 0 still_without_id
+- step 2 gates: e2e-saga 4/4, memes-ui Playwright 18/18 (Node 22 from nvm — v20 on PATH is refused by cucumber 13, CI uses 22), demo notebook OK via `jupyter execute` (`python -m nbclient` is not runnable); closures: SELF bob (comment+favourites gone, sign-in refused, farewell mail), ADMIN carol with comments=ANONYMIZE_AUTHOR (kept comment renders 'deleted account', author_id NULL)
