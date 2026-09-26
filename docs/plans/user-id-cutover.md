@@ -39,7 +39,7 @@ Order matters: each step must build green and be committed **before** the next s
 - [x] **1b ownership by id.** memes `own` (`/meta`) and `DeleteMeme`'s "may this caller delete",
       comments `viewerIsAuthor` and `DeleteComment`: compare `authorId` with the caller's id when
       both are present, fall back to the address while either is missing. Tests for both branches.
-- [ ] **1c the saga carries the id.** `shared/account-closure`: `Field.USER_ID`, `ClosureCommand.userId`
+- [x] **1c the saga carries the id.** `shared/account-closure`: `Field.USER_ID`, `ClosureCommand.userId`
       (Optional during the dual period), `isAddressed()` = id or e-mail present. Security's
       `AccountDeletionOrchestrator` puts `userId` beside `email` on `ACCOUNT_DELETION_REQUESTED`;
       offboarding copies it onto every command; participants prefer `activeOf(UserId)` /
@@ -96,3 +96,4 @@ Order matters: each step must build green and be committed **before** the next s
 (append lines: `- 1a done — memes 0123abc, portal 4567def`)
 - 1a done — collections 6310d8c, portal be6315c (add(user, Optional<UserId>, collection, ref) + default overload)
 - 1b done — memes 150be8c, comments 6635da1
+- 1c done — account-closure b6b4d13 (pushed), memes 8bc4d09, comments a41e409, collections 33a5bad, offboarding 68c90f4, security 0d6c3be, portal af2a863; pacts regenerated + provider-verified (offboarding 4+4+3, security 2)
