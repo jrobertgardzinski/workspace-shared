@@ -61,13 +61,13 @@ Order matters: each step must build green and be committed **before** the next s
 
 ## 2. Prove it on the real stack
 
-- [ ] `docker compose -p security down -v` (both compose files share the project name).
-- [ ] Rebuild images: security (`shared/infra-up.sh` / the identity compose), then
+- [x] `docker compose -p security down -v` (both compose files share the project name).
+- [x] Rebuild images: security (`shared/infra-up.sh` / the identity compose), then
       `portal/memes-up.sh` or `portal/infra-up.sh` (read the script headers; Docker context must be
       `desktop-linux`, see memory "ściągi i porty stacku").
-- [ ] Register two users through the UI or Newman, upload a meme, comment, save a favourite;
+- [x] Register two users through the UI or Newman, upload a meme, comment, save a favourite;
       check `/memes/{id}/meta` shows `a***@…` from the directory (security logs show `GET /users`).
-- [ ] Run `portal/dev/backfill-author-ids.sh`; every table reports `still_without_id = 0`.
+- [x] Run `portal/dev/backfill-author-ids.sh`; every table reports `still_without_id = 0`.
 - [ ] Nightly gates by hand: `portal/e2e` (Playwright) and the Newman collections in
       `shared/demo/` — green, or the failure fixed in code, never in the test.
 - [ ] Close one account end to end (SELF and ADMIN with `comments=ANONYMIZE_AUTHOR`); the kept
@@ -99,3 +99,4 @@ Order matters: each step must build green and be committed **before** the next s
 - 1c done — account-closure b6b4d13 (pushed), memes 8bc4d09, comments a41e409, collections 33a5bad, offboarding 68c90f4, security 0d6c3be, portal af2a863; pacts regenerated + provider-verified (offboarding 4+4+3, security 2)
 - 1d done — memes d2e479b, comments 25d1cb6, portal 2d4c9e2
 - 1e not started — gated on step 2's backfill (still_without_id must be 0 first)
+- step 2: down -v, infra-up.sh (21/21 healthy), scenario on the live stack OK (/meta = c***@…, security log 2× GET /users), backfill: memes 0 / comments 0 / collection_items 0 still_without_id
