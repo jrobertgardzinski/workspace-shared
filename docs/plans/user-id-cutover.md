@@ -28,7 +28,7 @@ Decisions already made by the owner — do not reopen them:
 
 Order matters: each step must build green and be committed **before** the next starts.
 
-- [ ] **1a collections `user_id`.** `SavedItem` gains `Optional<UserId> userId` (overload the old
+- [x] **1a collections `user_id`.** `SavedItem` gains `Optional<UserId> userId` (overload the old
       constructors like `Comment` did); `CollectionRepository.add(...)` needs the id to reach the
       INSERT — the least invasive shape is `add(SavedItem)` or an extra `Optional<UserId>` parameter,
       pick one and say why in the commit; `V1__schema.sql`: `user_id UUID` + index on
@@ -94,3 +94,4 @@ Order matters: each step must build green and be committed **before** the next s
 ## Progress
 
 (append lines: `- 1a done — memes 0123abc, portal 4567def`)
+- 1a done — collections 6310d8c, portal be6315c (add(user, Optional<UserId>, collection, ref) + default overload)
