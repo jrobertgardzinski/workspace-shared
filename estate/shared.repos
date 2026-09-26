@@ -11,6 +11,7 @@ voting                          https://github.com/jrobertgardzinski/voting.git
 purge-rule                      https://github.com/jrobertgardzinski/purge-rule.git
 observation                     https://github.com/jrobertgardzinski/observation.git
 account-closure                 https://github.com/jrobertgardzinski/account-closure.git
+user-id                         https://github.com/jrobertgardzinski/user-id.git
 envelope                        https://github.com/jrobertgardzinski/envelope.git
 email                           https://github.com/jrobertgardzinski/email.git
 password                        https://github.com/jrobertgardzinski/password.git

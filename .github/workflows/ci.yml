@@ -87,6 +87,11 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
+          repository: jrobertgardzinski/user-id
+          path: user-id
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
           repository: jrobertgardzinski/offline-jwt
           path: offline-jwt
           token: ${{ secrets.REPO_PAT }}
@@ -227,6 +232,11 @@ jobs:
         with:
           repository: jrobertgardzinski/account-closure
           path: account-closure
+          token: ${{ secrets.REPO_PAT }}
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/user-id
+          path: user-id
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
