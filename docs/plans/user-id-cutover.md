@@ -117,7 +117,7 @@ the guards below whitelist those on purpose.
       module) and `V1__schema.sql` for `user_email`, `Rekey`, `EMAIL_CHANGED`. Build:
       `/home/robert/git/portfolio/portal/mvnw -f /home/robert/git/portfolio/portal/microservice-user-collections/pom.xml clean verify`.
       Green = verify passes and the seeded-literal check bit once.
-- [ ] **3d the producer stays dead in security.** A guard test in `security-infrastructure`: no main
+- [x] **3d the producer stays dead in security.** A guard test in `security-infrastructure`: no main
       source names `EMAIL_CHANGED` or `EmailChangedAnnouncer`, and `SecurityEventPacts` declares no
       email-changed interaction. Build:
       `/home/robert/git/portfolio/shared/mvnw -f /home/robert/git/portfolio/shared/microservice-security/pom.xml clean verify`.
@@ -170,7 +170,7 @@ its own proof is green.
       is refused — verify the exact field list against `shared/account-closure`'s `ClosureMessages`
       and the committed `pacts/` before writing, the README must quote the contract, not the memory
       of it. Proof: 4d's grep; one commit in the offboarding sub-repo.
-- [ ] **4d regenerate and sweep.** Regenerate the generated docs from workspace-shared
+- [x] **4d regenerate and sweep.** Regenerate the generated docs from workspace-shared
       (`shared/build_features.py` → `docs/features.md`, `shared/build_c4.py` →
       `docs/c4-architecture.md`) and run the sweep:
       `grep -rn "EMAIL_CHANGED\|Rekey\|user_email" */README.md shared/docs portal/*.md` from
@@ -235,3 +235,29 @@ its own proof is green.
   names at all: unlike its siblings it has no AuthorDirectory)
 - 4c done — offboarding 9985e5f, written from the committed pacts: the confirmation is
   (sagaId, type, userId) with no address, the fact is (sagaId, id, userId, email, initiatedBy).
+- 3d done — security a6e0ebc. The guard is narrower than "no EMAIL_CHANGED in security": the words
+  are legal in exactly one file, ConfirmEmailChangeController, where they are the HTTP reply to the
+  browser that confirmed the change, and that file may not name the facts topic. Pinned as a set, so
+  a new sayer and a vanished reply both fail. Two counterweights (the deletion fact's pact, and
+  something still publishing to security-events).
+- 4d done — features.md regenerated (shared 40d0904); sweep over */README.md, shared/docs and
+  portal/*.md is clean: the only hits naming the retired machinery are docs/plans, docs/analysis,
+  the ADRs that explain it and portal/SYSTEM-REVIEW.md, a dated review record. build_c4.py was NOT
+  re-run: it reads a docker-compose.yml beside itself and the estate's identity stack is
+  docker-compose.identity.yml, so the generator cannot run in this layout — pre-existing, and the
+  owner already parked the C4 refresh in todo.md:130 ("odświeżenie potem może"). c4-architecture.md
+  greps clean, so it claims nothing false meanwhile.
+- Local build notes (2026-09-27), none of them caused by 3/4 and none of them CI-visible:
+  this machine's checkouts were 4-13 commits behind origin and user-id / author-directory were not
+  cloned at all, so the estate had to be synced and the shared libraries installed before anything
+  compiled (offline-jwt was a commit behind too, which is why VerifiedToken.email() was missing).
+  Two tests fail here and pass in CI on the same SHA (security CI green on 08d0a7c):
+  CorsPreflightTest.an_unknown_origin_is_refused (FORBIDDEN expected, METHOD_NOT_ALLOWED here) and
+  TrustedProxyHttpTest.distinct_clients_are_distinct_sources (TOO_MANY_REQUESTS here) — both fail in
+  isolation, both untouched by this work. memes-ui's gallery.test.tsx "still holds every page that
+  was loaded after a vote from inside a meme" times out at 5s (8s here, 35/36 green) on Node 22 and
+  with no other build running; memes-infrastructure's guard was proven by installing the jars and
+  verifying that module. Nothing was "fixed" in any of those tests.
+- STILL OPEN for the owner: 3e (the address column on memes/comments rows) is unticked on purpose.
+  Also unresolved from 1e's deliberate deviations: whether author_id should stay nullable and
+  whether the ballots' wire-form voter id deserves a typed API.
