@@ -77,7 +77,7 @@ Decisions taken by this brief (flip by editing the line, before the night starts
 
 ## 1. `shared/meme-deletion` — the vocabulary and the hop contract (D2)
 
-- [ ] **1a the library.** `gh repo create jrobertgardzinski/meme-deletion --public`; pom like
+- [x] **1a the library.** `gh repo create jrobertgardzinski/meme-deletion --public`; pom like
       `account-closure` (test-jar plugin, allure-junit5, junit), dependency on `unit-of-work` only.
       Main sources, package `com.jrobertgardzinski.deletion`:
       - `DeletionMessages`: `MEME_DELETED`, `COMMENTS_DELETED`; nested `Field`: `TYPE = "type"`,
@@ -96,7 +96,7 @@ Decisions taken by this brief (flip by editing the line, before the night starts
       - `DeletionOutcome`: sealed — `Dropped(int rows)` | `Nothing` — one shape for both hops
         (the closure protocol has three `ClosureOutcome` copies; do not repeat that).
       Tests in the library for `of()` (the three unusable shapes, the partial list).
-- [ ] **1b the contract, as a test-jar.** `CascadeHopContractTest` (abstract), modelled on
+- [x] **1b the contract, as a test-jar.** `CascadeHopContractTest` (abstract), modelled on
       `ClosureParticipantContractTest`: `handle(MemeDeleted)` / `handle(CommentsDeleted)`,
       `givenMemeHas(int rows)`, `nothingTouched()`; the promises every hop owes the cascade:
       a redelivered event drops nothing and announces nothing (ADR 0006 idempotence); an event that
@@ -104,66 +104,66 @@ Decisions taken by this brief (flip by editing the line, before the night starts
       business. `AtomicHopContractTest` adds what `AtomicParticipantContractTest` adds: the
       announcement is made inside `unitOfWork.run()`'s step — only comments announces, collections
       does not, so only comments extends it.
-- [ ] **1c registration** as in 0b (aggregator, estate list, the ci.yml of memes, comments,
+- [x] **1c registration** as in 0b (aggregator, estate list, the ci.yml of memes, comments,
       user-collections, portal ×3, workspace-shared; not offboarding, not security).
 
 ## 2. comments — the first hop as a participant
 
-- [ ] **2a the port comes home.** Move `CommentEvents` from comments-infrastructure to
+- [x] **2a the port comes home.** Move `CommentEvents` from comments-infrastructure to
       comments-application (`com.jrobertgardzinski.comments.application.CommentEvents`), keep
       `KafkaCommentEvents` and `NoopCommentEvents` as its adapters.
-- [ ] **2b `comments_meme-deletion`.** Module beside `comments_account-closure`, `src/main` only,
+- [x] **2b `comments_meme-deletion`.** Module beside `comments_account-closure`, `src/main` only,
       dependencies: comments-application, comments-domain, meme-deletion, unit-of-work, slf4j.
       `CommentsDeletionParticipant(DeleteThread deleteThread, CommentEvents commentEvents,
       UnitOfWork unitOfWork)` with `DeletionOutcome handle(MemeDeleted memeDeleted)`: inside
       `unitOfWork.run`, `deleteThread.execute(memeId)`; announce `commentsDeleted(memeId, dropped)`
       only when `dropped` is not empty (the rule now in `MemesEventsListener.dropTheThreadAndAnnounceIt`).
-- [ ] **2c the listener shrinks.** `MemesEventsListener` keeps: MDC/cid, JSON parsing, the
+- [x] **2c the listener shrinks.** `MemesEventsListener` keeps: MDC/cid, JSON parsing, the
       "malformed → drop" log, `DeletionMessages.MEME_DELETED` dispatch, `MemeDeleted.of(...)`, the
       participant call, the info log. `KafkaCommentEvents` builds its payload from
       `CommentsDeleted.fields()` + `DeletionMessages.Field.*`. `CascadeTopicNamesTest` stays (topics
       are transport). `MemeDeletedCascadeTest` / `MemeDeletedContractTest` keep testing the wire; the
       hop's own promises move to portal-specs (step 5) — as with the closure participants, the
       service's CI stops testing the participant, the portal's does.
-- [ ] **2d** `comments/pom.xml` module list, `comments/.github/workflows/ci.yml` (checkouts +
+- [x] **2d** `comments/pom.xml` module list, `comments/.github/workflows/ci.yml` (checkouts +
       install order: unit-of-work, meme-deletion). Build the whole service, commit, push after 1c.
 
 ## 3. user-collections — the second hop as a participant
 
-- [ ] **3a `collections_meme-deletion`.** `CollectionsDeletionParticipant(PurgeDeletedItem
+- [x] **3a `collections_meme-deletion`.** `CollectionsDeletionParticipant(PurgeDeletedItem
       purgeDeletedItem)` with `handle(MemeDeleted)` → `purge("meme", [memeId])` and
       `handle(CommentsDeleted)` → `purge("comment", commentIds)`; returns `Dropped(removed)` /
       `Nothing`. The item-type constants move here from `CascadeConsumer` (`MEME_ITEM_TYPE`,
       `COMMENT_ITEM_TYPE`).
-- [ ] **3b `CascadeConsumer` keeps the transport only:** polling, `MAX_POLL_RECORDS`, the
+- [x] **3b `CascadeConsumer` keeps the transport only:** polling, `MAX_POLL_RECORDS`, the
       3-attempt retry and the give-up log, cid header, the topic → type dispatch. Everything under
       `onMemeDeleted` / `onCommentsDeleted` / `isNotAnId` goes through `MemeDeleted.of` /
       `CommentsDeleted.of` and the participant; the "unusable ids" warning reads `unusable()`.
       `CascadeConsumerTest` / `CascadeConsumerLoopTest` keep the loop and the retry; assertions
       about which ids are purged move to the participant test in portal-specs.
-- [ ] **3c** module list, `ci.yml`, build, commit, push.
+- [x] **3c** module list, `ci.yml`, build, commit, push.
 
 ## 4. memes — speaks the vocabulary
 
-- [ ] **4a** `KafkaMemeEvents` builds the payload from `MemeDeleted.fields()` +
+- [x] **4a** `KafkaMemeEvents` builds the payload from `MemeDeleted.fields()` +
       `DeletionMessages` (keep `eventId` on the wire — the pacts pin it), `MemeDeletedTopicTest`,
       `MemeDeletedPactProviderTest`, `CommentsMemeDeletedPactProviderTest` re-verified unchanged.
       memes-infrastructure depends on meme-deletion; `ci.yml`, build, commit, push.
 
 ## 5. portal-specs — one world, two protocols (D3)
 
-- [ ] **5a rename.** `git mv account-closure-specs portal-specs`; artifactId `portal-specs`;
+- [x] **5a rename.** `git mv account-closure-specs portal-specs`; artifactId `portal-specs`;
       `portal/pom.xml` module; `portal/specs/README.md` and the module's own README (if none,
       write one paragraph: what runs here, what does not). `.system-review/` mentions are history,
       leave them.
-- [ ] **5b the fakes move to `com.jrobertgardzinski.portal.heap`:** `HeapMemes`, `HeapComments`,
+- [x] **5b the fakes move to `com.jrobertgardzinski.portal.heap`:** `HeapMemes`, `HeapComments`,
       `HeapFavourites`, plus `Identities.idOf(String email)` (today `PortalInOneProcess.idOf`).
       `HeapMemes` gains what the cascade needs through the port it already implements
       (`MemeRepository.deleteById`) — nothing new; `HeapComments` already implements
       `CommentRepository.deleteByMeme`; `HeapFavourites` already is `ItemReferences`
       (`InMemoryCollectionRepository.purge`). Readers the deletion specs will call by name:
       `HeapComments.under(String memeId)`, `HeapFavourites.pointingAt(String itemType, String id)`.
-- [ ] **5c the world splits from the bus.** `portal.heap.Portal`: the three heaps, the use cases
+- [x] **5c the world splits from the bus.** `portal.heap.Portal`: the three heaps, the use cases
       of all three services (today built inline in `PortalInOneProcess`) and both protocols'
       participants; `portal.closure.ClosureInOneProcess` = today's `PortalInOneProcess` minus the
       heaps (the router, `deliver`, `answerOf`, `saidToSecurity`); `portal.deletion.DeletionInOneProcess`:
@@ -171,7 +171,7 @@ Decisions taken by this brief (flip by editing the line, before the night starts
       list; `everyHopAnswers()` drains it: `MEME_DELETED` → comments participant AND collections
       participant, `COMMENTS_DELETED` → collections participant; `silence("comments")` as in the
       closure world; `redeliver()` re-sends the last `MEME_DELETED`.
-- [ ] **5d `portal/specs/meme-deletion.feature`** (business language, personas as in the closure
+- [x] **5d `portal/specs/meme-deletion.feature`** (business language, personas as in the closure
       feature, the mechanics in `#` comments), runner `MemeDeletionSpecsTest`, glue package
       `com.jrobertgardzinski.portal.deletion`. Scenarios, in this order:
       1. an author takes a meme down: the thread is gone, and so is every favourite that pointed at
@@ -182,24 +182,24 @@ Decisions taken by this brief (flip by editing the line, before the night starts
          and nothing ever compensates — the thread stays as dead rows (this is the truth of the
          choreography, ADR-worthy, not a bug to fix here);
       5. a deletion that names no meme is dropped by every hop.
-- [ ] **5e participant tests on the contract**, beside the closure ones:
+- [x] **5e participant tests on the contract**, beside the closure ones:
       `deletion/CommentsDeletionParticipantTest extends AtomicHopContractTest`,
       `deletion/CollectionsDeletionParticipantTest extends CascadeHopContractTest`, on the heaps,
       no mocks. Build: `portal/mvnw -f portal/portal-specs/pom.xml clean test`.
-- [ ] **5f CI.** `portal/.github/workflows/ci.yml` and `e2e-saga.yml`: checkouts and install order
+- [x] **5f CI.** `portal/.github/workflows/ci.yml` and `e2e-saga.yml`: checkouts and install order
       for unit-of-work and meme-deletion; `check-workflow-checkouts.sh` green; the specs job name
       follows the module. Commit, push.
 
 ## 6. Prove it
 
-- [ ] **6a** every touched repo: `clean verify` from the repo root, green, then pushed in the order
+- [x] **6a** every touched repo: `clean verify` from the repo root, green, then pushed in the order
       unit-of-work → account-closure → meme-deletion → comments → user-collections → memes →
       offboarding/security (0c only) → portal → workspace-shared. Wait for the CI of each library
       before pushing its consumers.
 - [ ] **6b on a machine with Docker only:** `docker compose -p security down -v`, `infra-up.sh`,
       `portal/e2e` `deletion-cascade.feature` and `account-deletion.feature` green. Without Docker,
       write "6b not run — no Docker on this machine" in Progress; the nightly e2e is the gate.
-- [ ] **6c** `shared/docs/features.md` catalogue: the new feature file and the two contracts;
+- [x] **6c** `shared/docs/features.md` catalogue: the new feature file and the two contracts;
       one paragraph in `portal/README.md` where the closure protocol is described, saying the
       deletion cascade is the second protocol built the same way.
 
@@ -247,3 +247,36 @@ Decisions taken by this brief (flip by editing the line, before the night starts
   lambda, so the port's name never appears there. Builds green; account-closure-specs green.
   Pushed unit-of-work -> account-closure -> services -> portal -> workspace-shared;
   account-closure has no CI of its own (the reactor in workspace-shared validates it).
+
+- 1a/1b/1c done — meme-deletion bffa786..(repo created, CI green): DeletionMessages, MemeDeleted,
+  CommentsDeleted, DeletionOutcome, and the two contracts as a test-jar; 9 library tests green.
+  Two deviations from the brief, both small: CommentsDeleted is a three-component record
+  (memeId, commentIds, unusable) because a record cannot expose unusable() otherwise; and
+  fields() is insertion-ordered rather than Map.copyOf, because memes builds its payload by hand
+  and the outbox stores it verbatim. Registered in shared 74960a8+, portal 4129ef7+.
+  The contract could not be stated exactly as the brief drew it: "an event of another type is
+  not this hop's business" cannot be a shared test when COMMENTS_DELETED *is* collections'
+  business. It is a test of the comments hop instead; the shared contract keeps idempotence,
+  "drops what the deletion names", and "an event that names nothing touches nothing".
+- 2a-2d done — comments 355bd29. 161 tests green. One behaviour changed on purpose: this hop had
+  NO id check at all, so the cucumber harness and the MEME_DELETED pact used "known-meme" as a
+  meme id. MemeDeleted.of turns that away, which is the rule the collections hop already
+  enforced; both fixtures now use a real uuid and the pact file was regenerated.
+- 3a-3c done — user-collections ffcfbb4. 172 tests green. CascadeConsumer lost ~90 lines of
+  decisions and kept the loop; MEME_ITEM_TYPE/COMMENT_ITEM_TYPE moved to the participant.
+- 4a done — memes 0f0a73a. 230 tests green (`-pl '!memes-ui'`), the three MEME_DELETED pact and
+  topic tests re-verified unchanged. NOTE: memes-ui/src/gallery.test.tsx fails on this machine on
+  a CLEAN checkout too — pre-existing, unrelated, not touched.
+- 5a-5f done — portal 6d86044. 57 tests in portal-specs, up from 41. Five deletion scenarios, and
+  the two hops held to the library's contract on the heaps with no mocks. The rename cost a
+  package move (the heaps to portal.heap) and Identities.idOf; the closure specs are unchanged in
+  behaviour.
+- 6a done — every touched repo `clean verify` green and pushed in the order unit-of-work ->
+  account-closure -> meme-deletion -> services -> portal -> workspace-shared, each library's CI
+  waited for (unit-of-work green, meme-deletion green; account-closure has no CI of its own).
+  Whole shared kernel and whole portal reactor build clean.
+- 6b NOT RUN — no Docker on this machine. The nightly e2e is the gate for deletion-cascade.feature
+  and account-deletion.feature.
+- 6c done — docs/features.md regenerated (290 scenarios, the new feature listed), portal/README.md
+  gained "Two protocols the portal owns", portal/specs/README.md and the new portal-specs/README.md
+  say what runs where.

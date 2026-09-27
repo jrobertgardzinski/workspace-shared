@@ -550,6 +550,20 @@ their repos, this page is the spec surface you can diff in one glance.
 - A saved reference has no conditions to honour
 - conditions stated for the favourites part change nothing
 
+**Deleting a meme — what goes with it, and what is left behind** — `portal/specs/meme-deletion.feature`
+
+> A meme is never alone. Its conversation lives in one part of the portal and the lists people saved it to live in another, and when the meme goes those have to go too — or the portal shows its readers things that are not there any more.
+
+- What the meme took with it, nobody can still be pointing at
+- an author takes their meme down
+- a meme nobody commented on
+- The same deletion twice changes nothing and announces nothing
+- the deletion arrives a second time
+- Nothing compensates, and the portal says so out loud
+- the comments part never hears the deletion
+- A deletion that names no meme reaches nobody
+- an announcement with no meme in it
+
 ## formula
 
 ### formula-simulator
@@ -608,4 +622,4 @@ their repos, this page is the spec surface you can diff in one glance.
 - only the author ships a new version
 - a rulebook that is not JSON is turned away at the door
 
-*281 scenarios in total.*
+*290 scenarios in total.*
