@@ -122,7 +122,7 @@ the guards below whitelist those on purpose.
       email-changed interaction. Build:
       `/home/robert/git/portfolio/shared/mvnw -f /home/robert/git/portfolio/shared/microservice-security/pom.xml clean verify`.
       Green = verify passes; commit in the security sub-repo after green.
-- [ ] **3e (owner's word first) the address itself on content rows.** `memes.author` and
+- [x] **3e the address itself on content rows** (the owner said drop it, 2026-09-27). `memes.author` and
       `comments.author` are still `varchar(255) NOT NULL` holding the caller's address (the V1
       comment calls it "the address as an attribute"), while analysis §4/§6 promised the content
       DBs would hold *less* PII after stage 7. Either bless keeping it (then ADR 0008 in 4a records
@@ -272,3 +272,20 @@ its own proof is green.
   memes 7b7096d, comments 5e1110d) plus collections d064b4c, offboarding 9985e5f, portal 59b38d8.
   Worth the owner's word: `check-workflow-checkouts.sh` guards the checkout LIST but not the install
   ORDER, which is what cost a day of silent red — a guard there is new scope, not done.
+- 3e done — the owner's word was "drop it". `memes.author` and `comments.author` are gone from the
+  schema, from `Meme`/`MemeMetadata`/`Comment`, from every INSERT and SELECT, and from the views;
+  `reassignAuthor(id, placeholder)` became `anonymise(id)` (the row keeps no trace of whose it was);
+  `DeletedAccount` is deleted in both services, because "deleted account" is now decided by the
+  reader from a null id, not stored; the upload and comment rate-limit buckets follow the id too, so
+  a rename no longer resets them; both guards assert the column cannot come back. ADR 0008 records
+  the decision instead of the question.
+- Found while pricing 3e, and fixed first: **tagging a meme still authorised by ADDRESS**
+  (`TagMeme` compared `memes.author` with the caller's address while 1b moved `own` and deletion onto
+  the id). Since 1e deleted the rekey machinery, that was permanent: a renamed author was refused
+  their own meme, and whoever registered the freed address could rewrite its tags. `OwnershipByIdTest`
+  now pins all three decisions — `own`, delete, tags — and the tagging pair was proven to bite.
+- NOT PROVEN HERE, and it must be before this is trusted: **the stack re-run that a schema change
+  owes** (`docker compose -p security down -v`, `infra-up.sh`, the scenario, the backfill, both
+  closures). This machine has no Docker at all (`/var/run/docker.sock` missing — it is the owner's
+  notes laptop), so 3e rests on the module suites (memes, comments, account-closure-specs, all green
+  on H2) and on CI. Run step 2 on the dev machine before calling the cutover finished.

@@ -32,20 +32,23 @@ registration, immutable — is the one thing about a member that does not.
 1. **Identity is `UserId`** (`shared/user-id`, the UUID from security's `users.id`). Every row that
    belongs to a member is keyed by it: `memes.author_id`, `comments.author_id`,
    `collection_items.user_id`, and the vote tables by the voter's id.
-2. **The e-mail address is an attribute**, never a key. It stays on content rows as the display
-   value the placeholder "deleted account" is written into; it is not what a row is looked up by. A
-   build-time guard per service (`RetiredAddressKeyTest`) fails the build on any SQL that matches
-   content by address again — an ADR alone enforces nothing (0001, 0006).
+2. **The e-mail address is not a key, and the content services do not keep one.** memes, comments
+   and user-collections hold no address at all: the name a page shows is read from security at
+   request time, and "deleted account" is a row with no author id rather than a placeholder written
+   into a column. A build-time guard per service (`RetiredAddressKeyTest`) fails the build on any
+   SQL that matches content by address again, and on the column coming back — an ADR alone enforces
+   nothing (0001, 0006).
 3. **The token carries both, separately**: `sub` = the UUID, `email` = its own claim. No `uid` claim
    was added — a second home for the id is a second thing to disagree with `sub`.
 4. **Display names are read, not replicated.** `AuthorDirectory` (`shared/author-directory`) asks
    security's `GET /users?ids=` at read time — masked addresses, anonymous, throttled, cached
    briefly. There is no nickname: the name IS the masked address. A directory outage degrades a
    listing's names, it does not hide the content.
-5. **Anonymisation clears the id.** `reassignAuthor` writes the placeholder into the address column
-   AND `author_id = NULL`, so content kept after a closure cannot be grouped back together by the
-   id of the account that is gone. The id columns are therefore nullable in memes and comments;
-   `collection_items.user_id` is `NOT NULL`, because a saved item of nobody has nothing to show.
+5. **Anonymisation clears the id and writes nothing in its place.** `anonymise(id)` sets
+   `author_id = NULL`, so content kept after a closure cannot be grouped back together by the id of
+   the account that is gone, and the reader renders a row without an id as "deleted account". The id
+   columns are therefore nullable in memes and comments; `collection_items.user_id` is `NOT NULL`,
+   because a saved item of nobody has nothing to show.
 6. **The closure speaks in ids.** `ClosureCommand` v2 carries `userId` and no address; a fact
    without one is refused rather than guessed at, and confirmations answer by id. The saga's own row
    still carries the leaver's address, because the farewell mail and the security verdict need
@@ -77,6 +80,14 @@ registration, immutable — is the one thing about a member that does not.
   `AddressKeyedStoresTest` (ADR 0006's shape). This ADR is about identity as the ESTATE sees it.
 - Tokens minted before the cutover carry an address as `sub`; `offline-jwt` keeps the fallback until
   they expire, and a token without an id is nobody to the id-keyed filters.
-- The address is still personal data on content rows. Whether it should be dropped from
-  `memes.author` / `comments.author` altogether is open, and is the one box the cutover plan left
-  unticked (`docs/plans/user-id-cutover.md`, 3e).
+- The content databases hold no personal data of an author beyond the fact that a row belongs to
+  some id: `memes.author` and `comments.author` were dropped on 2026-09-27 (plan 3e), along with the
+  `DeletedAccount` placeholder they existed to carry. A leaver's kept content is a row with a null
+  id, which is also what a row whose id security no longer knows looks like — the same "deleted
+  account" either way, decided by the reader and not stored.
+- Rate-limit buckets follow the id too (uploading, commenting). A bucket keyed by an address is
+  reset by a rename, which is a small thing next to ownership but the same mistake.
+- The cutover left one check behind, found while dropping the column: tagging a meme still compared
+  the caller's ADDRESS with the row's, so a renamed author was refused their own meme and the
+  address's next owner could curate it. Every "is this caller the author" decision now asks the id,
+  and `OwnershipByIdTest` pins all three of them (`own`, delete, tags).
