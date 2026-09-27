@@ -5,6 +5,11 @@
 - Scope: the portal's account-deletion saga — microservice-offboarding (orchestrator),
   microservice-memes, microservice-comments and microservice-user-collections (participants)
 
+> **Amendment, 2026-09-27 (ADR 0008).** Where this record describes the reaper as a query, it read
+> `WHERE author = ?` when it was written: content was keyed by the member's e-mail address. The
+> query reads `WHERE author_id = ?` now, and the address is an attribute. Nothing else in this
+> decision changed — the mark, the closure and the compensation are as described.
+
 ## Context
 
 The portal's account deletion is an orchestrated saga: security announces the fact,
@@ -44,7 +49,7 @@ that command destroys anything; when the orchestrator gives up, it emits `RESTOR
 the content is public again. A participant never decides on its own clock: a saga stuck for an hour
 because a sibling is down is a saga that may still compensate, and content erased on a timer cannot
 come back, so a local timeout would be a guess that is wrong exactly where it is expensive. The
-reaper is therefore not a scheduler but a query — `WHERE author = ? AND status = 'PENDING_ERASURE'`
+reaper is therefore not a scheduler but a query — `WHERE author_id = ? AND status = 'PENDING_ERASURE'`
 — run when the closure arrives. The passage of time buys exactly one thing: an ALARM.
 `StuckErasureWatch` gauges marks older than any saga can legitimately last
 (`memes_erasure_backlog`, `comments_erasure_backlog`, `collections_erasure_backlog`) and says in
