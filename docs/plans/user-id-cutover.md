@@ -289,3 +289,11 @@ its own proof is green.
   closures). This machine has no Docker at all (`/var/run/docker.sock` missing — it is the owner's
   notes laptop), so 3e rests on the module suites (memes, comments, account-closure-specs, all green
   on H2) and on CI. Run step 2 on the dev machine before calling the cutover finished.
+- What the missing Docker actually cost, concretely: two comments tests write rows with raw SQL
+  (`MarkedCommentRaceTest`, `PostgresDialectTest`), both are Testcontainers tests, and both were
+  SKIPPED here — 1 and 5 skipped, silently green — so their `INSERT INTO comments (… author …)`
+  reached CI and failed it with BadSqlGrammar (comments 9acd538 fixes them). Portal's reactor failed
+  on the same two, because it builds sibling checkouts and had comments from before the fix; a rerun
+  is green. Everything green now: memes 664501e, comments 9acd538, portal 8122150, shared a5b15fe.
+  The lesson for the next schema change made from this laptop: H2 covers the repositories, nothing
+  here covers Postgres, and `grep` over test SQL is the only local substitute.
