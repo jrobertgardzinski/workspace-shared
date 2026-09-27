@@ -261,3 +261,14 @@ its own proof is green.
 - STILL OPEN for the owner: 3e (the address column on memes/comments rows) is unticked on purpose.
   Also unresolved from 1e's deliberate deviations: whether author_id should stay nullable and
   whether the ballots' wire-form voter id deserves a typed API.
+- Found while proving 3/4, and not in either section: **memes' and comments' CI had been red since
+  1d** (2026-09-26 18:15) and nobody saw it — the shared-library loop in their `ci.yml` installed
+  `account-closure` before `user-id`, so every run died in "Install the shared libraries" with
+  "Could not find artifact user-id" once the closure vocabulary started speaking UserId. The
+  checkout list was already right; only the order was wrong, and user-collections happened to have
+  it the other way round, which is why one of the three stayed green. Fixed: memes 7b7096d,
+  comments 5e1110d. All four participant workflows now install user-id before account-closure.
+  CI green afterwards on all four repos touched here (shared 05e9740, security a6e0ebc,
+  memes 7b7096d, comments 5e1110d) plus collections d064b4c, offboarding 9985e5f, portal 59b38d8.
+  Worth the owner's word: `check-workflow-checkouts.sh` guards the checkout LIST but not the install
+  ORDER, which is what cost a day of silent red — a guard there is new scope, not done.
