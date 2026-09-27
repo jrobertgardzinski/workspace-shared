@@ -73,6 +73,112 @@ Order matters: each step must build green and be committed **before** the next s
 - [x] Close one account end to end (SELF and ADMIN with `comments=ANONYMIZE_AUTHOR`); the kept
       comments render "deleted account".
 
+## 3. Guard the retired address (a build that goes red when the key creeps back)
+
+Why this is section 3: the Progress log's last line says it outright — "no source-level guard for
+the dropped columns" — and analysis §9 stage 7 names the shape to copy (`MemeReadFilterTest`, the
+SQL-literal scan with a one-entry exemption list and a counterweight assertion). The estate is clean
+today (grep over java+sql, 2026-09-27: zero hits for `user_email` / `EMAIL_CHANGED` / `Rekey`), but
+one dormant address-keyed read survived 1e: `CommentRepository.findByAuthor(String)` →
+`WHERE author = ?` (`portal/microservice-comments/comments-application/.../CommentRepository.java:23`,
+`comments-infrastructure/.../JdbcCommentRepository.java:67-70`), no production caller — exactly the
+"honestly-written SELECT" a guard exists to catch.
+
+No schema change and no shared-library change in 3a–3d: no `down -v`, no install ordering. 3e is the
+one exception and is gated on the owner's word. Order matters: 3a before 3b, or the guard is born
+with an exemption for dead code. Do not reopen the recorded decisions — `author_id` stays nullable
+(NULL = anonymised), `voter` keeps holding the id in its wire form, the Ballots API stays untouched;
+the guards below whitelist those on purpose.
+
+- [ ] **3a delete the dormant address read in comments.** `findByAuthor(String)` leaves the port
+      (`CommentRepository.java:23`), the adapter (`JdbcCommentRepository.java:67-70`) and every fake
+      that implements it: comments-application `HideCommentRaceTest:37`, `VoteOnCommentRaceTest:38`,
+      `ListCommentsDegradationTest:50`, `PurgeAndCascadeTest:53`, `IdempotentCommandsTest:63`,
+      comments-infrastructure `TransactionalDecoratorsTest:78`, and `HeapComments.java:114` in
+      account-closure-specs. Builds, in this order:
+      `/home/robert/git/portfolio/portal/mvnw -f /home/robert/git/portfolio/portal/microservice-comments/pom.xml clean verify`,
+      then `/home/robert/git/portfolio/portal/mvnw -f /home/robert/git/portfolio/portal/account-closure-specs/pom.xml clean verify`.
+      Green = both pass with the method gone from every source; commit comments and the specs repo
+      separately, each after its own green.
+- [ ] **3b `RetiredAddressKeyTest` in memes and comments** (`memes-infrastructure` and
+      `comments-infrastructure` `src/test/java`, copy `MemeReadFilterTest`'s shape: string literals
+      only, never prose, plus a counterweight — assert the scan saw at least one SQL literal, so an
+      empty directory cannot go green). Forbidden in main-source SQL literals: `author` as a
+      predicate (`WHERE`/`AND author =` — `author_id` is a different word); SELECT lists and writes
+      (`INSERT`, `UPDATE … SET author` — `reassignAuthor` writes the placeholder) stay legal, the
+      address is an attribute there. Forbidden anywhere in main sources, identifiers included:
+      `Rekey`, `EMAIL_CHANGED`. The same test also reads the service's own `V1__schema.sql`: no
+      `user_email`, no index on bare `author`. Whitelist, with the reason in the javadoc: `voter`
+      (the id in wire form, 1e decision) and `settings.updated_by` (audit snapshot, analysis D8).
+      Builds: the memes and comments poms as in 3a. Green = both `clean verify` pass AND the guard
+      proven to bite — seed one forbidden literal, watch the red, revert before committing.
+- [ ] **3c the same guard in collections.** One test in `collections-infrastructure` scanning the
+      main tree's string literals (the plain-JDBC SQL is wired from `Main.java`, so scan the whole
+      module) and `V1__schema.sql` for `user_email`, `Rekey`, `EMAIL_CHANGED`. Build:
+      `/home/robert/git/portfolio/portal/mvnw -f /home/robert/git/portfolio/portal/microservice-user-collections/pom.xml clean verify`.
+      Green = verify passes and the seeded-literal check bit once.
+- [ ] **3d the producer stays dead in security.** A guard test in `security-infrastructure`: no main
+      source names `EMAIL_CHANGED` or `EmailChangedAnnouncer`, and `SecurityEventPacts` declares no
+      email-changed interaction. Build:
+      `/home/robert/git/portfolio/shared/mvnw -f /home/robert/git/portfolio/shared/microservice-security/pom.xml clean verify`.
+      Green = verify passes; commit in the security sub-repo after green.
+- [ ] **3e (owner's word first) the address itself on content rows.** `memes.author` and
+      `comments.author` are still `varchar(255) NOT NULL` holding the caller's address (the V1
+      comment calls it "the address as an attribute"), while analysis §4/§6 promised the content
+      DBs would hold *less* PII after stage 7. Either bless keeping it (then ADR 0008 in 4a records
+      why, and 3b's whitelist is the guard) or drop it: edit both `V1__schema.sql` (column + the
+      `active_memes`/`active_comments` views — one file per service, never a numbered migration),
+      remove the address from `MemeMetadata`/`Comment` and the controllers' writes, rethink
+      `reassignAuthor`'s placeholder, then `docker compose -p security down -v` and a step-2 re-run
+      on the rebuilt stack. Builds: the memes and comments poms as in 3a, then account-closure-specs.
+      Green = all three verify, and the live-stack scenario from section 2 repeats clean.
+
+## 4. Write down the identity that now exists (an ADR, and the READMEs that still teach the old one)
+
+Why this is section 4: no ADR records "UserId is the identity, the e-mail is an attribute" — the
+ADR shelf stops at 0007 and the analysis doc's own header says "nothing decided" — while three
+service READMEs still present the deleted machinery as today's behaviour: memes `README.md:121-130`
+("their content moves with it… announces `EMAIL_CHANGED`… `RekeyUserContent`"), comments
+`README.md:64-73`, collections `README.md:57-67` ("keyed by the address…
+`collection_items.user_email`, the JWT's `sub`"), and offboarding `README.md:87-88` pins the pacts
+as "(id, email…)" / "(type, email)" though v2 carries no email. A newcomer who follows the house
+rule and reads the README first re-learns the address as the key — docs that lie rot fastest.
+
+Docs only: no schema, no library, no `down -v`. English, short, one commit per sub-repo, each after
+its own proof is green.
+
+- [ ] **4a ADR 0008** — `shared/docs/adr/0008-user-id-is-the-identity-email-is-an-attribute.md`,
+      the shape of 0001–0007 (context, decision, consequences). It records the brief's header
+      verbatim as the decision: `sub` = the UUID from `users.id`, `email` its own claim (no `uid`);
+      display names via `AuthorDirectory` ↔ security's `GET /users?ids=` (masked, anonymous,
+      throttled); `author_id NULL` = anonymised, kept content not groupable; `ClosureCommand` v2
+      keyed by `userId` alone; ballots by the voter's id in wire form; rejected alternatives named:
+      `uid` claim, projection/CDC, read-only DB view. Add one dated amendment note to 0007 where its
+      reaper query still reads `WHERE author = ?` (`0007:47`), pointing at 0008 — a note, never a
+      rewrite of a decided record. If 3e drops (or blesses) the `author` column, 0008 says which.
+      Proof: 4d's grep; commit in workspace-shared.
+- [ ] **4b the three content READMEs.** Replace the "a member's address can move" passages —
+      memes `README.md:121-130`, comments `README.md:64-73`, collections `README.md:57-67` — with
+      what is true: rows keyed by `author_id`/`user_id`; a rename touches no content row and no
+      Kafka loop exists for it; names are fetched at read time through `AuthorDirectory` (60 s
+      cache, degradation logs "author names unavailable" and the page still reads); "deleted
+      account" = `author_id NULL` or a directory miss. The `reserved` /
+      `purge_reserved_nothing` paragraphs stay — still true. Proof: 4d's grep over each repo;
+      three commits, one per sub-repo.
+- [ ] **4c offboarding's contracts paragraph** (`portal/microservice-offboarding/README.md:87-88`):
+      describe the pinned fact and confirmations as keyed by `userId`, and that a fact without one
+      is refused — verify the exact field list against `shared/account-closure`'s `ClosureMessages`
+      and the committed `pacts/` before writing, the README must quote the contract, not the memory
+      of it. Proof: 4d's grep; one commit in the offboarding sub-repo.
+- [ ] **4d regenerate and sweep.** Regenerate the generated docs from workspace-shared
+      (`shared/build_features.py` → `docs/features.md`, `shared/build_c4.py` →
+      `docs/c4-architecture.md`) and run the sweep:
+      `grep -rn "EMAIL_CHANGED\|Rekey\|user_email" */README.md shared/docs portal/*.md` from
+      `/home/robert/git/portfolio`. Green = hits only in `docs/plans/`, `docs/analysis/` and the
+      historical `PLAN-*`/`PODRECZNIK*`/`AUDYT*` files (history may say what was) — nothing that
+      claims to describe the present. `onboarding-guide.md`, `go-live-2026.md` and `todo.md` were
+      checked clean on 2026-09-27; re-run the grep, do not re-edit what is not wrong.
+
 ## Rules for the session
 
 - One session, no subagents, no Fable. Batch edits with a Python script per slice; read only
@@ -109,3 +215,9 @@ Order matters: each step must build green and be committed **before** the next s
   - Points 3 and 4 the owner asked for do not exist in this plan (only sections 1 and 2); the analysis doc §9 stages 3–4 are superseded by the decisions above — needs the owner's word on what 3 and 4 mean.
 - 1e code DONE, all six green locally (not pushed yet): account-closure 2eb06b7, memes 47282a3, comments c1b4c78, collections 0d1d410, offboarding e3070dc, security 08d0a7c, portal 7f2ae68 (specs + backfill); stack being rebuilt for the step-2 re-run
 - 1e DONE and proven on the rebuilt stack (2026-09-27): scenario OK, backfill memes 0 / comments 0 (collections no longer backfilled), e2e-saga 4/4, Playwright 18/18, notebook OK, SELF and ADMIN closures OK ('deleted account', author_id NULL). Everything pushed. Left deliberately: memes/comments author_id stays nullable (NULL = anonymised); ballots keyed by the voter's id in wire form (Ballots API unchanged); no source-level guard for the dropped columns.
+- sections 3 and 4 written (2026-09-27), derived from the estate's own state, not from the owner's
+  words: the owner asked for "points 3 and 4" and the brief had none, and analysis §9's stages 3–4
+  (projection, `USER_PROFILE_CHANGED`) are the ones this brief's header rejects. Section 3 comes
+  from the Progress line above that records no source-level guard; section 4 from an ADR shelf that
+  stops at 0007 and three READMEs that still teach the address as the key. 3e (the `author` column
+  itself) stays unticked: it needs the owner's word, the way 1e was gated on step 2.
