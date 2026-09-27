@@ -42,6 +42,7 @@
         <module>purge-rule</module>
         <module>observation</module>
         <module>envelope</module>
+        <module>unit-of-work</module>
         <module>account-closure</module>
         <module>user-id</module>
         <module>author-directory</module>
