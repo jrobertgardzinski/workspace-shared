@@ -90,7 +90,7 @@ with an exemption for dead code. Do not reopen the recorded decisions — `autho
 (NULL = anonymised), `voter` keeps holding the id in its wire form, the Ballots API stays untouched;
 the guards below whitelist those on purpose.
 
-- [ ] **3a delete the dormant address read in comments.** `findByAuthor(String)` leaves the port
+- [x] **3a delete the dormant address read in comments.** `findByAuthor(String)` leaves the port
       (`CommentRepository.java:23`), the adapter (`JdbcCommentRepository.java:67-70`) and every fake
       that implements it: comments-application `HideCommentRaceTest:37`, `VoteOnCommentRaceTest:38`,
       `ListCommentsDegradationTest:50`, `PurgeAndCascadeTest:53`, `IdempotentCommandsTest:63`,
@@ -100,7 +100,7 @@ the guards below whitelist those on purpose.
       then `/home/robert/git/portfolio/portal/mvnw -f /home/robert/git/portfolio/portal/account-closure-specs/pom.xml clean verify`.
       Green = both pass with the method gone from every source; commit comments and the specs repo
       separately, each after its own green.
-- [ ] **3b `RetiredAddressKeyTest` in memes and comments** (`memes-infrastructure` and
+- [x] **3b `RetiredAddressKeyTest` in memes and comments** (`memes-infrastructure` and
       `comments-infrastructure` `src/test/java`, copy `MemeReadFilterTest`'s shape: string literals
       only, never prose, plus a counterweight — assert the scan saw at least one SQL literal, so an
       empty directory cannot go green). Forbidden in main-source SQL literals: `author` as a
@@ -112,7 +112,7 @@ the guards below whitelist those on purpose.
       (the id in wire form, 1e decision) and `settings.updated_by` (audit snapshot, analysis D8).
       Builds: the memes and comments poms as in 3a. Green = both `clean verify` pass AND the guard
       proven to bite — seed one forbidden literal, watch the red, revert before committing.
-- [ ] **3c the same guard in collections.** One test in `collections-infrastructure` scanning the
+- [x] **3c the same guard in collections.** One test in `collections-infrastructure` scanning the
       main tree's string literals (the plain-JDBC SQL is wired from `Main.java`, so scan the whole
       module) and `V1__schema.sql` for `user_email`, `Rekey`, `EMAIL_CHANGED`. Build:
       `/home/robert/git/portfolio/portal/mvnw -f /home/robert/git/portfolio/portal/microservice-user-collections/pom.xml clean verify`.
@@ -147,7 +147,7 @@ rule and reads the README first re-learns the address as the key — docs that l
 Docs only: no schema, no library, no `down -v`. English, short, one commit per sub-repo, each after
 its own proof is green.
 
-- [ ] **4a ADR 0008** — `shared/docs/adr/0008-user-id-is-the-identity-email-is-an-attribute.md`,
+- [x] **4a ADR 0008** — `shared/docs/adr/0008-user-id-is-the-identity-email-is-an-attribute.md`,
       the shape of 0001–0007 (context, decision, consequences). It records the brief's header
       verbatim as the decision: `sub` = the UUID from `users.id`, `email` its own claim (no `uid`);
       display names via `AuthorDirectory` ↔ security's `GET /users?ids=` (masked, anonymous,
@@ -157,7 +157,7 @@ its own proof is green.
       reaper query still reads `WHERE author = ?` (`0007:47`), pointing at 0008 — a note, never a
       rewrite of a decided record. If 3e drops (or blesses) the `author` column, 0008 says which.
       Proof: 4d's grep; commit in workspace-shared.
-- [ ] **4b the three content READMEs.** Replace the "a member's address can move" passages —
+- [x] **4b the three content READMEs.** Replace the "a member's address can move" passages —
       memes `README.md:121-130`, comments `README.md:64-73`, collections `README.md:57-67` — with
       what is true: rows keyed by `author_id`/`user_id`; a rename touches no content row and no
       Kafka loop exists for it; names are fetched at read time through `AuthorDirectory` (60 s
@@ -165,7 +165,7 @@ its own proof is green.
       account" = `author_id NULL` or a directory miss. The `reserved` /
       `purge_reserved_nothing` paragraphs stay — still true. Proof: 4d's grep over each repo;
       three commits, one per sub-repo.
-- [ ] **4c offboarding's contracts paragraph** (`portal/microservice-offboarding/README.md:87-88`):
+- [x] **4c offboarding's contracts paragraph** (`portal/microservice-offboarding/README.md:87-88`):
       describe the pinned fact and confirmations as keyed by `userId`, and that a fact without one
       is refused — verify the exact field list against `shared/account-closure`'s `ClosureMessages`
       and the committed `pacts/` before writing, the README must quote the contract, not the memory
@@ -221,3 +221,17 @@ its own proof is green.
   from the Progress line above that records no source-level guard; section 4 from an ADR shelf that
   stops at 0007 and three READMEs that still teach the address as the key. 3e (the `author` column
   itself) stays unticked: it needs the owner's word, the way 1e was gated on step 2.
+- 3a done — comments fd19d8c (port, adapter and seven fakes; the rollback test now asks the row
+  for the leaver's address AND id, which is the stronger assertion), portal 59b38d8 (HeapComments)
+- 3b done — comments 76217e1, memes 8b8c05e. Proven to bite in comments: a seeded WHERE author
+  predicate, a seeded Rekey identifier and a seeded user_email column each failed exactly one rule,
+  the counterweight stayed green, all three seeds reverted.
+- 3c done — collections aa542d3 (the predicate rule also names email / user_address, so the column
+  cannot come back under another name; user_email alone was already covered by the machinery rule)
+- 4a done — shared 2babcb0 (ADR 0008 + a dated note on 0007), corrected by 52b5145: the first commit
+  rewrote 0007's reaper query, which an amendment note exists to avoid. The note now covers both
+  queries the cutover moved, and 0007 keeps the words it was decided with.
+- 4b done — memes 47d94b3, comments 3def8cf, collections ad1da6c + d064b4c (collections shows no
+  names at all: unlike its siblings it has no AuthorDirectory)
+- 4c done — offboarding 9985e5f, written from the committed pacts: the confirmation is
+  (sagaId, type, userId) with no address, the fact is (sagaId, id, userId, email, initiatedBy).
