@@ -12,6 +12,7 @@ purge-rule                      https://github.com/jrobertgardzinski/purge-rule.
 observation                     https://github.com/jrobertgardzinski/observation.git
 unit-of-work                    https://github.com/jrobertgardzinski/unit-of-work.git
 account-closure                 https://github.com/jrobertgardzinski/account-closure.git
+meme-deletion                   https://github.com/jrobertgardzinski/meme-deletion.git
 user-id                         https://github.com/jrobertgardzinski/user-id.git
 author-directory                https://github.com/jrobertgardzinski/author-directory.git
 envelope                        https://github.com/jrobertgardzinski/envelope.git
