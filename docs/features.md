@@ -1,6 +1,6 @@
 # The estate's behavior, in its own words
 
-Every `.feature` across the three workspaces — collected 2026-09-11 by
+Every `.feature` across the three workspaces — collected 2026-09-27 by
 `build_features.py`. Titles and scenario names only: the steps live with
 their repos, this page is the spec surface you can diff in one glance.
 
@@ -115,6 +115,9 @@ their repos, this page is the spec surface you can diff in one glance.
 - An unknown token is rejected
 - A taken EMAIL cannot be probed through the change — the reply is quiet, the owner is told by mail
 - FEDERATED LINKS follow the account — the subject is the person, not the address
+- SESSIONS do not follow the account — after a CHANGE the USER signs in again
+- The EMAIL POLICY guards a CHANGE exactly as it guards REGISTRATION
+- An address taken while the LINK was in the mailbox is refused, and nothing moves
 
 **Changing the password** — `shared/microservice-security/specs/change-password.feature`
 
@@ -136,6 +139,13 @@ their repos, this page is the spec surface you can diff in one glance.
 - The closure completes only when the PORTAL confirmed its content purged
 - A failed portal purge rolls the closure back
 - Even total silence rolls the closure back (the safety net)
+
+**Showing who a person is, by their id** — `shared/microservice-security/specs/display-names.feature`
+
+> Other parts of the portal hold a person's id, never their address. When they need to show who posted something, they ask security for the names behind a batch of ids.
+
+- 1. A name is the address with its local part masked
+- 2. An id nobody holds is absent, not an error
 
 **Federated sign-in** — `shared/microservice-security/specs/federated-sign-in.feature`
 
@@ -174,6 +184,7 @@ their repos, this page is the spec surface you can diff in one glance.
 > A USER may enrol a PASSKEY — a possession FACTOR, nothing to type and nothing to copy. Once enrolled, the password alone no longer signs in: the device holding the PASSKEY must prove it is present. This exercises the same factor chain the e-mail and TOTP factors use, proving the factor port is genuinely plug-and-play. (The protocol behind a passkey is an implementation detail and lives in the glue — the argon2 rule.)
 
 - An enrolled PASSKEY signs the USER in without a typed code
+- Only the device signs the USER in — an ENROLMENT answer never does
 
 **Multi-factor sign-in** — `shared/microservice-security/specs/mfa.feature`
 
@@ -264,6 +275,7 @@ their repos, this page is the spec surface you can diff in one glance.
 - The VERIFICATION TOKEN from the link verifies the EMAIL
 - An unknown VERIFICATION TOKEN is rejected
 - Registration automatically starts VERIFICATION
+- Requesting VERIFICATION for an already verified EMAIL changes nothing
 
 ## portal
 
@@ -271,10 +283,10 @@ their repos, this page is the spec surface you can diff in one glance.
 
 **The right to be forgotten — leaving the portal takes the user's traces along** — `portal/e2e/features/account-deletion.feature`
 
-> A person who asks for their account to be deleted is owed more than a dead login: the meme they posted, the comment they signed and the list of things they saved all go with it. There is nothing to choose and nothing is kept back — that is what being forgotten means, and no amount of up-votes buys an exception. An ADMIN closing SOMEBODY ELSE's account is a different act: a ban, or house rules, and nobody is exercising any right. That one may say what happens to each kind of content — keep what the community voted up, keep it without its author, or destroy it like the leaver's own request would. These scenarios speak the user's language on purpose. The choreography underneath — the deletion fact, the purge commands, the participants' confirmations — is already specified in microservice-offboarding's own features; here only the promise made to the person counts, and it is proven against the LIVE stack: real services, real broker, real mailbox.
+> A person who asks for their account to be deleted is owed more than a dead login: the meme they posted, the comment they signed and the list of things they saved all have to be dealt with, each according to the portal's data policy. By default their memes disappear and their comments stay readable for the thread's sake — but signed by nobody. The leaver may also choose a stricter fate for their words. These scenarios speak the user's language on purpose. The choreography underneath — the deletion fact, the purge commands, the participants' confirmations — is already specified in microservice-offboarding's own features; here only the promise made to the person counts, and it is proven against the LIVE stack: real services, real broker, real mailbox.
 
-- Deleting your own account takes everything you posted with it
-- An ADMIN closing an account may keep the comments, without their author
+- Deleting the account removes the person's traces, all of them
+- What they wrote under someone else's meme goes with them
 
 **A deleted meme takes its traces along — including the ones in my favourites** — `portal/e2e/features/deletion-cascade.feature`
 
@@ -290,6 +302,16 @@ their repos, this page is the spec surface you can diff in one glance.
 - When the favourites service stays away too long, the account is handed back *(@outage)*
 
 ### microservice-comments
+
+**What a leaver's words are owed** — `portal/microservice-comments/specs/account-erasure.feature`
+
+> Anything this service holds of a person who is leaving has to go. Until somebody says the decision is final, it has to be possible to give it all back — so the COMMENTS are first taken out of sight and only later destroyed, and between those two moments nobody reading the portal can tell the difference from gone. Being out of sight is not a courtesy here. Every other service holding that person's things is deciding at the same time, and any one of them may fail; if this one had already shredded the words, there would be nothing to undo and the person would get their account back without their comments. What "destroyed" means is not this service's call either. A COMMENT is somebody else's conversation as much as its author's, so by default the words stay and the name goes — the thread reads on, signed "deleted account". Only an ADMIN closing somebody else's account may ask for something different.
+
+- Taken out of sight, the words are already gone as far as anyone can tell
+- Nothing is destroyed until the decision is final
+- Once it is final, the conversation survives and the author does not
+- An ADMIN may ask for the words to go with the name
+- Making it final destroys only what was set aside
 
 **Adding a COMMENT** — `portal/microservice-comments/specs/add-comment.feature`
 
@@ -339,13 +361,51 @@ their repos, this page is the spec surface you can diff in one glance.
 
 ### microservice-memes
 
-**An account deletion is a SAGA, so hiding comes first and erasing comes last** — `portal/microservice-memes/specs/account-erasure.feature`
+**Leaving — deleting the account, content and all** — `portal/microservice-memes/memes-ui/e2e/features/account-deletion.feature`
 
-> A meme service that shreds a leaver's pictures the moment the PURGE command arrives leaves the ORCHESTRATOR with nothing to undo when a LATER participant of the same SAGA fails — and that is not a theoretical worry: it is what used to happen, and the leaver got their account back without their memes and an e-mail apologising for a deletion that had not, in fact, been cancelled. So the meme service answers the PURGE by MARKING: the memes leave the gallery at once — the whole of what the leaver asked to see — and stay on disk, restorable, until the ORCHESTRATOR says the case is settled. Only its closure command erases anything, and the image leaving object storage is the point past which nothing can be taken back (ADR 0007).
+> The danger zone in the panel is the RODO exit, and it is deliberately not a single click: the visitor proves it is really them (step-up — a stolen session must not be able to end an account). What they posted is NOT a choice they are offered: a closure somebody requests for themselves destroys everything they wrote, and only an ADMIN closing SOMEBODY ELSE's account may attach conditions. What follows is a SAGA across the whole portal: security announces the deletion, offboarding orders every participant to purge, memes, comments and collections do it and confirm, and only then is the account gone for good. These scenarios drive that entire road in a real browser against real services on a real broker — no member of the chain stubbed out, because an end-to-end missing a member proves nothing about the member it skipped.
 
-- A failure at another participant brings the leaver's memes back
-- The closure is the point of no return — the memes are erased for good
-- The PURGE command arriving twice, as Kafka promises it may, changes nothing
+- Leaving takes the account AND the memes with it
+- What they wrote under someone else's meme goes with them
+- The wrong password does not end an account
+- Second thoughts leave everything alone
+- A second factor is asked for on the way out too
+
+**Favourites — the gallery integrated with user-collections** — `portal/microservice-memes/memes-ui/e2e/features/favourites.feature`
+
+> A signed-in visitor stars memes; the refs live in microservice-user-collections (opaque ids, saved cross-origin straight from the browser) and the gallery hydrates them back into tiles. A ref outlives its meme only until the deletion cascade catches up: collections stores opaque ids and never checks back, so for a moment the wall shows an unavailable keepsake — and then MEME_DELETED reaches user-collections and the ref is swept for good.
+
+- A starred meme lands on the favourites wall
+- Unstarring lets the favourite go
+- A favourite whose meme is deleted is swept off the wall by the cascade
+
+**The meme gallery in a real browser** — `portal/microservice-memes/memes-ui/e2e/features/gallery.feature`
+
+> The gallery is public to browse; uploading, voting and commenting need a signed-in identity from microservice-security. These scenarios drive the React UI with Playwright against the LIVE compose stack — real services on real Postgres, real Kafka, real mailbox — which run-e2e.sh brings up. The header used to say "(in-memory stores)", a leftover from the old four-jar harness; the sibling features already describe the live stack correctly, and overstating or understating what a suite proves is the one thing living documentation must not do.
+
+- An anonymous visitor browses the gallery
+- Signing in through the panel
+- An upload appears on the wall
+- A vote is a toggle
+- A comment lands in the thread
+
+**Getting into the gallery — every door the panel offers** — `portal/microservice-memes/memes-ui/e2e/features/identity.feature`
+
+> The gallery's sign-in panel is the portal's front door, and it has more than one lock: a fresh account made right here and confirmed by the mailed link, a plain password, a password plus a mailed sign-in code when the account carries a second factor — and, when the code cannot reach you, a recovery code in its place. These scenarios drive the real panel in a real browser against real security; only the mailbox is a test-environment backdoor, because a browser cannot read e-mail.
+
+- A visitor makes an account here and the mailed link lets them in
+- The wrong password does not open the door
+- An unverified account is sent back to its mailbox, not let in
+- A second factor adds the code step to the same password
+- A recovery code stands in for the mailed one
+
+**What a leaver's pictures are owed** — `portal/microservice-memes/specs/account-erasure.feature`
+
+> Anything this service holds of a person who is leaving has to go. Until somebody says the decision is final, it has to be possible to give it all back — so the MEMES first leave the gallery, the whole of what the leaver asked to see, and only later leave the disk. Being out of sight is not a courtesy here. Every other service holding that person's things is deciding at the same time, and any one of them may fail. This is not a theoretical worry: a service that shredded the pictures the moment it was asked left nothing to give back, and the leaver got their account restored without their memes and an e-mail apologising for a deletion that had not, in fact, been cancelled. The image leaving object storage is the point past which nothing can be taken back, so nothing may reach it before the decision is final. Being asked twice is normal and changes nothing — the second request finds the work already done.
+
+- Nothing is destroyed until the decision is final
+- Once it is final, the pictures are gone for good
+- Being asked twice is the same as being asked once
 
 **The purge-policy default is an ADMIN's dial** — `portal/microservice-memes/specs/admin-purge-policy.feature`
 
@@ -397,44 +457,6 @@ their repos, this page is the spec surface you can diff in one glance.
 - Repeating the same VOTE retracts it
 - A GUEST may watch, not vote
 
-**Leaving — deleting the account, content and all** — `portal/microservice-memes/memes-ui/e2e/features/account-deletion.feature`
-
-> The danger zone in the panel is the RODO exit, and it is deliberately not a single click: the visitor says what should happen to what they posted, then proves it is really them (step-up — a stolen session must not be able to end an account). What follows is a SAGA across the whole portal: security announces the deletion, offboarding orders every participant to purge, memes, comments and collections do it and confirm, and only then is the account gone for good. These scenarios drive that entire road in a real browser against real services on a real broker — no member of the chain stubbed out, because an end-to-end missing a member proves nothing about the member it skipped.
-
-- Burning it all takes the account AND the memes with it
-- The recommended choice keeps the comment, signed by nobody
-- The wrong password does not end an account
-- Second thoughts leave everything alone
-- A second factor is asked for on the way out too
-
-**Favourites — the gallery integrated with user-collections** — `portal/microservice-memes/memes-ui/e2e/features/favourites.feature`
-
-> A signed-in visitor stars memes; the refs live in microservice-user-collections (opaque ids, saved cross-origin straight from the browser) and the gallery hydrates them back into tiles. A ref outlives its meme only until the deletion cascade catches up: collections stores opaque ids and never checks back, so for a moment the wall shows an unavailable keepsake — and then MEME_DELETED reaches user-collections and the ref is swept for good.
-
-- A starred meme lands on the favourites wall
-- Unstarring lets the favourite go
-- A favourite whose meme is deleted is swept off the wall by the cascade
-
-**The meme gallery in a real browser** — `portal/microservice-memes/memes-ui/e2e/features/gallery.feature`
-
-> The gallery is public to browse; uploading, voting and commenting need a signed-in identity from microservice-security. These scenarios drive the React UI with Playwright against the LIVE compose stack — real services on real Postgres, real Kafka, real mailbox — which run-e2e.sh brings up. The header used to say "(in-memory stores)", a leftover from the old four-jar harness; the sibling features already describe the live stack correctly, and overstating or understating what a suite proves is the one thing living documentation must not do.
-
-- An anonymous visitor browses the gallery
-- Signing in through the panel
-- An upload appears on the wall
-- A vote is a toggle
-- A comment lands in the thread
-
-**Getting into the gallery — every door the panel offers** — `portal/microservice-memes/memes-ui/e2e/features/identity.feature`
-
-> The gallery's sign-in panel is the portal's front door, and it has more than one lock: a fresh account made right here and confirmed by the mailed link, a plain password, a password plus a mailed sign-in code when the account carries a second factor — and, when the code cannot reach you, a recovery code in its place. These scenarios drive the real panel in a real browser against real security; only the mailbox is a test-environment backdoor, because a browser cannot read e-mail.
-
-- A visitor makes an account here and the mailed link lets them in
-- The wrong password does not open the door
-- An unverified account is sent back to its mailbox, not let in
-- A second factor adds the code step to the same password
-- A recovery code stands in for the mailed one
-
 ### microservice-offboarding
 
 **Beginning the offboarding — a deletion FACT opens a CASE** — `portal/microservice-offboarding/specs/begin-offboarding.feature`
@@ -473,15 +495,16 @@ their repos, this page is the spec surface you can diff in one glance.
 
 ### microservice-user-collections
 
-**An account deletion empties the COLLECTIONS — carefully** — `portal/microservice-user-collections/specs/account-erasure.feature`
+**What a leaver's saved lists are owed** — `portal/microservice-user-collections/specs/account-erasure.feature`
 
-> When a person leaves the portal, the deletion arrives as a SAGA command from the offboarding ORCHESTRATOR. The purge first sets the saved REFERENCES aside; only the ORCHESTRATOR's closure destroys them for good, and if the SAGA fails at another participant, a compensation brings everything back. Every answer travels back as a CONFIRMATION naming the SAGA — and a command that names nobody is ignored, not obeyed.
+> Anything this service holds of a person who is leaving has to go. What it holds are REFERENCES — somebody else's meme or comment, saved into a list of one's own — so emptying the lists destroys nothing that anyone else can see. It still has to be undoable: until somebody says the decision is final, every list has to be restorable exactly as it was. Being out of sight is not a courtesy here. Every other service holding that person's things is deciding at the same time, and any one of them may fail; a service that shredded the lists at once would have nothing to give back, and the leaver would get their account restored with their saved lists emptied. A decision acts only on what it reserved. Being told to finish something that set nothing aside must destroy nothing, and a request that names nobody is ignored rather than obeyed — this service never guesses whose things it is being asked for.
 
-- The purge empties every COLLECTION at once and answers the ORCHESTRATOR *(@saga)*
-- A failure at another participant brings the saved list back
-- The closure is the point of no return
-- A closure for a SAGA that reserved nothing destroys nothing
-- A purge naming nobody is ignored
+- Set aside, the lists are already empty as far as their owner can tell *(@saga)*
+- Nothing is destroyed until the decision is final
+- What is set aside is not its owner's to remove either
+- Once it is final, nothing comes back
+- Making it final destroys only what was set aside
+- A request naming nobody is ignored
 
 **Listing a COLLECTION** — `portal/microservice-user-collections/specs/list-items.feature`
 
@@ -505,6 +528,27 @@ their repos, this page is the spec surface you can diff in one glance.
 - A saved REFERENCE lands in the COLLECTION
 - Saving twice is not an error — the caller is told it was already there
 - A REFERENCE too long to be real is refused at the door
+
+### specs
+
+**Closing an account — what becomes of everything the leaver left behind** — `portal/specs/account-closure.feature`
+
+> A person who asks to be forgotten is owed more than a dead login. Their meme, their comment and their saved list are held by three different parts of the portal, and the six rules below are what the portal promises about all three at once.
+
+- Answering the portal hides everything and destroys nothing
+- two parts have answered and the third has not
+- Only the closure destroys, and the closure needs every answer
+- the last answer closes the case
+- one part never got its command, so nothing is destroyed
+- When the portal gives up waiting, everything comes back
+- the silent part is waited out
+- the compensation reaches the silent part too, and costs it nothing
+- The leaver's own request admits no conditions
+- a self-closure carrying conditions destroys anyway
+- An administrator's closure is a business decision, so its conditions are honoured
+- the words stay in the thread, signed by nobody
+- A saved reference has no conditions to honour
+- conditions stated for the favourites part change nothing
 
 ## formula
 
@@ -534,6 +578,16 @@ their repos, this page is the spec surface you can diff in one glance.
 
 ### microservice-paddock
 
+**The paddock PWA in a real browser** — `formula/microservice-paddock/e2e/features/paddock.feature`
+
+> The social hub around the game: browsing servers is public, everything else — registering a server, joining an open one, planning an event, answering an RSVP — needs the one identity shared with the game and the gallery. Playwright drives the PWA against a real security (test environment) and a real paddock on in-memory H2.
+
+- An anonymous visitor sees an empty registry and no controls
+- Signing in through the dialog
+- Registering a server puts the organizer on its roster
+- Joining an open server from the registry
+- An organizer plans an event and a member answers the call
+
 **The paddock — servers, people and what's coming up** — `formula/microservice-paddock/src/test/resources/features/paddock.feature`
 
 > A racer signs in once and finds the servers they play on, who is on each, and the events and live signals around them. Identity is the security service's; game state stays on the servers.
@@ -554,14 +608,4 @@ their repos, this page is the spec surface you can diff in one glance.
 - only the author ships a new version
 - a rulebook that is not JSON is turned away at the door
 
-**The paddock PWA in a real browser** — `formula/microservice-paddock/e2e/features/paddock.feature`
-
-> The social hub around the game: browsing servers is public, everything else — registering a server, joining an open one, planning an event, answering an RSVP — needs the one identity shared with the game and the gallery. Playwright drives the PWA against a real security (test environment) and a real paddock on in-memory H2.
-
-- An anonymous visitor sees an empty registry and no controls
-- Signing in through the dialog
-- Registering a server puts the organizer on its roster
-- Joining an open server from the registry
-- An organizer plans an event and a member answers the call
-
-*254 scenarios in total.*
+*281 scenarios in total.*
