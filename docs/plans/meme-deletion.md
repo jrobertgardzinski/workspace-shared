@@ -60,18 +60,18 @@ Decisions taken by this brief (flip by editing the line, before the night starts
 
 ## 0. `shared/unit-of-work` (D1)
 
-- [ ] **0a the library.** `gh repo create jrobertgardzinski/unit-of-work --public`; pom like
+- [x] **0a the library.** `gh repo create jrobertgardzinski/unit-of-work --public`; pom like
       `shared/user-id` (artifactId `unit-of-work`, no dependencies); move
       `account-closure/src/main/java/com/jrobertgardzinski/closure/UnitOfWork.java` to
       `unit-of-work/src/main/java/com/jrobertgardzinski/unitofwork/UnitOfWork.java`, javadoc as is.
       `account-closure` depends on it and drops its own copy; `AtomicParticipantContractTest` imports
       the new package. `mvn clean install` both, in that order.
-- [ ] **0b registration.** `shared/pom.xml` `<module>unit-of-work</module>` before `account-closure`;
+- [x] **0b registration.** `shared/pom.xml` `<module>unit-of-work</module>` before `account-closure`;
       `shared/estate/shared.repos`; every `ci.yml` that checks out `account-closure` also checks out
       and installs `unit-of-work` BEFORE it: memes, comments, user-collections, offboarding,
       security, portal (`ci.yml` twice, `e2e-saga.yml`), workspace-shared. Run
       `portal/check-workflow-checkouts.sh ../shared` — it must go red before the edit and green after.
-- [ ] **0c consumers.** memes and comments participants (`*_account-closure`) and the two
+- [x] **0c consumers.** memes and comments participants (`*_account-closure`) and the two
       `PurgeCommandsListener`s import the new package. Build each service, commit.
       Push order: unit-of-work → account-closure → services → portal.
 
@@ -226,3 +226,24 @@ Decisions taken by this brief (flip by editing the line, before the night starts
 ## Progress
 
 (append lines: `- 0a done — unit-of-work 0123abc, account-closure 4567def`)
+
+- Before 0a: the Atomically -> UnitOfWork rename WAS done and pushed from the other machine
+  (account-closure 36f076c, memes 9270ddd, comments a077f29) — this machine had not fetched the
+  sub-repositories, only the two workspaces, so the brief's "move UnitOfWork.java" named a file
+  that was still called Atomically here. Fetched all 33 repos first; the local duplicate rename
+  was rebased away. Note for the next session: `git -C <workspace> pull` leaves every
+  sub-repository untouched.
+- Also before 0a: portal/main did not compile. 2aa3565 changed the specs' participant tests to
+  pass `unitOfWork`, which account-closure only gained in 36f076c, pushed ten minutes later and
+  never built together. 0a's move fixes it; account-closure-specs is green again.
+- 0a done — unit-of-work bffa786 (new repo, CI green), account-closure 74ea82b. UnitOfWork keeps
+  its one method; the javadoc is protocol-neutral now ("everything the step does commits
+  together"), because the closure-specific wording would be wrong in a library both protocols use.
+- 0b done — shared 74960a8 (aggregator, estate/shared.repos, .gitignore, its own ci.yml), portal
+  4129ef7 (ci.yml x2 jobs, e2e-saga.yml). check-workflow-checkouts.sh: red before
+  (20 modules, workflows short of 1), green after.
+- 0c done — memes 0debb5b, comments ee66a3a, user-collections 764b5fa, offboarding 66c0f5d,
+  microservice-security e5d3670. The PurgeCommandsListeners needed no change: both pass a
+  lambda, so the port's name never appears there. Builds green; account-closure-specs green.
+  Pushed unit-of-work -> account-closure -> services -> portal -> workspace-shared;
+  account-closure has no CI of its own (the reactor in workspace-shared validates it).
