@@ -14,13 +14,10 @@ docs/glossary/site/
 /microservice-security/
 /microservice-email/
 /voting/
-/purge-rule/
 /observation/
 /account-closure/
 /unit-of-work/
-/meme-deletion/
 /user-id/
-/author-directory/
 /envelope/
 /offline-jwt/
 /password/

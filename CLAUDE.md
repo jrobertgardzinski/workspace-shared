@@ -10,10 +10,24 @@ THREE sibling workspaces that replaced the old all-in-one `security` workspace
 
 ```
 Documents/git/
-├── shared/    ← THIS repo: identity + channels + every shared library
-├── portal/    ← workspace-portal: the social PORTAL product
+├── shared/    ← THIS repo: identity + channels + the libraries BOTH products could want
+├── portal/    ← workspace-portal: the social PORTAL product (+ portal-libs, its own vocabulary)
 └── formula/   ← workspace-formula: the F1 GAME product
 ```
+
+**What belongs in this kernel (the owner's verdict, 2026-09-28):** a GENERIC MECHANISM, not a
+product's vocabulary. A unit of work, an outbox, an envelope, a clock, an id — anything whose
+name and API do not know what a meme is. Not "whatever more than one repository happens to
+import": by that test `user-id` would leave the day the game stops importing it.
+
+On 2026-09-28 three libraries went the other way, to `../portal/portal-libs`: `purge-rule`,
+`author-directory` and `meme-deletion`. None of them had ever been listed below among the kernel's
+libraries — they arrived one at a time because four portal repositories needed a shared vocabulary
+and the estate offered no other home, so the kernel quietly learned what a meme was. Old documents
+in `docs/` still name their old paths; they are dated records and say what was true when written.
+
+`account-closure` deliberately stayed: `microservice-security` imports its `ClosureMessages`, so
+it is the contract BETWEEN identity and the portal, and identity is shared with the game.
 
 This workspace aggregates the independent git repositories of the kernel: the
 shared libraries (`test-starter`, `libs` (artifact `constraint`), `config`,

@@ -1,4 +1,8 @@
 # Sub-repositories of workspace-portal (the social PORTAL product): <directory> <git url>.
+# The product's own vocabulary — a meme, its thread, an author, a leaver's gallery. It used to
+# live in the kernel as purge-rule, author-directory and meme-deletion; nothing outside this
+# product ever spoke a word of it.
+portal-libs                     https://github.com/jrobertgardzinski/portal-libs.git
 microservice-memes              https://github.com/jrobertgardzinski/microservice-memes.git
 microservice-comments           https://github.com/jrobertgardzinski/microservice-comments.git
 microservice-user-collections   https://github.com/jrobertgardzinski/microservice-user-collections.git

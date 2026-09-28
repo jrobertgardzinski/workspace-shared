@@ -39,14 +39,11 @@
         <module>infrastructure-spring-outbox</module>
         <module>offline-jwt</module>
         <module>voting</module>
-        <module>purge-rule</module>
         <module>observation</module>
         <module>envelope</module>
         <module>unit-of-work</module>
         <module>account-closure</module>
-        <module>meme-deletion</module>
         <module>user-id</module>
-        <module>author-directory</module>
         <module>test-starter</module>
         <module>libs</module>
         <module>config</module>

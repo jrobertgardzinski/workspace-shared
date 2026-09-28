@@ -67,11 +67,6 @@ jobs:
           path: voting
       - uses: actions/checkout@v7
         with:
-          repository: jrobertgardzinski/purge-rule
-          path: purge-rule
-          token: ${{ secrets.REPO_PAT }}
-      - uses: actions/checkout@v7
-        with:
           repository: jrobertgardzinski/observation
           path: observation
           token: ${{ secrets.REPO_PAT }}
@@ -87,11 +82,6 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
-          repository: jrobertgardzinski/meme-deletion
-          path: meme-deletion
-          token: ${{ secrets.REPO_PAT }}
-      - uses: actions/checkout@v7
-        with:
           repository: jrobertgardzinski/account-closure
           path: account-closure
           token: ${{ secrets.REPO_PAT }}
@@ -99,11 +89,6 @@ jobs:
         with:
           repository: jrobertgardzinski/user-id
           path: user-id
-          token: ${{ secrets.REPO_PAT }}
-      - uses: actions/checkout@v7
-        with:
-          repository: jrobertgardzinski/author-directory
-          path: author-directory
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
@@ -230,11 +215,6 @@ jobs:
           path: voting
       - uses: actions/checkout@v7
         with:
-          repository: jrobertgardzinski/purge-rule
-          path: purge-rule
-          token: ${{ secrets.REPO_PAT }}
-      - uses: actions/checkout@v7
-        with:
           repository: jrobertgardzinski/observation
           path: observation
           token: ${{ secrets.REPO_PAT }}
@@ -250,11 +230,6 @@ jobs:
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
-          repository: jrobertgardzinski/meme-deletion
-          path: meme-deletion
-          token: ${{ secrets.REPO_PAT }}
-      - uses: actions/checkout@v7
-        with:
           repository: jrobertgardzinski/account-closure
           path: account-closure
           token: ${{ secrets.REPO_PAT }}
@@ -262,11 +237,6 @@ jobs:
         with:
           repository: jrobertgardzinski/user-id
           path: user-id
-          token: ${{ secrets.REPO_PAT }}
-      - uses: actions/checkout@v7
-        with:
-          repository: jrobertgardzinski/author-directory
-          path: author-directory
           token: ${{ secrets.REPO_PAT }}
       - uses: actions/checkout@v7
         with:
