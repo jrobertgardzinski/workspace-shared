@@ -20,10 +20,13 @@ Czyli cztery pytania do każdego modułu:
 
 Skan jest **czytający**. Nic nie jest zmieniane; to lista ustaleń, nie refaktor.
 
-## Stan: SKAN ZAKOŃCZONY 2026-10-02
+## Stan: SKAN ZAKOŃCZONY, POTEM ZWERYFIKOWANY ADWERSARYJNIE 2026-10-02
 
-Wszystkie sześć punktów checklisty odhaczone. Odpowiedź na założenie jest w sekcji
-**ODPOWIEDŹ NA ZAŁOŻENIE** niżej, ustalenia per cel w sekcjach 1-6.
+Wszystkie sześć punktów checklisty odhaczone, a potem cały plik przeszedł weryfikację przez 128
+agentów — **wynik jest w ANEKSIE na końcu i on tu rządzi.** Sekcje 1-6 oraz sekcja „ODPOWIEDŹ NA
+ZAŁOŻENIE" zostały napisane PRZED weryfikacją i zawierają 24 odstępstwa z błędnymi cytatami lub
+liczbami, pięć nieprawdziwych twierdzeń przekrojowych oraz tezę nośną wypowiedzianą nad ćwiercią
+kodu, której nikt nie otworzył. **Nie czytaj ich bez aneksu.**
 
 Ten plik jest całym stanem przeglądu. Gdyby trzeba było go kiedyś rozszerzyć o nowy cel:
 
@@ -1100,3 +1103,190 @@ kodem — rzeczywistymi.
   `password-security-system`, `hash-algorithm-contract`.
 
 ---
+## ANEKS 2026-10-02: co zostało z tego raportu po adwersaryjnej weryfikacji
+
+128 agentów. Każde z 58 odstępstw przeszło przez **dwóch niezależnych oponentów**: jeden sprawdzał
+wyłącznie fakty (otwierał każdy cytowany plik i linię, z mandatem obalenia), drugi atakował sam
+wniosek (czy to w ogóle odstępstwo od założenia właściciela i czy uzasadnienie w javadocu na miejscu
+się broni). Osiem agentów zrobiło **przekrojowe sweepy po całej posiadłości**, po jednym pytaniu
+każdy, jednym przejściem — czyli to, co pierwszy przebieg sumował z sześciu lokalnych grepów.
+Trzech krytyków szukało luk. Wszystkie tezy nośne tego aneksu sprawdzone ręcznie, ponad agentami.
+
+**Wynik w jednym zdaniu: ten plik nie jest listą odstępstw od założenia właściciela.** Jest listą
+58 uwag o jakości, z których 24 mają błędne cytaty albo liczby, pięć twierdzeń przekrojowych jest
+nieprawdziwych, a nośna teza „założenie jest zrealizowane w jednym miejscu" jest wypowiedziana nad
+ćwiercią kodu, której nikt nie otworzył.
+
+| | |
+|---|---|
+| odstępstw zważonych | 58, utraconych 0 |
+| fakty prawdziwe w całości | 34 |
+| fakty częściowo fałszywe | 23 |
+| fakty fałszywe | 1 |
+| wniosek „to odstępstwo od założenia" obalony | 57 |
+| przeszło oba sita i jest istotne | **0** |
+
+### Zastrzeżenie metodologiczne, które jest moje, nie agentów
+
+Refuterom kazałem domyślać się **na korzyść obalenia**. Wynik 57 na 58 nie jest więc neutralnym
+pomiarem i nie wolno go czytać jako „raport jest bezwartościowy". Ale **rozkład powodów** już jest
+pomiarem, bo powód trzeba było wskazać w kodzie: **48 z 57 obaleń mówi jedno i to samo — raport
+dołożył własne kryterium.** Sprawdziłem osobno cztery odstępstwa leżące najmocniej na samym
+założeniu (1.3, 2.1, 2.7, 3.5) i argument broni się w każdym. Jedno obalenie jest słabe i tak je
+oznaczam: **1.1** obala „wzorzec odbiega od wzorca" częściowo przez definicję, bo skoro właściciel
+wskazał security jako dobry przykład, to security nie może od siebie odbiegać.
+
+### Co właściwie zmierzył pierwszy przebieg
+
+Założenie ma dwie sprawdzalne połowy. Pierwsza: **repozytoria siedzą w domain.** Jest spełniona
+wszędzie — repozytoria encji domenowych są w `*-domain` w każdym serwisie. Raport rozszerzył
+„repozytoria" na „wszystkie porty" i wynik tego rozszerzenia zaraportował jako odstępstwo od słów
+właściciela. Co gorsza, **wzorzec wskazany przez właściciela sam to kryterium łamie i ma na to
+zapisane uzasadnienie**: `security-system` trzyma port `CodeHasher` z javadokiem „A port so the
+crypto stays in the infrastructure layer, out of the domain and system layers". Port techniczny
+używany przez jeden moduł mieszka u właściciela w tym module. Odstępstwa 1.3, 2.7, 3.5 i 6.6 mierzą
+więc kryterium, którego nie postawiono.
+
+Druga połowa: **application bierze prymitywy, buduje klasy domenowe, odpala use case.** Tu raport
+dołożył „**każde** VO ma powstawać w application, wzorcem `Supplier<VO>`, a wynik ma być `sealed`".
+Tego też nie postawiono. `AddComment.execute(String memeId, UserId author, String text)` buduje
+`new Comment(...)` z prymitywów i dopiero potem zapisuje — czyli **spełnia założenie**, a raport
+nazwał to niezgodnością, bo nie buduje także tożsamości. Odstępstwa 2.2, 3.3, 4.1 i 5.3 padają na
+tym samym.
+
+### Najcięższy błąd: ćwierć kodu, której nikt nie otworzył
+
+Zakres wyciąłem jedną komendą na starcie i nikt go nie sprawdził. Krytyk zakresu policzył:
+**19 repozytoriów, około 327 z 1334 plików `.java`, nie było ani celem, ani na liście „poza
+zakresem"** — m.in. `portal/portal-libs`, `portal/portal-specs`, `shared/config`,
+`shared/transactional-outbox`, `shared/account-closure`, `system-time`. Teza „w całej posiadłości"
+jest wypowiedziana nad 75% kodu. W posiadłości jest plik, który sam wymienia 30 repozytoriów
+(`shared/estate/*.repos`) i nikt do niego nie zajrzał.
+
+**I w wyciętym kawałku leży dosłownie druga połowa zdania właściciela.** Sprawdzone ręcznie:
+
+- `formula/formula-simulator/src/main/java/com/jrobertgardzinski/formula/` ma pakiety
+  **`domain`, `config`, `system`, `application`, `infrastructure`** — cztery warstwy, tylko jako
+  pakiety jednego modułu Mavena, nie jako moduły.
+- `application/GameService.java:34` **grupuje siedem use case'ów w jeden serwis**
+  (`RunResearch`, `ChangeEra`, `Homologate`, `SignDriver`, `ReleaseDriver`, `AdvanceSeason`,
+  `AwardRaceResult`), a jego javadoc w linii 30 wprost mówi: *„It used to cite security's
+  `SecurityService` as the precedent for this shape"*.
+- Repozytoria są w `domain`: `DriverRepository`, `GameRepository`. W `system/` jest dziewięć klas.
+
+Właściciel powiedział „zgrupowanie use case'ów w serwisy". Raport odpowiedział, że tę rolę **„pełni
+nic"** i że po skasowaniu `SecurityService` wzorzec nie ma nigdzie kontynuacji. Kontynuacja
+istnieje, zna swoje pochodzenie, działa na ścieżce produkcyjnej — i została wycięta z zakresu, bo
+ma jeden moduł Mavena zamiast czterech. **To unieważnia tezę nośną całego raportu.**
+
+Drugi pominięty przypadek, też sprawdzony ręcznie: `shared/microservice-email`. `entity/Mail.java:11`
+to `record Mail(@NotBlank @Email String to, ...)` — **niezmienniki domeny są adnotacjami
+frameworka** (`jakarta.validation.constraints`), a `pom.xml` tego serwisu **nie zawiera ani jednej
+wzmianki o `email-domain`**: serwis wysyłający maile nie używa biblioteki, w której według sekcji 6
+„żyje mechanizm pomostu". To najtwardsza odpowiedź na założenie w całej posiadłości i nie ma jej w
+raporcie.
+
+### Pięć twierdzeń przekrojowych, które sweepy poprawiły
+
+Każde z nich było w pierwszym przebiegu sumą sześciu lokalnych grepów. Teraz ma jedno źródło.
+Liczby z jednego przejścia po 1334 plikach i 76–79 pomach; pięć korekt sprawdziłem sam.
+
+1. **Porty, 90 wierszy.** 33 w `*-domain`, **12 w `system` i wszystkie w samym `security-system`** —
+   cztery moduły `*-system` w portalu mają **dokładnie zero portów**. 5 w `application`, 2 w
+   `usecase`. Przy okazji: zdanie z sekcji 1 „żadnego interfejsu `*Repository` poza `security-domain`
+   z wyjątkiem `SettingsRepository`" jest **nieprawdziwe** — w `security-infrastructure` jest
+   **15 interfejsów `*JdbcRepository extends CrudRepository`** (sprawdzone: `find … | xargs grep -l`
+   daje 15).
+2. **Martwe krawędzie: 23 w 15 modułach, nie „cztery z pięciu serwisów".** Martwą krawędź ma
+   **pięć z pięciu** serwisów. Rozkład: comments 5, collections 5, offboarding 4, portal-specs 4,
+   memes 3, security 1. Zjawisko jest systemowe, a nie dwu-trzyprzypadkowe, i teza o `email` oraz
+   `password` jako jedynych czystych **nie stoi**: `microservice-security` ma identyczną
+   konfigurację `analyze-only` z `failOnWarning`.
+3. **`Supplier<VO>`: teza „zero poza security" jest fałszywa co do litery.** Pięć z czternastu
+   wystąpień grupy „odroczenie konstrukcji VO" leży poza `microservice-security`:
+   `libs/Constraints.java:30`, `_EmailCandidate.java:25`, `CanRegister.java:29`,
+   `CanResetPassword.java:22`, `CreatePasswordHash.java:30`. Intencja („żaden serwis portalu")
+   trzyma się w stu procentach — ale rdzeń mechanizmu leży **warstwę niżej**, w `shared/libs`, nie
+   obok security.
+4. **`sealed` wynik use case'u poza security: JEST, trzy razy.** To korekta sześciu poprzednich
+   przejść, które odpowiadały „nie". Sprawdzone ręcznie: `CanRegister.evaluate` zwraca
+   `Outcome<Email>`, a `Outcome` jest `public sealed interface`. Tak samo `CanResetPassword.evaluate`
+   i `CreatePasswordHash.create`. Dodatkowo **produkcyjny portal oddaje zapieczętowane wyniki na
+   drucie Kafki**: `CommentsDeletionParticipant` i `CollectionsDeletionParticipant` zwracają
+   `DeletionOutcome` (sealed, `portal-libs/meme-deletion`). W całej posiadłości jest 24 deklaracji
+   `sealed`; w produkcie gry zero. Przy okazji odstępstwo **3.9 ma konwencje na krzyż**: to
+   `DeleteComment` ma rekord, a `HideComment` goły enum, nie odwrotnie — i zdanie „w security
+   wszystkie use case'y zwracają `sealed`" jest nieprawdziwe (`SetSetting`, `SetUserRoles`,
+   `SourceThrottle` zwracają rekordy nad enumami).
+5. **Strażnicy struktury: 41 mechanizmów, nie trzy.** ArchUnit faktycznie nie ma go nigdzie — ale
+   **jego brak jest zapisaną decyzją, nie przeoczeniem**: słowo „ArchUnit" występuje w javadocu
+   sześciu plików testowych (`MemeReadFilterTest`, `CommentReadFilterTest`, `ItemReadFilterTest`,
+   trzy `RetiredAddressKeyTest`) i za każdym razem tłumaczy, dlaczego go nie użyto („a bytecode-level
+   rule cannot see inside a string constant… would buy a green test and no guarantee"). Sprawdzone
+   ręcznie: **22 pliki testowe czytają drzewo źródeł**, z czego 12 poza własnym modułem. Teza
+   „kierunek zależności trzymają wyłącznie pomy" była po prostu nieprawdziwa.
+
+Dwa sweepy dorzuciły rzeczy, których nikt nie szukał: **typów z sufiksem `Id`/`Ref` jest w całej
+posiadłości dokładnie trzy** (`UserId`, `ItemRef`, `RejectedAuthenticationId`), a `collections`
+**ma** typ domenowy na id itemu (`ItemRef`) — więc punkt 3 syntezy jest sprzeczny z własną sekcją 4.
+I: **16 katalogów-widm oraz 20 nieprawdziwych zdań w dokumentacji**, w tym `system-time`, który ma
+`<parent>` `com.jrobertgardzinski:ddd-sample:1.0-SNAPSHOT` **nieistniejący ani w posiadłości, ani w
+`~/.m2`** — moduł jest niebudowalny i nie występuje w żadnym manifeście (sprawdzone ręcznie).
+
+### Co z 58 odstępstw naprawdę zostało
+
+**Fakty fałszywe, jedno.** Odstępstwo **6.3** — i jest to teza, którą sam wyróżniłem właścicielowi
+w podsumowaniu. Twierdziło: „żaden test w `email`, `password`, `libs` ani `microservice-security` nie
+pokrywa wariantu `RejectedDueToInvariantBreakage`". **Nieprawda.** Wariant jest pokryty
+behawioralnie: `microservice-security/specs/register.feature:25-26,30` ma przykłady z adresem
+`invalid` i `a..b@gmail.com`, które przechodzą przez `RegisterSteps.java:46`
+(`register.execute(() -> Email.of(email), …)`) i dalej przez `_EmailCandidate.java:29-30`, a kody
+są asertowane. Prawdziwe zdanie brzmi: **nie ma testu, który nazywa ten wariant wprost** — brak
+testu jednostkowego w `libs` (nie ma `src/test`) i w `email-usecase`; jedyne pokrycie jest
+pośrednie, przez scenariusz rejestracji.
+
+**Fakty częściowo fałszywe, 23.** Rdzeń się trzyma, sypią się numery linii, liczby i zbyt mocne
+słowa. To jest odpowiedź na pytanie, które sam zadałem przed tym przebiegiem: jaki jest poziom
+błędu w cytatach, których nie sprawdziłem. **Około 41%.**
+
+**Istotne po obu sitach, dwa — i oba o bibliotekach, nie o podziale na warstwy:** 6.3 (powyżej) i
+6.4 (`Constraints.validate` łapie `Exception`, więc NPE w supplierze staje się „odmową z powodu
+złamanego niezmiennika" z komunikatem `null`). Przy 6.4 refuter ma rację co do adresu zarzutu:
+`Constraints` leży w `shared/libs`, czyli w generycznym kernelu, i **nie może** złapać
+`InvalidEmailException` bez zaciągnięcia słownictwa produktu — co łamałoby regułę kernela zapisaną
+w `shared/CLAUDE.md`. Zarzut zostaje jako ryzyko działania, nie jako błąd warstwowania.
+
+### Luki, które zostały po tym aneksie
+
+Krytycy wskazali pięć pytań, których nie zadał ani pierwszy przebieg, ani ten:
+
+- **Graf zależności jako graf.** Ani raz nie zapytano, czy którykolwiek moduł dolny zależy od
+  górnego. To jedyne twarde „tak" na pierwszą połowę założenia, jakie da się wystawić, i nikt go nie
+  wystawił.
+- **Drugi, równoległy graf: test-jary i scope `test`/`provided`.** Ponad trzydzieści krawędzi.
+  Granica pilnowana w scope `compile` w scope `test` nie obowiązuje, a fejki z test-jarów domen są
+  faktycznym publicznym API portów — i to one spinają cztery domeny w jeden classpath.
+- **Kto testuje use case'y i z którego modułu.** Policzone: `security-infrastructure` 105 plików
+  testowych przeciw `security-system` 30; `memes-infrastructure` 81 przeciw `memes-application` 8 i
+  `memes-system` 2. Jeśli application ma być pomostem, to use case'y pod nim muszą dać się odpalić
+  bez frameworka — a masa testowa siedzi w infrastrukturze.
+- **Granica transakcji.** Cztery serwisy, cztery różne mechanizmy, nigdy nie porównane. Kto trzyma
+  granicę transakcji, ten jest pomostem, niezależnie od tego, jak się moduł nazywa.
+- **Kanał błędu między warstwami.** W całej posiadłości są tylko dwa własne typy wyjątków w dolnych
+  warstwach. „Pomost buduje klasy domenowe" to w praktyce zdanie o tym, kto łapie porażkę budowy, a
+  mapy tego nie ma.
+
+Do tego: **nie uruchomiono żadnego builda**, więc liczba martwych krawędzi jest wynikiem czytania
+pomów, a nie wykonania — mimo że trzy repozytoria mają już wpięty `analyze-only` z
+`failOnWarning=true`, który dałby odpowiedź wiążącą. I nie zdefiniowano, czym jest „martwa
+krawędź": grep importów po `src/main` nie widzi zależności runtime, procesorów adnotacji ani
+`ServiceLoader`a.
+
+### Czego ten aneks nie zrobił
+
+Nie zmienił ani jednego pliku kodu. Nie uruchomił buildów. Nie poprawił sekcji 1–6 w miejscu —
+błędne cytaty i liczby **zostają tam, gdzie były**, a ten aneks jest ich erratą; kto czyta sekcje
+1–6, musi czytać je razem z nim. Nie przeskanował 19 pominiętych repozytoriów, tylko nazwał je i
+sprawdził dwa najcięższe przypadki (`formula-simulator`, `microservice-email`). Niesprawdzalnych
+werdyktów: zero. Żadnych propozycji refaktoru — to nadal lista ustaleń pod decyzje, tylko wreszcie
+wiadomo, które z nich się trzymają.
