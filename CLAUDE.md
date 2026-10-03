@@ -32,14 +32,16 @@ it is the contract BETWEEN identity and the portal, and identity is shared with 
 This workspace aggregates the independent git repositories of the kernel: the
 shared libraries (`test-starter`, `libs` (artifact `constraint`), `config`,
 `email`, `password`, `adjustable-clock`, `infrastructure-micronaut-clock`,
-`voting`, `offline-jwt`), the hexagonal Micronaut auth service
+`infrastructure-spring-outbox`, `transactional-outbox`, `unit-of-work`,
+`envelope`, `observation`, `user-id`, `voting`, `offline-jwt`), the hexagonal
+Micronaut auth service
 (`microservice-security`), the mail service (`microservice-email`, BCE Quarkus)
 and the Python channel/identity stubs (`microservice-idp`, `microservice-sms`,
 `microservice-push`). Each sub-directory has its **own `.git`, history and
 remote** and is gitignored here. This repo versions only the aggregating
 `pom.xml` (a pure aggregator, **not** a parent pom), the identity/observability
 compose files, the cross-estate tooling (`estate.sh` + its map in `estate/*.repos` — clone/pull/status/check
-for all 27 repositories; `infra-smoke.sh`, `aggregate_allure.py`,
+for all 33 repositories; `infra-smoke.sh`, `aggregate_allure.py`,
 `build_features.py`, `build_javadocs.sh`, `build_c4.py`, `allure-serve.sh`) and shared docs
 (`docs/`, `todo.md` — the cross-project backlog lives here).
 

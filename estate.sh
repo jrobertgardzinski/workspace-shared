@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# estate.sh — the whole estate (three workspaces, ~27 repositories) from one command.
+# estate.sh — the whole estate (three workspaces, 33 repositories) from one command.
 #
 #   ./estate.sh clone  [--root DIR] [--dry-run]   clone every workspace and sub-repository that is missing
 #   ./estate.sh pull   [--root DIR]               fast-forward every clean repository (dirty ones are skipped and listed)
@@ -161,6 +161,18 @@ cmd_check() {
       fi
     done < <(entries "$manifest")
   done < <(workspaces)
+  # 4. the estate ROOT itself: checks 1-3 only ever look inside a workspace, so a repository
+  #    sitting next to them was invisible to the map. system-time hid there with a <parent> that
+  #    had not existed since the 2026-07-12 split, unbuilt and unnoticed. Reported, not failed:
+  #    whether such a repository joins a manifest or leaves is the owner's call, not the tool's.
+  local unmapped=()
+  for d in "$ROOT"/*/; do
+    d="${d%/}"; local name; name="$(basename "$d")"
+    [ -d "$d/.git" ] || continue
+    workspaces | awk '{print $1}' | grep -qx "$name" && continue
+    unmapped+=("$name")
+  done
+  [ "${#unmapped[@]}" = 0 ] || echo "at the estate root, in no manifest: ${unmapped[*]}"
   [ "$problems" = 0 ] && echo "map matches territory: $(all_repos | wc -l) repositories" || exit 1
 }
 
