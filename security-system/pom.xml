@@ -61,6 +61,10 @@
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>unit-test-starter</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>password-config</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
