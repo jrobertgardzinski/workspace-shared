@@ -8,6 +8,7 @@ import com.jrobertgardzinski.email.external.MxRecordPort;
 import com.jrobertgardzinski.util.constraint.*;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -17,9 +18,17 @@ import java.util.function.Supplier;
 public class CanRegister {
 
     private final Constraints<Email> constraints;
+    private final List<Constraint<Email>> con2;
 
     CanRegister(List<ErrorConstraint<Email>> errorConstraints, List<WarningConstraint<Email>> warningConstraints) {
         this.constraints = new Constraints<>(errorConstraints, warningConstraints);
+        con2 = new LinkedList<>();
+        con2.addAll(errorConstraints);
+        con2.addAll(warningConstraints);
+    }
+
+    public List<Constraint<Email>> getCon2() {
+        return con2;
     }
 
     public static Builder builder() {
@@ -28,6 +37,10 @@ public class CanRegister {
 
     public Outcome<Email> evaluate(Supplier<Email> email) {
         return _EmailCandidate.evaluate(constraints, email);
+    }
+
+    public Outcome<Email> evaluate(Email email) {
+        constraints.
     }
 
     public static final class Builder {
