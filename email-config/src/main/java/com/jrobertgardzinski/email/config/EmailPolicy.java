@@ -1,16 +1,15 @@
 package com.jrobertgardzinski.email.config;
 
-import com.jrobertgardzinski.email.config.port.EmailConfigPort;
 
 /**
  * The domain rules registration is judged by; a {@code null} list is an absent rule.
  */
-public record CanRegisterConfig(
+public record EmailPolicy(
         BlockedDomains blockedDomains,
         DisposableDomains disposableDomains,
-        CompanyDomains companyDomains) implements EmailConfigPort {
+        CompanyDomains companyDomains) {
 
-    public CanRegisterConfig() {
+    public EmailPolicy() {
         this(null, null, null);
     }
 }

@@ -1,9 +1,9 @@
 package com.jrobertgardzinski.email.policy;
 
 import com.jrobertgardzinski.email.config.BlockedDomains;
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.config.CompanyDomains;
 import com.jrobertgardzinski.email.config.DisposableDomains;
+import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
@@ -19,23 +19,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 @Epic("Email")
 @Feature("Use case")
-@Story("CanRegister")
-class CanRegisterRulesTest {
-
-    private final CanRegister canRegister = new CanRegister();
+@Story("AdmitEmail")
+class AdmitEmailRulesTest {
 
     /** Every rule switched on: one blocked domain, one disposable domain, one company. */
-    private static final CanRegisterConfig EVERY_RULE = new CanRegisterConfig(
+    private static final EmailPolicy EVERY_RULE = new EmailPolicy(
             new BlockedDomains(Set.of(DomainPart.of("blocked.example"))),
             new DisposableDomains(Set.of(DomainPart.of("throwaway.example"))),
             new CompanyDomains(Set.of(DomainPart.of("acme.example"))));
 
+    private final AdmitEmail admitEmail = new AdmitEmail(EVERY_RULE);
+
     @Property
     @Label("every broken rule is named, in policy order")
     void brokenRulesAreNamedInPolicyOrder(@ForAll("refusals") Tuple.Tuple2<String, List<EmailError>> row) {
-        CanRegister.Result result = canRegister.evaluate(Email.of(row.get1()), EVERY_RULE);
+        AdmitEmail.Result result = admitEmail.evaluate(Email.of(row.get1()));
 
-        assertThat(result).isEqualTo(new CanRegister.Result.Failure(row.get2()));
+        assertThat(result).isEqualTo(new AdmitEmail.Result.Failure(row.get2()));
     }
 
     @Provide
@@ -56,7 +56,7 @@ class CanRegisterRulesTest {
     void passingAddressIsAllowed() {
         Email email = Email.of("user@acme.example");
 
-        assertThat(canRegister.evaluate(email, EVERY_RULE)).isEqualTo(new CanRegister.Result.Success(email));
+        assertThat(admitEmail.evaluate(email)).isEqualTo(new AdmitEmail.Result.Success(email));
     }
 
     @Example
@@ -64,15 +64,15 @@ class CanRegisterRulesTest {
     void absentRulesAreSkipped() {
         Email email = Email.of("user@throwaway.example");
 
-        assertThat(canRegister.evaluate(email, new CanRegisterConfig())).isEqualTo(new CanRegister.Result.Success(email));
+        assertThat(new AdmitEmail(new EmailPolicy()).evaluate(email)).isEqualTo(new AdmitEmail.Result.Success(email));
     }
 
     @Example
     @Label("the domain is compared case-insensitively: the value lower-cases it before any rule sees it")
     void domainCaseDoesNotMatter() {
-        CanRegister.Result result = canRegister.evaluate(Email.of("user@Blocked.Example"), EVERY_RULE);
+        AdmitEmail.Result result = admitEmail.evaluate(Email.of("user@Blocked.Example"));
 
-        assertThat(result).isEqualTo(new CanRegister.Result.Failure(
+        assertThat(result).isEqualTo(new AdmitEmail.Result.Failure(
                 List.of(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN)));
     }
 }

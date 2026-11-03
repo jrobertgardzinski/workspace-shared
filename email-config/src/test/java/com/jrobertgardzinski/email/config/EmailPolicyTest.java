@@ -14,15 +14,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Epic("Email")
 @Feature("Config")
-@Story("CanRegister")
-class CanRegisterConfigTest {
+@Story("EmailPolicy")
+class EmailPolicyTest {
 
     private static final List<String> FIELD_NAMES = List.of("blockedDomains", "disposableDomains", "companyDomains");
 
     @Example
     @Label("default config → all domain wrappers are absent")
     void defaultConfig() {
-        CanRegisterConfig config = new CanRegisterConfig();
+        EmailPolicy config = new EmailPolicy();
         Allure.parameter("default", config);
 
         assertThat(config.blockedDomains()).isNull();
