@@ -33,7 +33,7 @@ public class AdmitEmail {
     }
 
     public sealed interface Result {
-        record Success(Email email) implements Result {}
+        record Success() implements Result {}
         record Failure(List<EmailError> errors) implements Result {
             public Failure {
                 errors = List.copyOf(errors);
@@ -58,7 +58,7 @@ public class AdmitEmail {
         }
 
         if (errors.isEmpty()) {
-            return new Result.Success(email);
+            return new Result.Success();
         }
         else {
             return new Result.Failure(errors);
