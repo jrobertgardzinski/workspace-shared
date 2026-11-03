@@ -47,7 +47,7 @@ public class Register {
         }
         if (email != null) {
             switch (admitEmail.evaluate(email)) {
-                case AdmitEmail.Result.Success success -> { }
+                case AdmitEmail.Result.Success _ -> { }
                 case AdmitEmail.Result.Failure failure -> emailErrors = failure.errors();
             }
         }
