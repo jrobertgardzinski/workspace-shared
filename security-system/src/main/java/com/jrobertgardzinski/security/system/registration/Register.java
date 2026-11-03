@@ -1,11 +1,10 @@
 package com.jrobertgardzinski.security.system.registration;
 
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.InvalidEmailException;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
-import com.jrobertgardzinski.email.policy.CanRegister;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
@@ -24,16 +23,14 @@ import java.util.function.Supplier;
 public class Register {
 
     private final UserRepository userRepository;
-    private final CanRegisterConfig canRegisterConfig;
-    private final CanRegister canRegister;
+    private final AdmitEmail admitEmail;
     private final CreatePasswordHash createPasswordHash;
     private final PasswordPolicyInForce passwordPolicyInForce;
 
-    public Register(UserRepository userRepository, CanRegisterConfig canRegisterConfig,
+    public Register(UserRepository userRepository, AdmitEmail admitEmail,
                     HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicyInForce) {
         this.userRepository = userRepository;
-        this.canRegisterConfig = canRegisterConfig;
-        this.canRegister = new CanRegister();
+        this.admitEmail = admitEmail;
         this.createPasswordHash = new CreatePasswordHash(hashAlgorithm);
         this.passwordPolicyInForce = passwordPolicyInForce;
     }
@@ -49,9 +46,9 @@ public class Register {
             emailErrors = List.of(refused.error());
         }
         if (email != null) {
-            switch (canRegister.evaluate(email, canRegisterConfig)) {
-                case CanRegister.Result.Success success -> { }
-                case CanRegister.Result.Failure failure -> emailErrors = failure.errors();
+            switch (admitEmail.evaluate(email)) {
+                case AdmitEmail.Result.Success success -> { }
+                case AdmitEmail.Result.Failure failure -> emailErrors = failure.errors();
             }
         }
 

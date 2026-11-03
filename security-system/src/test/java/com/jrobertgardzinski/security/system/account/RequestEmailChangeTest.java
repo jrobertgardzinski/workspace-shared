@@ -1,10 +1,11 @@
 package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.config.BlockedDomains;
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
 import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
@@ -28,7 +29,7 @@ class RequestEmailChangeTest {
     private static final Email NEW = Email.of("new@example.com");
     private static final Email BLOCKED = Email.of("user@blocked.example");
     /** The deployment's policy for every example here: one blocked domain, no other rule. */
-    private static final CanRegisterConfig EMAIL_POLICY = new CanRegisterConfig(
+    private static final EmailPolicy EMAIL_POLICY = new EmailPolicy(
             new BlockedDomains(Set.of(DomainPart.of("blocked.example"))), null, null);
 
     private UserRepository userRepository;
@@ -41,7 +42,7 @@ class RequestEmailChangeTest {
         userRepository = Mockito.mock(UserRepository.class);
         emailChangeRepository = Mockito.mock(EmailChangeRepository.class);
         notifier = Mockito.mock(EmailVerificationNotifier.class);
-        requestEmailChange = new RequestEmailChange(userRepository, emailChangeRepository, notifier, EMAIL_POLICY);
+        requestEmailChange = new RequestEmailChange(userRepository, emailChangeRepository, notifier, new AdmitEmail(EMAIL_POLICY));
     }
 
     @Example

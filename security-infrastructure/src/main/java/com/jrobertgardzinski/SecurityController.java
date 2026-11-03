@@ -4,7 +4,7 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.system.registration.Register;
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.password.domain.PasswordError;
@@ -66,7 +66,7 @@ public class SecurityController {
     private final ClientIpResolver clientIpResolver;
     private final EmailVerificationRepository emailVerifications;
     private final RegistrationNoticeNotifier registrationNoticeNotifier;
-    private final CanRegisterConfig emailPolicy;
+    private final EmailPolicy emailPolicy;
 
     public SecurityController(Register register, RequestEmailVerification requestEmailVerification,
                               TransactionBoundary transactionBoundary,
@@ -74,7 +74,7 @@ public class SecurityController {
                               ClientIpResolver clientIpResolver,
                               EmailVerificationRepository emailVerifications,
                               RegistrationNoticeNotifier registrationNoticeNotifier,
-                              CanRegisterConfig emailPolicy) {
+                              EmailPolicy emailPolicy) {
         this.register = register;
         this.requestEmailVerification = requestEmailVerification;
         this.transactionBoundary = transactionBoundary;
@@ -151,7 +151,7 @@ public class SecurityController {
      * {@code true}: those lists are denylists, and enumerating them would only tell an abuser
      * which domains to try next; the caller already knows which domain they typed.
      */
-    static List<Map<String, Object>> emailErrors(List<EmailError> errors, CanRegisterConfig policy) {
+    static List<Map<String, Object>> emailErrors(List<EmailError> errors, EmailPolicy policy) {
         // exhaustive on purpose: a new rule does not compile until it says what parameter it carries
         return errors.stream().map(error -> Map.<String, Object>of(error.name(), switch (error) {
             case NOT_A_COMPANY_DOMAIN -> policy.companyDomains().values().stream()

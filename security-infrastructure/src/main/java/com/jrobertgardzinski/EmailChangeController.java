@@ -3,7 +3,7 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.system.account.RequestEmailChange;
 import com.jrobertgardzinski.security.system.account.RequestEmailChangeResult;
@@ -36,11 +36,11 @@ final class EmailChangeController {
     private final TransactionBoundary transactionBoundary;
     private final com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier noticeNotifier;
     private final StepUpGuard stepUpGuard;
-    private final CanRegisterConfig emailPolicy;
+    private final EmailPolicy emailPolicy;
 
     EmailChangeController(RequestEmailChange requestEmailChange, TransactionBoundary transactionBoundary,
                           com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier noticeNotifier,
-                          StepUpGuard stepUpGuard, CanRegisterConfig emailPolicy) {
+                          StepUpGuard stepUpGuard, EmailPolicy emailPolicy) {
         this.requestEmailChange = requestEmailChange;
         this.transactionBoundary = transactionBoundary;
         this.noticeNotifier = noticeNotifier;

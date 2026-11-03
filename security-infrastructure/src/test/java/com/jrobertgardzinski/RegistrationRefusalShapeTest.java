@@ -1,6 +1,6 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.config.CompanyDomains;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.EmailError;
@@ -29,7 +29,7 @@ class RegistrationRefusalShapeTest {
     @Test
     @DisplayName("the company rule is valued by the domains an employee MAY register from, sorted")
     void companyRuleNamesTheAllowedDomains() {
-        var policy = new CanRegisterConfig(null, null,
+        var policy = new EmailPolicy(null, null,
                 new CompanyDomains(Set.of(DomainPart.of("zeta.example"), DomainPart.of("acme.example"))));
 
         var errors = SecurityController.emailErrors(List.of(EmailError.NOT_A_COMPANY_DOMAIN), policy);
@@ -42,7 +42,7 @@ class RegistrationRefusalShapeTest {
     void denylistsStayBare() {
         var errors = SecurityController.emailErrors(
                 List.of(EmailError.RFC_FORMAT_INVALID, EmailError.DOMAIN_BLOCKED, EmailError.DISPOSABLE_DOMAIN,
-                        EmailError.EMAIL_FORMAT_INVALID), new CanRegisterConfig());
+                        EmailError.EMAIL_FORMAT_INVALID), new EmailPolicy());
 
         assertEquals(List.of(
                 Map.of("RFC_FORMAT_INVALID", true),

@@ -10,7 +10,8 @@ import com.jrobertgardzinski.security.system.settings.SetSetting;
 import com.jrobertgardzinski.security.system.settings.SettingCatalog;
 import com.jrobertgardzinski.security.system.settings.SettingsRepository;
 import com.jrobertgardzinski.email.config.BlockedDomains;
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.email.config.CompanyDomains;
 import com.jrobertgardzinski.email.config.DisposableDomains;
 import com.jrobertgardzinski.email.domain.DomainPart;
@@ -202,7 +203,7 @@ public class BeanFactory {
      * merely that this one was not among them.
      */
     @Context
-    CanRegisterConfig emailPolicyAtBoot(Environment environment) {
+    EmailPolicy emailPolicyAtBoot(Environment environment) {
         // @Context, not @Singleton: this is a VALUE read from properties, and the javadoc above has
         // always claimed it is read "once at startup, so a misspelt domain fails the boot rather
         // than the first registration". It was not: the policy was built inside the Register bean's
@@ -211,8 +212,8 @@ public class BeanFactory {
         return emailPolicy(environment);
     }
 
-    private static CanRegisterConfig emailPolicy(Environment environment) {
-        return new CanRegisterConfig(
+    private static EmailPolicy emailPolicy(Environment environment) {
+        return new EmailPolicy(
                 domains(environment, "security.email.blocked.domains", BlockedDomains::new),
                 domains(environment, "security.email.disposable.domains", DisposableDomains::new),
                 domains(environment, "security.email.company.domains", CompanyDomains::new));
@@ -228,10 +229,16 @@ public class BeanFactory {
         return domains.isEmpty() ? null : rule.apply(domains);
     }
 
+    /** One answer to "may this address hold an account here", for registration and for a change of address alike. */
+    @Singleton
+    AdmitEmail admitEmail(EmailPolicy emailPolicy) {
+        return new AdmitEmail(emailPolicy);
+    }
+
     @Singleton
     Register register(UserRepository userRepository, HashAlgorithmPort hashAlgorithm,
-                      PasswordPolicyInForce passwordPolicy, CanRegisterConfig emailPolicy) {
-        return new Register(userRepository, emailPolicy, hashAlgorithm, passwordPolicy);
+                      PasswordPolicyInForce passwordPolicy, AdmitEmail admitEmail) {
+        return new Register(userRepository, admitEmail, hashAlgorithm, passwordPolicy);
     }
 
     /**
@@ -693,10 +700,10 @@ public class BeanFactory {
     @Singleton
     RequestEmailChange requestEmailChange(UserRepository userRepository,
                                           EmailChangeRepository emailChangeRepository,
-                                          EmailVerificationNotifier notifier, CanRegisterConfig emailPolicy) {
-        // the same policy Register is given: one deployment, one answer to "may this address hold
+                                          EmailVerificationNotifier notifier, AdmitEmail admitEmail) {
+        // the same judge Register is given: one deployment, one answer to "may this address hold
         // an account here"
-        return new RequestEmailChange(userRepository, emailChangeRepository, notifier, emailPolicy);
+        return new RequestEmailChange(userRepository, emailChangeRepository, notifier, admitEmail);
     }
 
     @Singleton

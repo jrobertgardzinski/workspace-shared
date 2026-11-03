@@ -2,7 +2,8 @@ package com.jrobertgardzinski.security.application.feature.registration;
 
 import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.hash.algorithm.argon2.Argon2HashAlgorithm;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
@@ -25,7 +26,7 @@ public class RegisterSteps {
     private final FakeUserRepository users = new FakeUserRepository();
     private final Register register = new Register(
             users,
-            new CanRegisterConfig(),
+            new AdmitEmail(new EmailPolicy()),
             new Argon2HashAlgorithm(),
             // The REBUILD defaults, and not a policy invented here. The spec's literals are samples
             // of what this service ships with (specs/README.md), so judging them against a

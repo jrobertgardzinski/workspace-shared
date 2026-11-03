@@ -1,12 +1,13 @@
 package com.jrobertgardzinski.security.system.registration;
 
 import com.jrobertgardzinski.email.config.BlockedDomains;
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.config.CompanyDomains;
 import com.jrobertgardzinski.email.config.DisposableDomains;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
@@ -40,10 +41,10 @@ class RegisterTest {
     private static final HashedPassword HASH = new HashedPassword("hash:" + PASSWORD);
     private static final PasswordPolicy POLICY = PasswordPolicy.withDefaults();
     /** The email policy in force for every attempt here: one blocked domain, no other rule. */
-    private static final CanRegisterConfig EMAIL_POLICY = new CanRegisterConfig(
+    private static final EmailPolicy EMAIL_POLICY = new EmailPolicy(
             new BlockedDomains(Set.of(DomainPart.of("blocked.example"))), null, null);
     /** Every rule switched on, for the examples that walk the rules one by one. */
-    private static final CanRegisterConfig EVERY_RULE = new CanRegisterConfig(
+    private static final EmailPolicy EVERY_RULE = new EmailPolicy(
             new BlockedDomains(Set.of(DomainPart.of("blocked.example"))),
             new DisposableDomains(Set.of(DomainPart.of("throwaway.example"))),
             new CompanyDomains(Set.of(DomainPart.of("acme.example"))));
@@ -72,7 +73,7 @@ class RegisterTest {
     void init() {
         userRepository = Mockito.mock(UserRepository.class);
         algorithm = new CountingAlgorithm();
-        register = new Register(userRepository, EMAIL_POLICY, algorithm, () -> POLICY);
+        register = new Register(userRepository, new AdmitEmail(EMAIL_POLICY), algorithm, () -> POLICY);
     }
 
     @Property
@@ -152,7 +153,7 @@ class RegisterTest {
     @Property
     @Label("each email rule answers with its own code; a domain that passes every rule answers with none")
     void each_email_rule_by_its_code(@ForAll("addressesUnderEveryRule") Tuple.Tuple2<String, List<EmailError>> row) {
-        Register strict = new Register(userRepository, EVERY_RULE, algorithm, () -> POLICY);
+        Register strict = new Register(userRepository, new AdmitEmail(EVERY_RULE), algorithm, () -> POLICY);
 
         RegisterResult result = strict.execute(() -> Email.of(row.get1()), () -> PlaintextPassword.of(PASSWORD));
 
@@ -177,7 +178,7 @@ class RegisterTest {
     @Example
     @Label("a deployment without email rules admits any well-formed address")
     void absent_rules_are_skipped() {
-        Register lenient = new Register(userRepository, new CanRegisterConfig(), algorithm, () -> POLICY);
+        Register lenient = new Register(userRepository, new AdmitEmail(new EmailPolicy()), algorithm, () -> POLICY);
         Mockito.when(userRepository.save(Mockito.any())).thenAnswer(call -> call.getArgument(0));
 
         RegisterResult result = lenient.execute(() -> Email.of("user@throwaway.example"), () -> PlaintextPassword.of(PASSWORD));

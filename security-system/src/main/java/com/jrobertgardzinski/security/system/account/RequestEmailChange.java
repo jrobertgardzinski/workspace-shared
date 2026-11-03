@@ -1,10 +1,9 @@
 package com.jrobertgardzinski.security.system.account;
 
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
-import com.jrobertgardzinski.email.policy.CanRegister;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
 import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
@@ -30,20 +29,20 @@ public class RequestEmailChange {
     private final UserRepository userRepository;
     private final EmailChangeRepository emailChangeRepository;
     private final EmailVerificationNotifier notifier;
-    private final CanRegisterConfig emailPolicy;
+    private final AdmitEmail admitEmail;
 
     public RequestEmailChange(UserRepository userRepository, EmailChangeRepository emailChangeRepository,
-                              EmailVerificationNotifier notifier, CanRegisterConfig emailPolicy) {
+                              EmailVerificationNotifier notifier, AdmitEmail admitEmail) {
         this.userRepository = userRepository;
         this.emailChangeRepository = emailChangeRepository;
         this.notifier = notifier;
-        this.emailPolicy = emailPolicy;
+        this.admitEmail = admitEmail;
     }
 
     public RequestEmailChangeResult execute(Email currentEmail, Email newEmail) {
         // the same question Register asks of a new address, asked again of the one an account wants
         // to move to: a closed shop that only checks at registration is not closed
-        if (new CanRegister().evaluate(newEmail, emailPolicy) instanceof CanRegister.Result.Failure(List<EmailError> errors)) {
+        if (admitEmail.evaluate(newEmail) instanceof AdmitEmail.Result.Failure(List<EmailError> errors)) {
             return new RequestEmailChangeResult.Rejected(errors);
         }
         if (userRepository.existsBy(NormalizedEmail.of(newEmail))) {
