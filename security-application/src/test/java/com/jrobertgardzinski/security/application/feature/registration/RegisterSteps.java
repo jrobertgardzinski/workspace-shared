@@ -68,19 +68,19 @@ public class RegisterSteps {
 
     @Then("the EMAIL is flagged as {word}")
     public void theEmailIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().emailErrors().codes());
+        assertFlag(flag, rejected().emailErrors());
     }
 
     @Then("the password is flagged as {word}")
     public void thePasswordIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().passwordErrors().codes());
+        assertFlag(flag, rejected().passwordErrors());
     }
 
     private RegisterResult.Rejected rejected() {
         return assertInstanceOf(RegisterResult.Rejected.class, result);
     }
 
-    private void assertFlag(String flag, List<String> errors) {
+    private void assertFlag(String flag, List<?> errors) {
         switch (flag) {
             case "invalid" -> assertFalse(errors.isEmpty(), "expected validation errors, but there were none");
             case "accepted" -> assertTrue(errors.isEmpty(), "expected no validation errors, but got: " + errors);

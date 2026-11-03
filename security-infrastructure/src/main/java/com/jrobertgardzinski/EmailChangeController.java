@@ -4,6 +4,7 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.security.system.account.RequestEmailChange;
 import com.jrobertgardzinski.security.system.account.RequestEmailChangeResult;
 import io.micronaut.http.HttpRequest;
@@ -75,7 +76,9 @@ final class EmailChangeController {
             case RequestEmailChangeResult.Rejected rejected ->
                     HttpResponse.unprocessableEntity().body(Map.of(
                             "emailErrors",
-                            SecurityController.emailErrors(rejected.emailErrors(), rejected.emailPolicy())));
+                            SecurityController.emailErrors(
+                                    rejected.emailErrors().stream().map(EmailError::valueOf).toList(),
+                                    rejected.emailPolicy())));
             case RequestEmailChangeResult.EmailTaken ignored -> {
                 // quiet refusal: the wire looks like a fresh request; the address owner is told by mail
                 transactionBoundary.execute(() -> {

@@ -6,6 +6,8 @@ import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.system.registration.Register;
 import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.DomainPart;
+import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.system.registration.RegisterResult;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
@@ -129,8 +131,8 @@ public class SecurityController {
             case RegisterResult.Rejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
                             .body(Map.of(
-                                    "emailErrors", emailErrors(rejected.emailErrors().codes(), rejected.emailPolicy()),
-                                    "passwordErrors", passwordErrors(rejected.passwordErrors().codes(), rejected.passwordPolicy())));
+                                    "emailErrors", emailErrors(rejected.emailErrors(), rejected.emailPolicy()),
+                                    "passwordErrors", passwordErrors(rejected.passwordErrors(), rejected.passwordPolicy())));
             case RegisterResult.EmailAlreadyTaken alreadyTaken ->
                     HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
         };
@@ -144,11 +146,14 @@ public class SecurityController {
      * {@code true}: those lists are denylists, and enumerating them would only tell an abuser
      * which domains to try next; the caller already knows which domain they typed.
      */
-    static List<Map<String, Object>> emailErrors(List<String> codes, CanRegisterConfig policy) {
-        return codes.stream().map(code -> Map.<String, Object>of(code, switch (code) {
-            case "NOT_A_COMPANY_DOMAIN" -> policy.companyDomains().values().stream()
+    static List<Map<String, Object>> emailErrors(List<EmailError> errors, CanRegisterConfig policy) {
+        // exhaustive on purpose: a new rule does not compile until it says what parameter it carries
+        return errors.stream().map(error -> Map.<String, Object>of(error.name(), switch (error) {
+            case NOT_A_COMPANY_DOMAIN -> policy.companyDomains().values().stream()
                     .map(DomainPart::value).sorted().toList();
-            default -> Boolean.TRUE;
+            case EMAIL_BLANK, EMAIL_FORMAT_INVALID, LOCAL_PART_EMPTY, LOCAL_PART_DOT_AT_EDGE,
+                 LOCAL_PART_CONSECUTIVE_DOTS, DOMAIN_EMPTY, DOMAIN_MISSING_DOT,
+                 RFC_FORMAT_INVALID, DOMAIN_BLOCKED, DISPOSABLE_DOMAIN -> Boolean.TRUE;
         })).toList();
     }
 
@@ -157,11 +162,11 @@ public class SecurityController {
      * force for this attempt — or {@code true} where the rule has none (digit, uppercase,
      * lowercase say everything in their code already).
      */
-    static List<Map<String, Object>> passwordErrors(List<String> codes, PasswordPolicy policy) {
-        return codes.stream().map(code -> Map.<String, Object>of(code, switch (code) {
-            case "MIN_LENGTH_NOT_MET" -> policy.minLength().value();
-            case "SPECIAL_CHAR_REQUIRED" -> policy.specialChars().value();
-            default -> Boolean.TRUE;
+    static List<Map<String, Object>> passwordErrors(List<PasswordError> errors, PasswordPolicy policy) {
+        return errors.stream().map(error -> Map.<String, Object>of(error.name(), switch (error) {
+            case MIN_LENGTH_NOT_MET -> policy.minLength().value();
+            case SPECIAL_CHAR_REQUIRED -> policy.specialChars().value();
+            case PASSWORD_BLANK, LOWERCASE_REQUIRED, UPPERCASE_REQUIRED, DIGIT_REQUIRED -> Boolean.TRUE;
         })).toList();
     }
 }

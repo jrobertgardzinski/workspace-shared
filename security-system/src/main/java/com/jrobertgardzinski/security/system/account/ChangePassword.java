@@ -49,12 +49,17 @@ public class ChangePassword {
         if (found.isEmpty() || !hashAlgorithm.verify(found.get().passwordHash(), currentPassword.get())) {
             return new ChangePasswordResult.WrongCurrentPassword();
         }
-        Optional<HashedPassword> newHash = new CreatePasswordHash(hashAlgorithm, passwordPolicy.current())
-                .create(newPassword).findValue();
-        if (newHash.isEmpty()) {
+        PlaintextPassword candidate;
+        try {
+            candidate = newPassword.get();
+        } catch (IllegalArgumentException blank) {
             return new ChangePasswordResult.WeakPassword();
         }
-        userRepository.updatePassword(email, newHash.get());
+        CreatePasswordHash.Result judged = new CreatePasswordHash(hashAlgorithm).create(candidate, passwordPolicy.current());
+        if (!(judged instanceof CreatePasswordHash.Result.Success(HashedPassword newHash))) {
+            return new ChangePasswordResult.WeakPassword();
+        }
+        userRepository.updatePassword(email, newHash);
         sessions.revokeAllSessions(email);   // the old password's sessions do not survive it
         return new ChangePasswordResult.Changed();
     }

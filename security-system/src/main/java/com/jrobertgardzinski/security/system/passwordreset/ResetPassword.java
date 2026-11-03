@@ -67,9 +67,14 @@ public class ResetPassword {
     }
 
     public ResetPasswordResult execute(PasswordResetToken token, Supplier<PlaintextPassword> newPassword) {
-        Optional<HashedPassword> hashed = new CreatePasswordHash(hashAlgorithm, passwordPolicy.current())
-                .create(newPassword).findValue();
-        if (hashed.isEmpty()) {
+        PlaintextPassword candidate;
+        try {
+            candidate = newPassword.get();
+        } catch (IllegalArgumentException blank) {
+            return new ResetPasswordResult.WeakPassword();
+        }
+        CreatePasswordHash.Result judged = new CreatePasswordHash(hashAlgorithm).create(candidate, passwordPolicy.current());
+        if (!(judged instanceof CreatePasswordHash.Result.Success(HashedPassword hashed))) {
             return new ResetPasswordResult.WeakPassword();
         }
         Optional<PasswordResetRepository.PendingReset> pending = passwordResetRepository.consumeReset(token);
@@ -87,7 +92,7 @@ public class ResetPassword {
             // password has been reset" all the same.
             return new ResetPasswordResult.InvalidToken();
         }
-        userRepository.updatePassword(email, hashed.get());
+        userRepository.updatePassword(email, hashed);
         passwordlessAccounts.setPasswordless(email, false);   // the account now has a password
         sessions.revokeAllSessions(email);   // the old password's sessions do not survive it
         return new ResetPasswordResult.PasswordReset(email);

@@ -3,88 +3,111 @@ package com.jrobertgardzinski.security.system.registration;
 import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.email.policy.CanRegister;
+import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.email.domain.InvalidEmailException;
+import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
+import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
-import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.password.policy.PasswordPolicyInForce;
-import com.jrobertgardzinski.security.domain.vo.RegisterRequest;
+import com.jrobertgardzinski.security.domain.entity.User;
+import com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 
 public class Register {
+
+    // the same shape email-usecase's _RfcFormatConstraint checks; copied here because that class is package-private
+    private static final Pattern RFC_FORMAT = Pattern.compile(
+            "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
+                    + "@"
+                    + "[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+                    + "(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$");
+
     private final UserRepository userRepository;
     private final CanRegisterConfig canRegisterConfig;
-    private final HashAlgorithmPort hashAlgorithm;
+    private final CreatePasswordHash createPasswordHash;
     private final PasswordPolicyInForce passwordPolicyInForce;
 
     public Register(UserRepository userRepository, CanRegisterConfig canRegisterConfig,
                     HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicyInForce) {
         this.userRepository = userRepository;
         this.canRegisterConfig = canRegisterConfig;
-        this.hashAlgorithm = hashAlgorithm;
+        this.createPasswordHash = new CreatePasswordHash(hashAlgorithm);
         this.passwordPolicyInForce = passwordPolicyInForce;
     }
 
-    public RegisterResult execute(Supplier<Email> email, Supplier<PlaintextPassword> password) {
+    public RegisterResult execute(Supplier<Email> emailCandidate, Supplier<PlaintextPassword> passwordCandidate) {
+        PasswordPolicy passwordPolicy = passwordPolicyInForce.current();
+        List<EmailError> emailErrors = new ArrayList<>();
+        List<PasswordError> passwordErrors = new ArrayList<>();
 
+        Email email = null;
+        try {
+            email = emailCandidate.get();
+            emailErrors.addAll(policyErrors(email));
+        } catch (InvalidEmailException refused) {
+            emailErrors.add(refused.error());
+        }
 
-        return new RegistrationAttempt(
-                _EmailVerdict.judge(canRegisterConfig, email),
-                _PasswordVerdict.judge(hashAlgorithm, passwordPolicyInForce.current(), password),
-                userRepository
-        ).resolve();
-    }
+        // judged even when the address already failed: the form shows both channels in one round.
+        // A passing password is hashed here, BEFORE existsBy below: a taken address answers the same
+        // 201 as a fresh one, and it must take the same time, or the clock tells the caller what
+        // the body hides
+        PlaintextPassword password = null;
+        try {
+            password = passwordCandidate.get();
+        } catch (IllegalArgumentException blank) {
+            passwordErrors.add(PasswordError.PASSWORD_BLANK);
+        }
+        HashedPassword hashedPassword = null;
+        if (password != null) {
+            switch (createPasswordHash.create(password, passwordPolicy)) {
+                case CreatePasswordHash.Result.Success success -> hashedPassword = success.hashedPassword();
+                case CreatePasswordHash.Result.Failure failure -> passwordErrors.addAll(failure.errors());
+            }
+        }
 
-    public RegisterResult execute2(RegisterRequest registerRequest) {
-        Email email = registerRequest.getEmail();
-        PlaintextPassword plaintextPassword = registerRequest.getPlaintextPassword();
-
-        CanRegister canRegister = CanRegister.builder()
-                .blockingDomains(canRegisterConfig.blockedDomains())
-                .blockingDisposable(canRegisterConfig.disposableDomains())
-                .requiringCompanyEmployee(canRegisterConfig.companyDomains())
-                .build();
-
-        if (!collectErrorsForEmail(email.domain()).isEmpty()) {
+        if (!emailErrors.isEmpty() || !passwordErrors.isEmpty()) {
+            return new RegisterResult.Rejected(emailErrors, canRegisterConfig, passwordErrors, passwordPolicy);
+        }
+        if (userRepository.existsBy(NormalizedEmail.of(email))) {
             return new RegisterResult.EmailAlreadyTaken(email);
         }
-
-        PasswordPolicy ab = passwordPolicyInForce.current();
-        if (!blah(plaintextPassword, ab).isEmpty()) {
-            return new RegisterResult.Rejected(em)
+        try {
+            return new RegisterResult.Registered(userRepository.save(new User(email, hashedPassword)));
+        } catch (EmailAlreadyTakenException e) {
+            // the storage uniqueness check lost the race after our existsBy check passed
+            return new RegisterResult.EmailAlreadyTaken(email);
         }
-        CreatePasswordHash createPasswordHash = new CreatePasswordHash(hashAlgorithm, passwordPolicyInForce.current());
-
-        //canRegister.getCon2().stream().
-
-        // dobra chuj, dalej nie dam rady. Chciałem po prostu w tym miejscu w prosty sposób zwalidować email podany do rejestracji i wyjebać error, potem jeszcze password do walidacji i też wyjebać error albo dać sukces. Dasz rade to ogarnąć?
     }
 
-    private List<String> blah(PlaintextPassword plaintextPassword, PasswordPolicy ab) {
-        List<String> errors = new LinkedList<>();
-        if (ab.minLength().value() > plaintextPassword.value().length()) {
-            errors.add("minLength");
+    private List<EmailError> policyErrors(Email email) {
+        List<EmailError> errors = new ArrayList<>();
+        DomainPart domain = email.domain();
+        if (!RFC_FORMAT.matcher(email.value()).matches()) {
+            errors.add(EmailError.RFC_FORMAT_INVALID);
+        }
+        // a null rule is an absent rule: the deployment did not configure that list
+        if (canRegisterConfig.blockedDomains() != null
+                && canRegisterConfig.blockedDomains().values().contains(domain)) {
+            errors.add(EmailError.DOMAIN_BLOCKED);
+        }
+        if (canRegisterConfig.disposableDomains() != null
+                && canRegisterConfig.disposableDomains().values().contains(domain)) {
+            errors.add(EmailError.DISPOSABLE_DOMAIN);
+        }
+        if (canRegisterConfig.companyDomains() != null
+                && !canRegisterConfig.companyDomains().values().contains(domain)) {
+            errors.add(EmailError.NOT_A_COMPANY_DOMAIN);
         }
         return errors;
-    }
-
-    private List<String> collectErrorsForEmail(DomainPart domainPart) {
-        List<String> emailErrors = new LinkedList<>();
-        if (canRegisterConfig.blockedDomains().values().contains(domainPart)) {
-            emailErrors.add("blocked");
-        }
-        if (canRegisterConfig.disposableDomains().values().contains(domainPart)) {
-            emailErrors.add("disposable");
-        }
-        if (!canRegisterConfig.companyDomains().values().contains(domainPart)) {
-            emailErrors.add("company");
-        }
-        return emailErrors;
     }
 }

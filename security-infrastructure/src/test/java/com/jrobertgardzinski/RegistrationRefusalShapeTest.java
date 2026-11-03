@@ -3,6 +3,8 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.config.CompanyDomains;
 import com.jrobertgardzinski.email.domain.DomainPart;
+import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.password.config.MinLength;
 import com.jrobertgardzinski.password.config.SpecialChars;
@@ -30,21 +32,23 @@ class RegistrationRefusalShapeTest {
         var policy = new CanRegisterConfig(null, null,
                 new CompanyDomains(Set.of(DomainPart.of("zeta.example"), DomainPart.of("acme.example"))));
 
-        var errors = SecurityController.emailErrors(List.of("NOT_A_COMPANY_DOMAIN"), policy);
+        var errors = SecurityController.emailErrors(List.of(EmailError.NOT_A_COMPANY_DOMAIN), policy);
 
         assertEquals(List.of(Map.of("NOT_A_COMPANY_DOMAIN", List.of("acme.example", "zeta.example"))), errors);
     }
 
     @Test
-    @DisplayName("denylist rules and the format rule carry no parameter: the caller knows what they typed")
+    @DisplayName("denylist rules, the format rule and the address's own invariants carry no parameter")
     void denylistsStayBare() {
         var errors = SecurityController.emailErrors(
-                List.of("RFC_FORMAT_INVALID", "DOMAIN_BLOCKED", "DISPOSABLE_DOMAIN"), new CanRegisterConfig());
+                List.of(EmailError.RFC_FORMAT_INVALID, EmailError.DOMAIN_BLOCKED, EmailError.DISPOSABLE_DOMAIN,
+                        EmailError.EMAIL_FORMAT_INVALID), new CanRegisterConfig());
 
         assertEquals(List.of(
                 Map.of("RFC_FORMAT_INVALID", true),
                 Map.of("DOMAIN_BLOCKED", true),
-                Map.of("DISPOSABLE_DOMAIN", true)), errors);
+                Map.of("DISPOSABLE_DOMAIN", true),
+                Map.of("EMAIL_FORMAT_INVALID", true)), errors);
     }
 
     @Test
@@ -53,11 +57,13 @@ class RegistrationRefusalShapeTest {
         var policy = PasswordPolicy.defaultsExcept(new MinLength(12), new SpecialChars("#?!"));
 
         var errors = SecurityController.passwordErrors(
-                List.of("MIN_LENGTH_NOT_MET", "SPECIAL_CHAR_REQUIRED", "DIGIT_REQUIRED"), policy);
+                List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.SPECIAL_CHAR_REQUIRED,
+                        PasswordError.DIGIT_REQUIRED, PasswordError.PASSWORD_BLANK), policy);
 
         assertEquals(List.of(
                 Map.of("MIN_LENGTH_NOT_MET", 12),
                 Map.of("SPECIAL_CHAR_REQUIRED", "#?!"),
-                Map.of("DIGIT_REQUIRED", true)), errors);
+                Map.of("DIGIT_REQUIRED", true),
+                Map.of("PASSWORD_BLANK", true)), errors);
     }
 }
