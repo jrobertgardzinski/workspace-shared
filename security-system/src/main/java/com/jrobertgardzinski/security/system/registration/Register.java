@@ -1,11 +1,11 @@
 package com.jrobertgardzinski.security.system.registration;
 
 import com.jrobertgardzinski.email.config.CanRegisterConfig;
-import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.InvalidEmailException;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
+import com.jrobertgardzinski.email.policy.CanRegister;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
@@ -17,22 +17,15 @@ import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
-import java.util.regex.Pattern;
 
 public class Register {
 
-    // the same shape email-usecase's _RfcFormatConstraint checks; copied here because that class is package-private
-    private static final Pattern RFC_FORMAT = Pattern.compile(
-            "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+"
-                    + "@"
-                    + "[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
-                    + "(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$");
-
     private final UserRepository userRepository;
     private final CanRegisterConfig canRegisterConfig;
+    private final CanRegister canRegister;
     private final CreatePasswordHash createPasswordHash;
     private final PasswordPolicyInForce passwordPolicyInForce;
 
@@ -40,6 +33,7 @@ public class Register {
                     HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicyInForce) {
         this.userRepository = userRepository;
         this.canRegisterConfig = canRegisterConfig;
+        this.canRegister = new CanRegister();
         this.createPasswordHash = new CreatePasswordHash(hashAlgorithm);
         this.passwordPolicyInForce = passwordPolicyInForce;
     }
@@ -48,12 +42,17 @@ public class Register {
         PasswordPolicy passwordPolicy = passwordPolicyInForce.current();
 
         Email email = null;
-        List<EmailError> emailErrors;
+        List<EmailError> emailErrors = List.of();
         try {
             email = emailCandidate.get();
-            emailErrors = policyErrors(email);
         } catch (InvalidEmailException refused) {
             emailErrors = List.of(refused.error());
+        }
+        if (email != null) {
+            switch (canRegister.evaluate(email, canRegisterConfig)) {
+                case CanRegister.Result.Success success -> { }
+                case CanRegister.Result.Failure failure -> emailErrors = failure.errors();
+            }
         }
 
         // judged even when the address already failed: the form shows both channels in one round.
@@ -61,22 +60,22 @@ public class Register {
         // 201 as a fresh one, and it must take the same time, or the clock tells the caller what
         // the body hides
         PlaintextPassword password = null;
-        List<PasswordError> passwordErrors = List.of();
+        CreatePasswordHash.Result.Failure passwordFailure = null;
         try {
             password = passwordCandidate.get();
         } catch (IllegalArgumentException blank) {
-            passwordErrors = List.of(PasswordError.PASSWORD_BLANK);
+            passwordFailure = new CreatePasswordHash.Result.Failure(List.of(PasswordError.PASSWORD_BLANK), passwordPolicy);
         }
         HashedPassword hashedPassword = null;
         if (password != null) {
             switch (createPasswordHash.create(password, passwordPolicy)) {
                 case CreatePasswordHash.Result.Success success -> hashedPassword = success.hashedPassword();
-                case CreatePasswordHash.Result.Failure failure -> passwordErrors = failure.errors();
+                case CreatePasswordHash.Result.Failure failure -> passwordFailure = failure;
             }
         }
 
-        if (!emailErrors.isEmpty() || !passwordErrors.isEmpty()) {
-            return new RegisterResult.Rejected(emailErrors, canRegisterConfig, passwordErrors, passwordPolicy);
+        if (!emailErrors.isEmpty() || passwordFailure != null) {
+            return new RegisterResult.Rejected(emailErrors, Optional.ofNullable(passwordFailure));
         }
         if (userRepository.existsBy(NormalizedEmail.of(email))) {
             return new RegisterResult.EmailAlreadyTaken(email);
@@ -87,27 +86,5 @@ public class Register {
             // the storage uniqueness check lost the race after our existsBy check passed
             return new RegisterResult.EmailAlreadyTaken(email);
         }
-    }
-
-    private List<EmailError> policyErrors(Email email) {
-        List<EmailError> errors = new ArrayList<>();
-        DomainPart domain = email.domain();
-        if (!RFC_FORMAT.matcher(email.value()).matches()) {
-            errors.add(EmailError.RFC_FORMAT_INVALID);
-        }
-        // a null rule is an absent rule: the deployment did not configure that list
-        if (canRegisterConfig.blockedDomains() != null
-                && canRegisterConfig.blockedDomains().values().contains(domain)) {
-            errors.add(EmailError.DOMAIN_BLOCKED);
-        }
-        if (canRegisterConfig.disposableDomains() != null
-                && canRegisterConfig.disposableDomains().values().contains(domain)) {
-            errors.add(EmailError.DISPOSABLE_DOMAIN);
-        }
-        if (canRegisterConfig.companyDomains() != null
-                && !canRegisterConfig.companyDomains().values().contains(domain)) {
-            errors.add(EmailError.NOT_A_COMPANY_DOMAIN);
-        }
-        return errors;
     }
 }

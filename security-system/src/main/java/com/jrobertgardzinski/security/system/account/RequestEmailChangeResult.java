@@ -1,6 +1,6 @@
 package com.jrobertgardzinski.security.system.account;
 
-import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.domain.EmailError;
 
 import java.util.List;
 
@@ -15,9 +15,9 @@ public sealed interface RequestEmailChangeResult {
     record EmailTaken() implements RequestEmailChangeResult {}
 
     /**
-     * The address broke the e-mail policy. Carries the policy in force alongside the broken rules,
-     * exactly as registration does, so one client renders both refusals with one piece of code —
-     * and so a closed shop can say which domains an employee may move to.
+     * The address broke the e-mail policy: the rules it broke, exactly as registration reports
+     * them, so one client renders both refusals with one piece of code. The policy itself is a
+     * boot value the edge already holds.
      */
-    record Rejected(List<String> emailErrors, CanRegisterConfig emailPolicy) implements RequestEmailChangeResult {}
+    record Rejected(List<EmailError> emailErrors) implements RequestEmailChangeResult {}
 }

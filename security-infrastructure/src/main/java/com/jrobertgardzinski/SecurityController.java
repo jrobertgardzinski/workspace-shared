@@ -66,13 +66,15 @@ public class SecurityController {
     private final ClientIpResolver clientIpResolver;
     private final EmailVerificationRepository emailVerifications;
     private final RegistrationNoticeNotifier registrationNoticeNotifier;
+    private final CanRegisterConfig emailPolicy;
 
     public SecurityController(Register register, RequestEmailVerification requestEmailVerification,
                               TransactionBoundary transactionBoundary,
                               @Named("registration") SourceThrottle registrationThrottle,
                               ClientIpResolver clientIpResolver,
                               EmailVerificationRepository emailVerifications,
-                              RegistrationNoticeNotifier registrationNoticeNotifier) {
+                              RegistrationNoticeNotifier registrationNoticeNotifier,
+                              CanRegisterConfig emailPolicy) {
         this.register = register;
         this.requestEmailVerification = requestEmailVerification;
         this.transactionBoundary = transactionBoundary;
@@ -80,6 +82,7 @@ public class SecurityController {
         this.clientIpResolver = clientIpResolver;
         this.emailVerifications = emailVerifications;
         this.registrationNoticeNotifier = registrationNoticeNotifier;
+        this.emailPolicy = emailPolicy;
     }
 
     @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
@@ -131,8 +134,10 @@ public class SecurityController {
             case RegisterResult.Rejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
                             .body(Map.of(
-                                    "emailErrors", emailErrors(rejected.emailErrors(), rejected.emailPolicy()),
-                                    "passwordErrors", passwordErrors(rejected.passwordErrors(), rejected.passwordPolicy())));
+                                    "emailErrors", emailErrors(rejected.emailErrors(), emailPolicy),
+                                    "passwordErrors", rejected.passwordFailure()
+                                            .map(failure -> passwordErrors(failure.errors(), failure.policy()))
+                                            .orElse(List.of())));
             case RegisterResult.EmailAlreadyTaken alreadyTaken ->
                     HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
         };

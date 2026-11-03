@@ -3,8 +3,8 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
+import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.security.system.account.RequestEmailChange;
 import com.jrobertgardzinski.security.system.account.RequestEmailChangeResult;
 import io.micronaut.http.HttpRequest;
@@ -36,14 +36,16 @@ final class EmailChangeController {
     private final TransactionBoundary transactionBoundary;
     private final com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier noticeNotifier;
     private final StepUpGuard stepUpGuard;
+    private final CanRegisterConfig emailPolicy;
 
     EmailChangeController(RequestEmailChange requestEmailChange, TransactionBoundary transactionBoundary,
                           com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier noticeNotifier,
-                          StepUpGuard stepUpGuard) {
+                          StepUpGuard stepUpGuard, CanRegisterConfig emailPolicy) {
         this.requestEmailChange = requestEmailChange;
         this.transactionBoundary = transactionBoundary;
         this.noticeNotifier = noticeNotifier;
         this.stepUpGuard = stepUpGuard;
+        this.emailPolicy = emailPolicy;
     }
 
     @Post(value = "/request", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
@@ -76,9 +78,7 @@ final class EmailChangeController {
             case RequestEmailChangeResult.Rejected rejected ->
                     HttpResponse.unprocessableEntity().body(Map.of(
                             "emailErrors",
-                            SecurityController.emailErrors(
-                                    rejected.emailErrors().stream().map(EmailError::valueOf).toList(),
-                                    rejected.emailPolicy())));
+                            SecurityController.emailErrors(rejected.emailErrors(), emailPolicy)));
             case RequestEmailChangeResult.EmailTaken ignored -> {
                 // quiet refusal: the wire looks like a fresh request; the address owner is told by mail
                 transactionBoundary.execute(() -> {

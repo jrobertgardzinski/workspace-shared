@@ -61,7 +61,7 @@ class RequestEmailChangeTest {
 
         RequestEmailChangeResult.Rejected rejected =
                 assertInstanceOf(RequestEmailChangeResult.Rejected.class, result);
-        assertEquals(java.util.List.of("DOMAIN_BLOCKED"), rejected.emailErrors());
+        assertEquals(java.util.List.of(com.jrobertgardzinski.email.domain.EmailError.DOMAIN_BLOCKED), rejected.emailErrors());
         // a closed shop that only checks at registration is not closed: the account could walk out
         // through a change, taking its roles, factors and federated links with it
         Mockito.verify(emailChangeRepository, Mockito.never()).startChange(Mockito.any(), Mockito.any());

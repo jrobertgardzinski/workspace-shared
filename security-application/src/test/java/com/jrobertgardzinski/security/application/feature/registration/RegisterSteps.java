@@ -73,7 +73,7 @@ public class RegisterSteps {
 
     @Then("the password is flagged as {word}")
     public void thePasswordIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().passwordErrors());
+        assertFlag(flag, rejected().passwordFailure().map(failure -> failure.errors()).orElse(List.of()));
     }
 
     private RegisterResult.Rejected rejected() {

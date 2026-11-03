@@ -2,12 +2,16 @@ package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
+import com.jrobertgardzinski.email.policy.CanRegister;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
 import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
+
+import java.util.List;
 
 /**
  * Starts an email change for a signed-in user: refuses an address this deployment does not admit,
@@ -37,9 +41,10 @@ public class RequestEmailChange {
     }
 
     public RequestEmailChangeResult execute(Email currentEmail, Email newEmail) {
-        _NewEmailVerdict verdict = _NewEmailVerdict.judge(emailPolicy, newEmail);
-        if (!verdict.accepted()) {
-            return new RequestEmailChangeResult.Rejected(verdict.errorCodes(), emailPolicy);
+        // the same question Register asks of a new address, asked again of the one an account wants
+        // to move to: a closed shop that only checks at registration is not closed
+        if (new CanRegister().evaluate(newEmail, emailPolicy) instanceof CanRegister.Result.Failure(List<EmailError> errors)) {
+            return new RequestEmailChangeResult.Rejected(errors);
         }
         if (userRepository.existsBy(NormalizedEmail.of(newEmail))) {
             return new RequestEmailChangeResult.EmailTaken();
