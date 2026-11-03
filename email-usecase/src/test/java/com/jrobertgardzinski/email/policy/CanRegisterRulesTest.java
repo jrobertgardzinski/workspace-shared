@@ -1,26 +1,19 @@
 package com.jrobertgardzinski.email.policy;
 
+import com.jrobertgardzinski.email.config.BlockedDomains;
+import com.jrobertgardzinski.email.config.CanRegisterConfig;
+import com.jrobertgardzinski.email.config.CompanyDomains;
+import com.jrobertgardzinski.email.config.DisposableDomains;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.email.domain.InvalidEmailException;
-import com.jrobertgardzinski.util.constraint.ErrorConstraint;
-import com.jrobertgardzinski.util.constraint.Outcome;
-import com.jrobertgardzinski.util.constraint.WarningConstraint;
-import io.qameta.allure.Allure;
+import com.jrobertgardzinski.email.domain.EmailError;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.Story;
 import net.jqwik.api.*;
-import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,135 +22,57 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Story("CanRegister")
 class CanRegisterRulesTest {
 
-    private static final Supplier<Email> ANY_EMAIL = () -> Email.of("user@example.com");
+    private final CanRegister canRegister = new CanRegister();
 
-    private static final List<ErrorConstraint<Email>> CONSTRAINTS = List.of(
-            alwaysFailing(new _RfcFormatConstraint()),
-            alwaysFailing(new _BlockedDomainConstraint(Set.of())),
-            alwaysFailing(new _DisposableEmailConstraint(Set.of())),
-            alwaysFailing(new _IsEmployeeConstraint(Set.of(DomainPart.of("other.com"))))
-    );
+    /** Every rule switched on: one blocked domain, one disposable domain, one company. */
+    private static final CanRegisterConfig EVERY_RULE = new CanRegisterConfig(
+            new BlockedDomains(Set.of(DomainPart.of("blocked.example"))),
+            new DisposableDomains(Set.of(DomainPart.of("throwaway.example"))),
+            new CompanyDomains(Set.of(DomainPart.of("acme.example"))));
 
-    @DisplayName("Rejects with ")
-    @ParameterizedTest(name = "{1} when \"{0}\" is unsatisfied")
-    @MethodSource("constraintCases")
-    void unsatisfiedConstraintCausesRejection(String name, String code, ErrorConstraint<Email> constraint) {
-        CanRegister policy = new CanRegister(List.of(constraint), List.of(passingMx()));
-        Outcome<Email> emailOutcome = policy.evaluate(ANY_EMAIL);
-        assertThat(emailOutcome).isInstanceOf(Outcome.Rejected.class);
-        assertThat(emailOutcome.errorCodes()).contains(code);
-    }
+    @Property
+    @Label("every broken rule is named, in policy order")
+    void brokenRulesAreNamedInPolicyOrder(@ForAll("refusals") Tuple.Tuple2<String, List<EmailError>> row) {
+        CanRegister.Result result = canRegister.evaluate(Email.of(row.get1()), EVERY_RULE);
 
-    static Stream<Arguments> constraintCases() {
-        return CONSTRAINTS.stream().map(c -> Arguments.of(c.toString(), c.code(), c));
-    }
-
-    @Property(tries = 10)
-    @Label("if any subset of OTHER_CONSTRAINTS is unsatisfied → reject with all their codes")
-    void anySubsetOfUnsatisfiedConstraintsCausesRejection(
-            @ForAll("constraintCombinations") Set<ErrorConstraint<Email>> brokenConstraints) {
-        List<String> expectedCodes = brokenConstraints.stream().map(ErrorConstraint::code).toList();
-        Allure.parameter("OTHER_CONSTRAINTS", CONSTRAINTS);
-        Allure.parameter("broken constraints", expectedCodes);
-
-        CanRegister policy = new CanRegister(new ArrayList<>(brokenConstraints), List.of(passingMx()));
-        Outcome<Email> decision = policy.evaluate(ANY_EMAIL);
-        assertThat(decision).isInstanceOf(Outcome.class);
-        assertThat(decision.errorCodes()).containsAll(expectedCodes);
-    }
-
-    @Example
-    @Label("all constraints satisfied → allowed")
-    void allConstraintsSatisfiedAllows() {
-        CanRegister policy = new CanRegister(List.of(passing()), List.of(passingMx()));
-
-        assertThat(policy.evaluate(ANY_EMAIL)).isInstanceOf(Outcome.Allowed.class);
-    }
-
-    @Example
-    @Label("all error constraints satisfied, MX absent → allowed with \"NO_MX_RECORD\" warning")
-    void noMxAllowsWithWarning() {
-        CanRegister policy = new CanRegister(List.of(passing()), List.of(failingMx("NO_MX_RECORD")));
-
-        Outcome<Email> emailOutcome = policy.evaluate(ANY_EMAIL);
-
-        assertThat(emailOutcome).isInstanceOf(Outcome.AllowedWithWarning.class);
-        assertThat(((Outcome.AllowedWithWarning<Email>) emailOutcome).warningCodes()).containsExactly("NO_MX_RECORD");
-    }
-
-    /**
-     * The variant by its own name. Until now it was only reached through the registration
-     * scenario, which asserts the CODES and so cannot tell a broken invariant apart from a
-     * rejected policy — the two carry different variants of {@link Outcome} on purpose.
-     */
-    @DisplayName("Rejects due to invariant breakage with ")
-    @ParameterizedTest(name = "{1} when the supplier cannot build \"{0}\"")
-    @MethodSource("brokenInvariantCases")
-    void brokenInvariantIsItsOwnOutcomeVariant(String raw, String code) {
-        CanRegister policy = new CanRegister(List.of(passing()), List.of(passingMx()));
-
-        Outcome<Email> emailOutcome = policy.evaluate(() -> Email.of(raw));
-
-        assertThat(emailOutcome).isInstanceOf(Outcome.RejectedDueToInvariantBreakage.class);
-        assertThat(emailOutcome.errorCodes()).containsExactly(code);
-    }
-
-    static Stream<Arguments> brokenInvariantCases() {
-        return Stream.of(
-                Arguments.of("", InvalidEmailException.EMAIL_BLANK),
-                Arguments.of("no-at-sign", InvalidEmailException.EMAIL_FORMAT_INVALID),
-                Arguments.of(".user@example.com", InvalidEmailException.LOCAL_PART_DOT_AT_EDGE),
-                Arguments.of("a..b@gmail.com", InvalidEmailException.LOCAL_PART_CONSECUTIVE_DOTS),
-                Arguments.of("user@localhost", InvalidEmailException.DOMAIN_MISSING_DOT));
-    }
-
-    @Example
-    @Label("a broken invariant short-circuits the policy → only the invariant's code, no constraint code")
-    void brokenInvariantSkipsThePolicy() {
-        CanRegister policy = new CanRegister(CONSTRAINTS, List.of(failingMx("NO_MX_RECORD")));
-
-        Outcome<Email> emailOutcome = policy.evaluate(() -> Email.of("a..b@gmail.com"));
-
-        assertThat(emailOutcome).isInstanceOf(Outcome.RejectedDueToInvariantBreakage.class);
-        assertThat(emailOutcome.errorCodes())
-                .containsExactly(InvalidEmailException.LOCAL_PART_CONSECUTIVE_DOTS);
-        assertThat(emailOutcome.findValue()).isEmpty();
+        assertThat(result).isEqualTo(new CanRegister.Result.Failure(row.get2()));
     }
 
     @Provide
-    Arbitrary<Set<ErrorConstraint<Email>>> constraintCombinations() {
-        return Arbitraries.subsetOf(CONSTRAINTS).ofMinSize(1);
+    Arbitrary<Tuple.Tuple2<String, List<EmailError>>> refusals() {
+        return Arbitraries.of(
+                Tuple.of("user@blocked.example", List.of(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN)),
+                Tuple.of("user@throwaway.example", List.of(EmailError.DISPOSABLE_DOMAIN, EmailError.NOT_A_COMPANY_DOMAIN)),
+                Tuple.of("user@other.example", List.of(EmailError.NOT_A_COMPANY_DOMAIN)),
+                // constructs (the value checks only the '@' and the dots) but is not an RFC atom
+                Tuple.of("user test@acme.example", List.of(EmailError.RFC_FORMAT_INVALID)),
+                Tuple.of("user(comment)@acme.example", List.of(EmailError.RFC_FORMAT_INVALID)),
+                Tuple.of("user,extra@acme.example", List.of(EmailError.RFC_FORMAT_INVALID)),
+                Tuple.of("user@-bad.example", List.of(EmailError.RFC_FORMAT_INVALID, EmailError.NOT_A_COMPANY_DOMAIN)));
     }
 
-    // --- stubs ---
+    @Example
+    @Label("an address that passes every rule is allowed, and comes back as itself")
+    void passingAddressIsAllowed() {
+        Email email = Email.of("user@acme.example");
 
-    private static ErrorConstraint<Email> alwaysFailing(ErrorConstraint<Email> delegate) {
-        String name = delegate.getClass().getSimpleName();
-        return new ErrorConstraint<>() {
-            @Override public boolean isSatisfied(Email e) { return false; }
-            @Override public String code() { return delegate.code(); }
-            @Override public String toString() { return name; }
-        };
+        assertThat(canRegister.evaluate(email, EVERY_RULE)).isEqualTo(new CanRegister.Result.Success(email));
     }
 
-    private static ErrorConstraint<Email> passing() {
-        return new ErrorConstraint<>() {
-            @Override public boolean isSatisfied(Email e) { return true; }
-            @Override public String code() { return "UNUSED"; }
-        };
+    @Example
+    @Label("a rule the deployment did not configure is not applied")
+    void absentRulesAreSkipped() {
+        Email email = Email.of("user@throwaway.example");
+
+        assertThat(canRegister.evaluate(email, new CanRegisterConfig())).isEqualTo(new CanRegister.Result.Success(email));
     }
 
-    private static WarningConstraint<Email> passingMx() {
-        return new WarningConstraint<>() {
-            @Override public boolean isSatisfied(Email e) { return true; }
-            @Override public String code() { return "NO_MX_RECORD"; }
-        };
-    }
+    @Example
+    @Label("the domain is compared case-insensitively: the value lower-cases it before any rule sees it")
+    void domainCaseDoesNotMatter() {
+        CanRegister.Result result = canRegister.evaluate(Email.of("user@Blocked.Example"), EVERY_RULE);
 
-    private static WarningConstraint<Email> failingMx(String code) {
-        return new WarningConstraint<>() {
-            @Override public boolean isSatisfied(Email e) { return false; }
-            @Override public String code() { return code; }
-        };
+        assertThat(result).isEqualTo(new CanRegister.Result.Failure(
+                List.of(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN)));
     }
 }
