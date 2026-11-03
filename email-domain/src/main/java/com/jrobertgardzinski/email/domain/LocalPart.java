@@ -13,17 +13,17 @@ public final class LocalPart {
 
     public static LocalPart of(String value) {
         if (value == null || value.isEmpty()) {
-            throw new InvalidEmailException(InvalidEmailException.LOCAL_PART_EMPTY, "Email local part must not be empty");
+            throw new InvalidEmailException(EmailError.LOCAL_PART_EMPTY, "Email local part must not be empty");
         }
         if (value.startsWith(".") || value.endsWith(".")) {
-            throw new InvalidEmailException(InvalidEmailException.LOCAL_PART_DOT_AT_EDGE,
+            throw new InvalidEmailException(EmailError.LOCAL_PART_DOT_AT_EDGE,
                     "Email local part must not start or end with a dot: " + value);
         }
         // dot-atom is dot-SEPARATED atoms, so a dot must have something on either side. The RFC
         // constraint downstream cannot catch this one: its pattern carries the dot inside the
         // character class, so "a..b" matches it - and did, right up to a created account.
         if (value.contains("..")) {
-            throw new InvalidEmailException(InvalidEmailException.LOCAL_PART_CONSECUTIVE_DOTS,
+            throw new InvalidEmailException(EmailError.LOCAL_PART_CONSECUTIVE_DOTS,
                     "Email local part must not contain two dots in a row: " + value);
         }
         return new LocalPart(value);

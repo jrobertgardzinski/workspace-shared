@@ -15,11 +15,11 @@ public final class DomainPart {
 
     public static DomainPart of(String value) {
         if (value == null || value.isEmpty()) {
-            throw new InvalidEmailException(InvalidEmailException.DOMAIN_EMPTY, "Email domain must not be empty");
+            throw new InvalidEmailException(EmailError.DOMAIN_EMPTY, "Email domain must not be empty");
         }
         String lower = value.toLowerCase();
         if (!lower.contains(".")) {
-            throw new InvalidEmailException(InvalidEmailException.DOMAIN_MISSING_DOT,
+            throw new InvalidEmailException(EmailError.DOMAIN_MISSING_DOT,
                     "Email domain must contain at least one '.': " + value);
         }
         return new DomainPart(lower);
