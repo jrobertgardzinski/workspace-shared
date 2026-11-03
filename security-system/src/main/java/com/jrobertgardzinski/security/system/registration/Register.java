@@ -46,15 +46,14 @@ public class Register {
 
     public RegisterResult execute(Supplier<Email> emailCandidate, Supplier<PlaintextPassword> passwordCandidate) {
         PasswordPolicy passwordPolicy = passwordPolicyInForce.current();
-        List<EmailError> emailErrors = new ArrayList<>();
-        List<PasswordError> passwordErrors = new ArrayList<>();
 
         Email email = null;
+        List<EmailError> emailErrors;
         try {
             email = emailCandidate.get();
-            emailErrors.addAll(policyErrors(email));
+            emailErrors = policyErrors(email);
         } catch (InvalidEmailException refused) {
-            emailErrors.add(refused.error());
+            emailErrors = List.of(refused.error());
         }
 
         // judged even when the address already failed: the form shows both channels in one round.
@@ -62,16 +61,17 @@ public class Register {
         // 201 as a fresh one, and it must take the same time, or the clock tells the caller what
         // the body hides
         PlaintextPassword password = null;
+        List<PasswordError> passwordErrors = List.of();
         try {
             password = passwordCandidate.get();
         } catch (IllegalArgumentException blank) {
-            passwordErrors.add(PasswordError.PASSWORD_BLANK);
+            passwordErrors = List.of(PasswordError.PASSWORD_BLANK);
         }
         HashedPassword hashedPassword = null;
         if (password != null) {
             switch (createPasswordHash.create(password, passwordPolicy)) {
                 case CreatePasswordHash.Result.Success success -> hashedPassword = success.hashedPassword();
-                case CreatePasswordHash.Result.Failure failure -> passwordErrors.addAll(failure.errors());
+                case CreatePasswordHash.Result.Failure failure -> passwordErrors = failure.errors();
             }
         }
 
