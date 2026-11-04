@@ -4,19 +4,21 @@ import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.email.domain.InvalidEmailException;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 /**
- * Whether an address that did construct may hold an account here: the deployment's {@link EmailPolicy},
- * applied to a new registration and to the address an existing account wants to move to alike. A
- * refused one comes back as {@link Result.Failure} with every broken rule at once, in policy order,
- * so a form can show all of them in one round. A {@code null} rule in the policy is an absent rule.
+ * Whether an address may hold an account here: the deployment's {@link EmailPolicy}, applied to a
+ * new registration and to the address an existing account wants to move to alike. A refused one
+ * comes back as {@link Result.Failure} with every broken rule at once, in policy order, so a form
+ * can show all of them in one round. A {@code null} rule in the policy is an absent rule.
  *
  * <p>The policy is a boot value, so it is given once here; the password policy, which can change
- * between attempts, travels with each call instead.
+ * between attempts, is asked per attempt by {@code CreatePasswordHash} from its port.
  */
 public class AdmitEmail {
 
@@ -33,7 +35,8 @@ public class AdmitEmail {
     }
 
     public sealed interface Result {
-        record Success() implements Result {}
+        /** The address that passed, handed back to whoever gave only a candidate. */
+        record Success(Email email) implements Result {}
         record Failure(List<EmailError> errors) implements Result {
             public Failure {
                 errors = List.copyOf(errors);
@@ -41,6 +44,21 @@ public class AdmitEmail {
         }
     }
 
+    /**
+     * The candidate as the edge received it: one that does not construct is refused by the invariant
+     * it broke, one that does is judged by the rules.
+     */
+    public Result evaluate(Supplier<Email> candidate) {
+        Email email;
+        try {
+            email = candidate.get();
+        } catch (InvalidEmailException refused) {
+            return new Result.Failure(List.of(refused.error()));
+        }
+        return evaluate(email);
+    }
+
+    /** An address that did construct, judged by the rules. */
     public Result evaluate(Email email) {
         List<EmailError> errors = new LinkedList<>();
         DomainPart domain = email.domain();
@@ -58,7 +76,7 @@ public class AdmitEmail {
         }
 
         if (errors.isEmpty()) {
-            return new Result.Success();
+            return new Result.Success(email);
         }
         else {
             return new Result.Failure(errors);
