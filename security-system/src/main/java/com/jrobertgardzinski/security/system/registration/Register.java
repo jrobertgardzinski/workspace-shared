@@ -28,7 +28,7 @@ public class Register {
 
     public RegisterResult execute(Supplier<Email> emailCandidate, Supplier<PlaintextPassword> passwordCandidate) {
 
-        AdmitEmail.Result adminEmailResult = admitEmail.evaluate(emailCandidate);
+        AdmitEmail.Result admitEmailResult = admitEmail.evaluate(emailCandidate);
 
         // judged even when the address already failed: the form shows both channels in one round.
         // A passing password is hashed here, BEFORE existsBy below: a taken address answers the same
@@ -36,17 +36,35 @@ public class Register {
         // the body hides
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(passwordCandidate);
 
-        if (!adminEmailResult.errors().isEmpty() || !createPasswordHashResult.errors().isEmpty()) {
-            return new RegisterResult.Rejected(adminEmailResult.errors(), createPasswordHashResult.errors(), createPasswordHashResult.policy());
+        if (
+                !admitEmailResult.errors().isEmpty() ||
+                !createPasswordHashResult.errors().isEmpty()
+        ) {
+            return new RegisterResult.Rejected(
+                    admitEmailResult.errors(),
+                    createPasswordHashResult.errors(),
+                    createPasswordHashResult.policy());
         }
-        if (userRepository.existsBy(NormalizedEmail.of(adminEmailResult.email()))) {
-            return new RegisterResult.EmailAlreadyTaken(adminEmailResult.email());
+
+        if (
+                userRepository.existsBy(
+                        NormalizedEmail.of(
+                                admitEmailResult.email()))
+        ) {
+            return new RegisterResult.EmailAlreadyTaken(
+                    admitEmailResult.email());
         }
+
         try {
-            return new RegisterResult.Registered(userRepository.save(new User(adminEmailResult.email(), createPasswordHashResult.hashedPassword())));
+            return new RegisterResult.Registered(
+                    userRepository.save(
+                            new User(
+                                    admitEmailResult.email(),
+                                    createPasswordHashResult.hashedPassword())));
         } catch (EmailAlreadyTakenException e) {
             // the storage uniqueness check lost the race after our existsBy check passed
-            return new RegisterResult.EmailAlreadyTaken(adminEmailResult.email());
+            return new RegisterResult.EmailAlreadyTaken(
+                    admitEmailResult.email());
         }
     }
 }
