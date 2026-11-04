@@ -69,11 +69,16 @@ class RegisterTest {
     private CountingAlgorithm algorithm;
     private Register register;
 
+    /** The address channel refused by exactly these rules, as the judge hands it. */
+    private static Optional<AdmitEmail.Result.Failure> refused(EmailError... errors) {
+        return Optional.of(new AdmitEmail.Result.Failure(List.of(errors)));
+    }
+
     @BeforeTry
     void init() {
         userRepository = Mockito.mock(UserRepository.class);
         algorithm = new CountingAlgorithm();
-        register = new Register(userRepository, new AdmitEmail(EMAIL_POLICY), algorithm, () -> POLICY);
+        register = new Register(userRepository, new AdmitEmail(EMAIL_POLICY), new CreatePasswordHash(algorithm, () -> POLICY));
     }
 
     @Property
@@ -91,7 +96,7 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(emailFails ? List.of(EmailError.DOMAIN_BLOCKED) : List.of(), rejected.emailErrors()),
+                () -> assertEquals(emailFails ? refused(EmailError.DOMAIN_BLOCKED) : Optional.empty(), rejected.emailFailure()),
                 () -> assertEquals(passwordFails, rejected.passwordFailure().isPresent()),
                 () -> rejected.passwordFailure().ifPresent(failure -> assertEquals(POLICY, failure.policy())),
                 () -> Mockito.verify(userRepository, Mockito.never()).save(Mockito.any())
@@ -105,7 +110,7 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(List.of(EmailError.DOMAIN_BLOCKED), rejected.emailErrors()),
+                () -> assertEquals(refused(EmailError.DOMAIN_BLOCKED), rejected.emailFailure()),
                 () -> assertEquals(Optional.of(new CreatePasswordHash.Result.Failure(
                                 List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.UPPERCASE_REQUIRED,
                                         PasswordError.DIGIT_REQUIRED, PasswordError.SPECIAL_CHAR_REQUIRED), POLICY)),
@@ -121,7 +126,7 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(List.of(EmailError.EMAIL_FORMAT_INVALID), rejected.emailErrors()),
+                () -> assertEquals(refused(EmailError.EMAIL_FORMAT_INVALID), rejected.emailFailure()),
                 () -> assertTrue(rejected.passwordFailure().isPresent(), "the password channel must be judged too"),
                 () -> Mockito.verify(userRepository, Mockito.never()).save(Mockito.any())
         );
@@ -134,7 +139,7 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(List.of(EmailError.LOCAL_PART_CONSECUTIVE_DOTS), rejected.emailErrors()),
+                () -> assertEquals(refused(EmailError.LOCAL_PART_CONSECUTIVE_DOTS), rejected.emailFailure()),
                 () -> assertEquals(Optional.of(new CreatePasswordHash.Result.Failure(List.of(PasswordError.PASSWORD_BLANK), POLICY)),
                         rejected.passwordFailure()),
                 () -> assertEquals(0, algorithm.hashes.get())
@@ -153,14 +158,15 @@ class RegisterTest {
     @Property
     @Label("each email rule answers with its own code; a domain that passes every rule answers with none")
     void each_email_rule_by_its_code(@ForAll("addressesUnderEveryRule") Tuple.Tuple2<String, List<EmailError>> row) {
-        Register strict = new Register(userRepository, new AdmitEmail(EVERY_RULE), algorithm, () -> POLICY);
+        Register strict = new Register(userRepository, new AdmitEmail(EVERY_RULE), new CreatePasswordHash(algorithm, () -> POLICY));
 
         RegisterResult result = strict.execute(() -> Email.of(row.get1()), () -> PlaintextPassword.of(PASSWORD));
 
         if (row.get2().isEmpty()) {
             assertInstanceOf(RegisterResult.Registered.class, result);
         } else {
-            assertEquals(row.get2(), assertInstanceOf(RegisterResult.Rejected.class, result).emailErrors());
+            assertEquals(Optional.of(new AdmitEmail.Result.Failure(row.get2())),
+                    assertInstanceOf(RegisterResult.Rejected.class, result).emailFailure());
         }
     }
 
@@ -178,7 +184,7 @@ class RegisterTest {
     @Example
     @Label("a deployment without email rules admits any well-formed address")
     void absent_rules_are_skipped() {
-        Register lenient = new Register(userRepository, new AdmitEmail(new EmailPolicy()), algorithm, () -> POLICY);
+        Register lenient = new Register(userRepository, new AdmitEmail(new EmailPolicy()), new CreatePasswordHash(algorithm, () -> POLICY));
         Mockito.when(userRepository.save(Mockito.any())).thenAnswer(call -> call.getArgument(0));
 
         RegisterResult result = lenient.execute(() -> Email.of("user@throwaway.example"), () -> PlaintextPassword.of(PASSWORD));

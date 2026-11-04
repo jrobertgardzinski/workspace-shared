@@ -16,6 +16,7 @@ import com.jrobertgardzinski.email.config.CompanyDomains;
 import com.jrobertgardzinski.email.config.DisposableDomains;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.hash.algorithm.argon2.Argon2HashAlgorithm;
+import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicyInForce;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.config.Configuration;
@@ -235,10 +236,19 @@ public class BeanFactory {
         return new AdmitEmail(emailPolicy);
     }
 
+    /**
+     * One judge of a new password, for registration, a change and a reset alike: it asks the policy
+     * in force per attempt, so a rule an ADMIN sets while the system runs is measured from the next
+     * attempt on.
+     */
     @Singleton
-    Register register(UserRepository userRepository, HashAlgorithmPort hashAlgorithm,
-                      PasswordPolicyInForce passwordPolicy, AdmitEmail admitEmail) {
-        return new Register(userRepository, admitEmail, hashAlgorithm, passwordPolicy);
+    CreatePasswordHash createPasswordHash(HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicyInForce) {
+        return new CreatePasswordHash(hashAlgorithm, passwordPolicyInForce);
+    }
+
+    @Singleton
+    Register register(UserRepository userRepository, AdmitEmail admitEmail, CreatePasswordHash createPasswordHash) {
+        return new Register(userRepository, admitEmail, createPasswordHash);
     }
 
     /**
@@ -629,15 +639,14 @@ public class BeanFactory {
 
     @Singleton
     ResetPassword resetPassword(PasswordResetRepository passwordResetRepository, UserRepository userRepository,
-                                HashAlgorithmPort hashAlgorithm,
+                                CreatePasswordHash createPasswordHash,
                                 com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
                                 SessionRepository sessions,
                                 @io.micronaut.context.annotation.Value("${security.password-reset.ttl-minutes:60}")
                                 int resetTtlMinutes,
-                                Clock clock,
-                                PasswordPolicyInForce passwordPolicy) {
+                                Clock clock) {
         return new ResetPassword(passwordResetRepository, userRepository,
-                hashAlgorithm, passwordPolicy, passwordless,
+                createPasswordHash, passwordless,
                 sessions, java.time.Duration.ofMinutes(resetTtlMinutes), clock);
     }
 
@@ -692,9 +701,8 @@ public class BeanFactory {
 
     @Singleton
     ChangePassword changePassword(UserRepository userRepository, HashAlgorithmPort hashAlgorithm,
-                                  SessionRepository sessions,
-                                  PasswordPolicyInForce passwordPolicy) {
-        return new ChangePassword(userRepository, hashAlgorithm, passwordPolicy, sessions);
+                                  SessionRepository sessions, CreatePasswordHash createPasswordHash) {
+        return new ChangePassword(userRepository, hashAlgorithm, createPasswordHash, sessions);
     }
 
     @Singleton

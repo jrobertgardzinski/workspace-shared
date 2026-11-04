@@ -56,14 +56,11 @@
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>email-config</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>unit-test-starter</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.jrobertgardzinski</groupId>
-            <artifactId>password-config</artifactId>
         </dependency>
     </dependencies>
 

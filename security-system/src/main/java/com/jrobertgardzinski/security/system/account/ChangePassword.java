@@ -5,14 +5,11 @@ import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
-import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 
 import java.util.Optional;
-import com.jrobertgardzinski.password.policy.PasswordPolicyInForce;
-
 import java.util.function.Supplier;
 
 /**
@@ -32,14 +29,14 @@ public class ChangePassword {
 
     private final UserRepository userRepository;
     private final HashAlgorithmPort hashAlgorithm;
-    private final PasswordPolicyInForce passwordPolicy;
+    private final CreatePasswordHash createPasswordHash;
     private final SessionRepository sessions;
 
     public ChangePassword(UserRepository userRepository, HashAlgorithmPort hashAlgorithm,
-                          PasswordPolicyInForce passwordPolicy, SessionRepository sessions) {
+                          CreatePasswordHash createPasswordHash, SessionRepository sessions) {
         this.userRepository = userRepository;
         this.hashAlgorithm = hashAlgorithm;
-        this.passwordPolicy = passwordPolicy;
+        this.createPasswordHash = createPasswordHash;
         this.sessions = sessions;
     }
 
@@ -49,14 +46,7 @@ public class ChangePassword {
         if (found.isEmpty() || !hashAlgorithm.verify(found.get().passwordHash(), currentPassword.get())) {
             return new ChangePasswordResult.WrongCurrentPassword();
         }
-        PlaintextPassword candidate;
-        try {
-            candidate = newPassword.get();
-        } catch (IllegalArgumentException blank) {
-            return new ChangePasswordResult.WeakPassword();
-        }
-        CreatePasswordHash.Result judged = new CreatePasswordHash(hashAlgorithm).create(candidate, passwordPolicy.current());
-        if (!(judged instanceof CreatePasswordHash.Result.Success(HashedPassword newHash))) {
+        if (!(createPasswordHash.create(newPassword) instanceof CreatePasswordHash.Result.Success(HashedPassword newHash))) {
             return new ChangePasswordResult.WeakPassword();
         }
         userRepository.updatePassword(email, newHash);

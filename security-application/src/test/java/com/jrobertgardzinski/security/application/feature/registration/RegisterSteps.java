@@ -6,6 +6,7 @@ import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.hash.algorithm.argon2.Argon2HashAlgorithm;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
+import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.security.domain.entity.User;
@@ -27,13 +28,12 @@ public class RegisterSteps {
     private final Register register = new Register(
             users,
             new AdmitEmail(new EmailPolicy()),
-            new Argon2HashAlgorithm(),
             // The REBUILD defaults, and not a policy invented here. The spec's literals are samples
             // of what this service ships with (specs/README.md), so judging them against a
             // min-length of 12 and a special-character set of "#?!" made the .feature describe a
             // deployment nobody has: "StrongPassword1!" was accepted and "weak" refused for reasons
             // the shipped policy does not hold.
-            PasswordPolicy::withDefaults);
+            new CreatePasswordHash(new Argon2HashAlgorithm(), PasswordPolicy::withDefaults));
 
     private RegisterResult result;
 
@@ -69,7 +69,7 @@ public class RegisterSteps {
 
     @Then("the EMAIL is flagged as {word}")
     public void theEmailIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().emailErrors());
+        assertFlag(flag, rejected().emailFailure().map(failure -> failure.errors()).orElse(List.of()));
     }
 
     @Then("the password is flagged as {word}")

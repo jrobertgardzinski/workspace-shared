@@ -1,11 +1,9 @@
 package com.jrobertgardzinski.security.system.passwordreset;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
-import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
 import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
@@ -16,8 +14,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
-import com.jrobertgardzinski.password.policy.PasswordPolicyInForce;
-
 import java.util.function.Supplier;
 
 /**
@@ -45,21 +41,19 @@ public class ResetPassword {
 
     private final PasswordResetRepository passwordResetRepository;
     private final UserRepository userRepository;
-    private final HashAlgorithmPort hashAlgorithm;
-    private final PasswordPolicyInForce passwordPolicy;
+    private final CreatePasswordHash createPasswordHash;
     private final PasswordlessAccountRepository passwordlessAccounts;
     private final SessionRepository sessions;
     private final Duration tokenTtl;
     private final Clock clock;
 
     public ResetPassword(PasswordResetRepository passwordResetRepository, UserRepository userRepository,
-                         HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicy,
+                         CreatePasswordHash createPasswordHash,
                          PasswordlessAccountRepository passwordlessAccounts,
                          SessionRepository sessions, Duration tokenTtl, Clock clock) {
         this.passwordResetRepository = passwordResetRepository;
         this.userRepository = userRepository;
-        this.hashAlgorithm = hashAlgorithm;
-        this.passwordPolicy = passwordPolicy;
+        this.createPasswordHash = createPasswordHash;
         this.passwordlessAccounts = passwordlessAccounts;
         this.sessions = sessions;
         this.tokenTtl = tokenTtl;
@@ -67,14 +61,7 @@ public class ResetPassword {
     }
 
     public ResetPasswordResult execute(PasswordResetToken token, Supplier<PlaintextPassword> newPassword) {
-        PlaintextPassword candidate;
-        try {
-            candidate = newPassword.get();
-        } catch (IllegalArgumentException blank) {
-            return new ResetPasswordResult.WeakPassword();
-        }
-        CreatePasswordHash.Result judged = new CreatePasswordHash(hashAlgorithm).create(candidate, passwordPolicy.current());
-        if (!(judged instanceof CreatePasswordHash.Result.Success(HashedPassword hashed))) {
+        if (!(createPasswordHash.create(newPassword) instanceof CreatePasswordHash.Result.Success(HashedPassword hashed))) {
             return new ResetPasswordResult.WeakPassword();
         }
         Optional<PasswordResetRepository.PendingReset> pending = passwordResetRepository.consumeReset(token);

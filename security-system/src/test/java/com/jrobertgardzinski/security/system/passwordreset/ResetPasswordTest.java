@@ -69,7 +69,7 @@ class ResetPasswordTest {
                 new com.jrobertgardzinski.security.domain.entity.User(EMAIL, new HashedPassword("hash:old"))));
         sessions = Mockito.mock(SessionRepository.class);
         resetPassword = new ResetPassword(passwordResetRepository, userRepository,
-                FAKE_ALGORITHM, PasswordPolicy::withDefaults,
+                new CreatePasswordHash(FAKE_ALGORITHM, PasswordPolicy::withDefaults),
                 new com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository() {
                     public boolean isPasswordless(com.jrobertgardzinski.email.domain.Email e) { return false; }
                     public void setPasswordless(com.jrobertgardzinski.email.domain.Email e, boolean v) {}

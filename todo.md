@@ -837,6 +837,19 @@ czy sekwencja czyta się jako historia. Powiązane otwarte: password-policy prze
 
 ## Otwarte — nazwy pól po wprowadzeniu portu odczytu (2026-09-02, drobne)
 
+**ZAMKNIĘTE 2026-11-04 (werdykt Roberta, gałąź RegisterRebuild):** pola zniknęły z use case'ów.
+`PasswordPolicyInForce` jest wstrzyknięty do `CreatePasswordHash` (password-usecase), który pyta
+`current()` raz na próbę; `Register`, `ChangePassword`, `ResetPassword` dostają jeden bean
+`CreatePasswordHash` (`BeanFactory#createPasswordHash`). Asymetria z `AdmitEmail(EmailPolicy)`
+została, ale siedzi w bibliotekach: wartość z bootu kontra port, oba podane raz w konstruktorze.
+`Register` nie ma już try/catch: `AdmitEmail.evaluate(Supplier<Email>)` i
+`CreatePasswordHash.create(Supplier<PlaintextPassword>)` same wyciągają kandydata, a odmowę
+konstruktora VO nazywają własnym kodem (`EMAIL_*` z `InvalidEmailException#error`,
+`PASSWORD_BLANK`). `AdmitEmail.Result.Success` znów niesie `Email`, bo sędzia, nie use case,
+trzyma skonstruowany adres. `RegisterResult.Rejected` jest symetryczny:
+`(Optional<AdmitEmail.Result.Failure>, Optional<CreatePasswordHash.Result.Failure>)`, każda odmowa
+tak, jak oddał ją jej sędzia (Robert: „co to za asymetria? raz lista raz error”).
+
 Po `5656eb9` pole i argument nazywają się `passwordPolicy`, a mają typ `PasswordPolicyInForce`
 — nazwa kłamie: trzymamy PYTAJĄCEGO o politykę, nie politykę. Do przemianowania na
 `passwordPolicyInForce` w: `Register`, `ChangePassword`, `ResetPassword` (pole + argument
