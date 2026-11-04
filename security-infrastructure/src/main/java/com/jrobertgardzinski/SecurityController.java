@@ -134,12 +134,8 @@ public class SecurityController {
             case RegisterResult.Rejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
                             .body(Map.of(
-                                    "emailErrors", rejected.emailFailure()
-                                            .map(failure -> emailErrors(failure.errors(), emailPolicy))
-                                            .orElse(List.of()),
-                                    "passwordErrors", rejected.passwordFailure()
-                                            .map(failure -> passwordErrors(failure.errors(), failure.policy()))
-                                            .orElse(List.of())));
+                                    "emailErrors", emailErrors(rejected.emailErrors(), emailPolicy),
+                                    "passwordErrors", passwordErrors(rejected.passwordErrors(), rejected.policy())));
             case RegisterResult.EmailAlreadyTaken alreadyTaken ->
                     HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
         };

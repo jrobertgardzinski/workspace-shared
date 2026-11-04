@@ -24,7 +24,6 @@ import net.jqwik.api.lifecycle.BeforeTry;
 import org.mockito.Mockito;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -69,11 +68,6 @@ class RegisterTest {
     private CountingAlgorithm algorithm;
     private Register register;
 
-    /** The address channel refused by exactly these rules, as the judge hands it. */
-    private static Optional<AdmitEmail.Result.Failure> refused(EmailError... errors) {
-        return Optional.of(new AdmitEmail.Result.Failure(List.of(errors)));
-    }
-
     @BeforeTry
     void init() {
         userRepository = Mockito.mock(UserRepository.class);
@@ -96,9 +90,9 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(emailFails ? refused(EmailError.DOMAIN_BLOCKED) : Optional.empty(), rejected.emailFailure()),
-                () -> assertEquals(passwordFails, rejected.passwordFailure().isPresent()),
-                () -> rejected.passwordFailure().ifPresent(failure -> assertEquals(POLICY, failure.policy())),
+                () -> assertEquals(emailFails ? List.of(EmailError.DOMAIN_BLOCKED) : List.of(), rejected.emailErrors()),
+                () -> assertEquals(passwordFails, !rejected.passwordErrors().isEmpty()),
+                () -> assertEquals(POLICY, rejected.policy()),
                 () -> Mockito.verify(userRepository, Mockito.never()).save(Mockito.any())
         );
     }
@@ -110,11 +104,11 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(refused(EmailError.DOMAIN_BLOCKED), rejected.emailFailure()),
-                () -> assertEquals(Optional.of(new CreatePasswordHash.Result.Failure(
-                                List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.UPPERCASE_REQUIRED,
-                                        PasswordError.DIGIT_REQUIRED, PasswordError.SPECIAL_CHAR_REQUIRED), POLICY)),
-                        rejected.passwordFailure()),
+                () -> assertEquals(List.of(EmailError.DOMAIN_BLOCKED), rejected.emailErrors()),
+                () -> assertEquals(List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.UPPERCASE_REQUIRED,
+                                PasswordError.DIGIT_REQUIRED, PasswordError.SPECIAL_CHAR_REQUIRED),
+                        rejected.passwordErrors()),
+                () -> assertEquals(POLICY, rejected.policy()),
                 () -> assertEquals(0, algorithm.hashes.get(), "a refused password is never hashed")
         );
     }
@@ -126,8 +120,8 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(refused(EmailError.EMAIL_FORMAT_INVALID), rejected.emailFailure()),
-                () -> assertTrue(rejected.passwordFailure().isPresent(), "the password channel must be judged too"),
+                () -> assertEquals(List.of(EmailError.EMAIL_FORMAT_INVALID), rejected.emailErrors()),
+                () -> assertFalse(rejected.passwordErrors().isEmpty(), "the password channel must be judged too"),
                 () -> Mockito.verify(userRepository, Mockito.never()).save(Mockito.any())
         );
     }
@@ -139,9 +133,8 @@ class RegisterTest {
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
         assertAll(
-                () -> assertEquals(refused(EmailError.LOCAL_PART_CONSECUTIVE_DOTS), rejected.emailFailure()),
-                () -> assertEquals(Optional.of(new CreatePasswordHash.Result.Failure(List.of(PasswordError.PASSWORD_BLANK), POLICY)),
-                        rejected.passwordFailure()),
+                () -> assertEquals(List.of(EmailError.LOCAL_PART_CONSECUTIVE_DOTS), rejected.emailErrors()),
+                () -> assertEquals(List.of(PasswordError.PASSWORD_BLANK), rejected.passwordErrors()),
                 () -> assertEquals(0, algorithm.hashes.get())
         );
     }
@@ -152,7 +145,7 @@ class RegisterTest {
         RegisterResult result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(PASSWORD));
 
         RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
-        assertEquals(Optional.empty(), rejected.passwordFailure());
+        assertEquals(List.of(), rejected.passwordErrors());
     }
 
     @Property
@@ -165,8 +158,7 @@ class RegisterTest {
         if (row.get2().isEmpty()) {
             assertInstanceOf(RegisterResult.Registered.class, result);
         } else {
-            assertEquals(Optional.of(new AdmitEmail.Result.Failure(row.get2())),
-                    assertInstanceOf(RegisterResult.Rejected.class, result).emailFailure());
+            assertEquals(row.get2(), assertInstanceOf(RegisterResult.Rejected.class, result).emailErrors());
         }
     }
 

@@ -69,12 +69,12 @@ public class RegisterSteps {
 
     @Then("the EMAIL is flagged as {word}")
     public void theEmailIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().emailFailure().map(failure -> failure.errors()).orElse(List.of()));
+        assertFlag(flag, rejected().emailErrors());
     }
 
     @Then("the password is flagged as {word}")
     public void thePasswordIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().passwordFailure().map(failure -> failure.errors()).orElse(List.of()));
+        assertFlag(flag, rejected().passwordErrors());
     }
 
     private RegisterResult.Rejected rejected() {

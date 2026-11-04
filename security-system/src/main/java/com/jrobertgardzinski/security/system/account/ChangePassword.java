@@ -2,7 +2,6 @@ package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
-import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.security.domain.entity.User;
@@ -46,10 +45,11 @@ public class ChangePassword {
         if (found.isEmpty() || !hashAlgorithm.verify(found.get().passwordHash(), currentPassword.get())) {
             return new ChangePasswordResult.WrongCurrentPassword();
         }
-        if (!(createPasswordHash.create(newPassword) instanceof CreatePasswordHash.Result.Success(HashedPassword newHash))) {
+        CreatePasswordHash.Result judged = createPasswordHash.create(newPassword);
+        if (!judged.errors().isEmpty()) {
             return new ChangePasswordResult.WeakPassword();
         }
-        userRepository.updatePassword(email, newHash);
+        userRepository.updatePassword(email, judged.hashedPassword());
         sessions.revokeAllSessions(email);   // the old password's sessions do not survive it
         return new ChangePasswordResult.Changed();
     }

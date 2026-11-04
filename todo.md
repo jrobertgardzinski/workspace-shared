@@ -845,10 +845,12 @@ została, ale siedzi w bibliotekach: wartość z bootu kontra port, oba podane r
 `Register` nie ma już try/catch: `AdmitEmail.evaluate(Supplier<Email>)` i
 `CreatePasswordHash.create(Supplier<PlaintextPassword>)` same wyciągają kandydata, a odmowę
 konstruktora VO nazywają własnym kodem (`EMAIL_*` z `InvalidEmailException#error`,
-`PASSWORD_BLANK`). `AdmitEmail.Result.Success` znów niesie `Email`, bo sędzia, nie use case,
-trzyma skonstruowany adres. `RegisterResult.Rejected` jest symetryczny:
-`(Optional<AdmitEmail.Result.Failure>, Optional<CreatePasswordHash.Result.Failure>)`, każda odmowa
-tak, jak oddał ją jej sędzia (Robert: „co to za asymetria? raz lista raz error”).
+`PASSWORD_BLANK`). Wyniki sędziów to REKORDY, nie sealed `Success`/`Failure`:
+`AdmitEmail.Result(Email email, List<EmailError> errors)` i
+`CreatePasswordHash.Result(HashedPassword hashedPassword, List<PasswordError> errors, PasswordPolicy policy)`
+(Robert, po trzech podejściach z instanceof/switch w `Register`: „wygląda okropnie”). `Register`
+czyta akcesory i bramkuje na `errors().isEmpty()`; `Rejected(List<EmailError>, List<PasswordError>,
+PasswordPolicy)` niesie tylko to, co konsumuje drut.
 
 Po `5656eb9` pole i argument nazywają się `passwordPolicy`, a mają typ `PasswordPolicyInForce`
 — nazwa kłamie: trzymamy PYTAJĄCEGO o politykę, nie politykę. Do przemianowania na

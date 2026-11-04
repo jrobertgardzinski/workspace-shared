@@ -1,7 +1,6 @@
 package com.jrobertgardzinski.security.system.passwordreset;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
@@ -61,7 +60,8 @@ public class ResetPassword {
     }
 
     public ResetPasswordResult execute(PasswordResetToken token, Supplier<PlaintextPassword> newPassword) {
-        if (!(createPasswordHash.create(newPassword) instanceof CreatePasswordHash.Result.Success(HashedPassword hashed))) {
+        CreatePasswordHash.Result judged = createPasswordHash.create(newPassword);
+        if (!judged.errors().isEmpty()) {
             return new ResetPasswordResult.WeakPassword();
         }
         Optional<PasswordResetRepository.PendingReset> pending = passwordResetRepository.consumeReset(token);
@@ -79,7 +79,7 @@ public class ResetPassword {
             // password has been reset" all the same.
             return new ResetPasswordResult.InvalidToken();
         }
-        userRepository.updatePassword(email, hashed);
+        userRepository.updatePassword(email, judged.hashedPassword());
         passwordlessAccounts.setPasswordless(email, false);   // the account now has a password
         sessions.revokeAllSessions(email);   // the old password's sessions do not survive it
         return new ResetPasswordResult.PasswordReset(email);
