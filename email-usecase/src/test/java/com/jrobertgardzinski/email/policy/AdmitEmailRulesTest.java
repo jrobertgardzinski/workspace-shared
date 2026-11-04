@@ -35,7 +35,7 @@ class AdmitEmailRulesTest {
     void brokenRulesAreNamedInPolicyOrder(@ForAll("refusals") Tuple.Tuple2<String, List<EmailError>> row) {
         AdmitEmail.Result result = admitEmail.evaluate(Email.of(row.get1()));
 
-        assertThat(result).isEqualTo(new AdmitEmail.Result.Failure(row.get2()));
+        assertThat(result.errors()).isEqualTo(row.get2());
     }
 
     @Provide
@@ -56,7 +56,7 @@ class AdmitEmailRulesTest {
     void passingAddressIsAllowed() {
         Email email = Email.of("user@acme.example");
 
-        assertThat(admitEmail.evaluate(email)).isEqualTo(new AdmitEmail.Result.Success(email));
+        assertThat(admitEmail.evaluate(email)).isEqualTo(new AdmitEmail.Result(email, List.of()));
     }
 
     @Example
@@ -64,7 +64,7 @@ class AdmitEmailRulesTest {
     void absentRulesAreSkipped() {
         Email email = Email.of("user@throwaway.example");
 
-        assertThat(new AdmitEmail(new EmailPolicy()).evaluate(email)).isEqualTo(new AdmitEmail.Result.Success(email));
+        assertThat(new AdmitEmail(new EmailPolicy()).evaluate(email)).isEqualTo(new AdmitEmail.Result(email, List.of()));
     }
 
     @Example
@@ -72,14 +72,14 @@ class AdmitEmailRulesTest {
     void malformedCandidateIsRefusedByItsInvariant() {
         AdmitEmail.Result result = admitEmail.evaluate(() -> Email.of("invalid"));
 
-        assertThat(result).isEqualTo(new AdmitEmail.Result.Failure(List.of(EmailError.EMAIL_FORMAT_INVALID)));
+        assertThat(result).isEqualTo(new AdmitEmail.Result(null, List.of(EmailError.EMAIL_FORMAT_INVALID)));
     }
 
     @Example
     @Label("a candidate that constructs is judged by the rules and handed back")
     void constructingCandidateIsJudgedAndHandedBack() {
         assertThat(admitEmail.evaluate(() -> Email.of("user@acme.example")))
-                .isEqualTo(new AdmitEmail.Result.Success(Email.of("user@acme.example")));
+                .isEqualTo(new AdmitEmail.Result(Email.of("user@acme.example"), List.of()));
     }
 
     @Example
@@ -87,7 +87,7 @@ class AdmitEmailRulesTest {
     void domainCaseDoesNotMatter() {
         AdmitEmail.Result result = admitEmail.evaluate(Email.of("user@Blocked.Example"));
 
-        assertThat(result).isEqualTo(new AdmitEmail.Result.Failure(
-                List.of(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN)));
+        assertThat(result.errors()).isEqualTo(
+                List.of(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN));
     }
 }

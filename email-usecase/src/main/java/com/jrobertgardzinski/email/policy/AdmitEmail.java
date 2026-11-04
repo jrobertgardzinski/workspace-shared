@@ -34,13 +34,13 @@ public class AdmitEmail {
         this.policy = policy;
     }
 
-    public sealed interface Result {
-        /** The address that passed, handed back to whoever gave only a candidate. */
-        record Success(Email email) implements Result {}
-        record Failure(List<EmailError> errors) implements Result {
-            public Failure {
-                errors = List.copyOf(errors);
-            }
+    /**
+     * The address as it constructed ({@code null} when it did not) and every invariant or rule it
+     * broke, in policy order. Admitted iff {@code errors} is empty.
+     */
+    public record Result(Email email, List<EmailError> errors) {
+        public Result {
+            errors = List.copyOf(errors);
         }
     }
 
@@ -53,7 +53,7 @@ public class AdmitEmail {
         try {
             email = candidate.get();
         } catch (InvalidEmailException refused) {
-            return new Result.Failure(List.of(refused.error()));
+            return new Result(null, List.of(refused.error()));
         }
         return evaluate(email);
     }
@@ -75,11 +75,6 @@ public class AdmitEmail {
             errors.add(EmailError.NOT_A_COMPANY_DOMAIN);
         }
 
-        if (errors.isEmpty()) {
-            return new Result.Success(email);
-        }
-        else {
-            return new Result.Failure(errors);
-        }
+        return new Result(email, errors);
     }
 }
