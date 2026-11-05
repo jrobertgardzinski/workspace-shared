@@ -78,7 +78,7 @@ own way:
 Proven by executable specifications (**jqwik** + **Allure**); concepts explained in Javadoc.
 
 - **System** — composes Config + Domain into use cases. Within a use-case package the
-  package-private steps carry a `_` prefix (e.g. `_BruteForceGuard`, `_VerifyCredentials`), so the
+  package-private steps carry a `_` prefix (e.g. `_BruteForceGuard`, `_RequireVerifiedEmail`), so the
   package's public API stands out at a glance — a deliberate convention, see
   [ADR 0002](https://github.com/jrobertgardzinski/security/blob/main/docs/adr/0002-underscore-prefix-for-use-case-steps.md).
 - **Config** — domain rules made configurable. Where a rule's value lives decides how fast a change
@@ -152,7 +152,7 @@ After installing, **open a new terminal** so the updated `PATH` is picked up.
 ## Clone & build the whole project
 
 This microservice depends on sibling modules that live in separate repositories: `test-starter`,
-`libs` (which holds the `constraint` artifact), `config`, `adjustable-clock`, `email`, `password`,
+`config`, `adjustable-clock`, `email`, `password`,
 `infrastructure-micronaut-clock`, `offline-jwt`, `user-id`, `unit-of-work` and `account-closure`
 (the last three arrived later — the identity of an author, and the closure vocabulary this service
 shares with the portal). The list first named five of them, then eight, and a build on a clean
@@ -170,13 +170,13 @@ on first run.
 ```bash
 mkdir security && cd security
 
-for repo in test-starter libs config adjustable-clock email password \
+for repo in test-starter config adjustable-clock email password \
             infrastructure-micronaut-clock offline-jwt user-id unit-of-work \
             account-closure microservice-security; do
   git clone "https://github.com/jrobertgardzinski/$repo.git"
 done
 
-for dir in test-starter libs config adjustable-clock email password \
+for dir in test-starter config adjustable-clock email password \
            infrastructure-micronaut-clock offline-jwt user-id unit-of-work \
            account-closure microservice-security; do
   ( cd "$dir" && ./mvnw clean install ) || break
@@ -188,13 +188,13 @@ done
 ```powershell
 mkdir security; cd security
 
-foreach ($repo in 'test-starter','libs','config','adjustable-clock','email','password',
+foreach ($repo in 'test-starter','config','adjustable-clock','email','password',
                   'infrastructure-micronaut-clock','offline-jwt','user-id','unit-of-work',
                   'account-closure','microservice-security') {
   git clone "https://github.com/jrobertgardzinski/$repo.git"
 }
 
-foreach ($dir in 'test-starter','libs','config','adjustable-clock','email','password',
+foreach ($dir in 'test-starter','config','adjustable-clock','email','password',
                  'infrastructure-micronaut-clock','offline-jwt','user-id','unit-of-work',
                  'account-closure','microservice-security') {
   Push-Location $dir

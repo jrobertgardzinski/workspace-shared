@@ -6,6 +6,7 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
+import com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment;
 import com.jrobertgardzinski.security.system.mfa.EnrolFactor;
 import com.jrobertgardzinski.security.system.mfa.FactorRegistry;
 import io.micronaut.http.HttpRequest;
@@ -36,6 +37,7 @@ import java.util.Map;
 final class FactorsController {
 
     private final EnrolFactor enrolFactor;
+    private final ConfirmEnrolment confirmEnrolment;
     private final EnrolledFactorRepository enrolledFactors;
     private final FactorRegistry registry;
     private final TransactionBoundary transactionBoundary;
@@ -43,12 +45,14 @@ final class FactorsController {
     private final com.jrobertgardzinski.security.system.mfa.MfaCompliance compliance;
     private final StepUpGuard stepUpGuard;
 
-    FactorsController(EnrolFactor enrolFactor, EnrolledFactorRepository enrolledFactors,
+    FactorsController(EnrolFactor enrolFactor, ConfirmEnrolment confirmEnrolment,
+                      EnrolledFactorRepository enrolledFactors,
                       FactorRegistry registry, TransactionBoundary transactionBoundary,
                       com.jrobertgardzinski.security.domain.repository.UserRepository users,
                       com.jrobertgardzinski.security.system.mfa.MfaCompliance compliance,
                       StepUpGuard stepUpGuard) {
         this.enrolFactor = enrolFactor;
+        this.confirmEnrolment = confirmEnrolment;
         this.enrolledFactors = enrolledFactors;
         this.registry = registry;
         this.transactionBoundary = transactionBoundary;
@@ -87,7 +91,7 @@ final class FactorsController {
         String target = "EMAIL_CODE".equals(factorType.value()) || body == null || body.get("target") == null
                 ? caller.value() : body.get("target");
         return respond(transactionBoundary.execute(
-                () -> enrolFactor.start(caller, factorType, target)));
+                () -> enrolFactor.execute(caller, factorType, target)));
     }
 
     @Post(value = "/{type}/enroll/confirm", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
@@ -95,7 +99,7 @@ final class FactorsController {
                                               @Body Map<String, String> body) {
         Email caller = caller(request);
         return respond(transactionBoundary.execute(
-                () -> enrolFactor.confirm(caller, FactorType.of(type), body.get("code"))));
+                () -> confirmEnrolment.execute(caller, FactorType.of(type), body.get("code"))));
     }
 
     @Delete(value = "/{type}", produces = MediaType.APPLICATION_JSON)
@@ -143,15 +147,20 @@ final class FactorsController {
                         : Map.of("status", "ENROLL_SETUP", "display", started.display());
                 yield HttpResponse.accepted().body(body);
             }
-            case EnrolFactor.Result.Enrolled enrolled ->
-                    HttpResponse.ok(Map.of("status", "ENROLLED", "type", enrolled.type().value()));
-            case EnrolFactor.Result.WrongProof wrong ->
-                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
-                            .body(Map.of("status", "WRONG_CODE"));
-            case EnrolFactor.Result.NoPendingEnrolment none ->
-                    HttpResponse.<Map<String, Object>>badRequest(Map.of("status", "NO_PENDING_ENROLMENT"));
             case EnrolFactor.Result.UnsupportedFactor unsupported ->
                     HttpResponse.<Map<String, Object>>badRequest(Map.of("status", "UNSUPPORTED_FACTOR"));
+        };
+    }
+
+    private static HttpResponse<Map<String, Object>> respond(ConfirmEnrolment.Result result) {
+        return switch (result) {
+            case ConfirmEnrolment.Result.Enrolled enrolled ->
+                    HttpResponse.ok(Map.of("status", "ENROLLED", "type", enrolled.type().value()));
+            case ConfirmEnrolment.Result.WrongProof wrong ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
+                            .body(Map.of("status", "WRONG_CODE"));
+            case ConfirmEnrolment.Result.NoPendingEnrolment none ->
+                    HttpResponse.<Map<String, Object>>badRequest(Map.of("status", "NO_PENDING_ENROLMENT"));
         };
     }
 

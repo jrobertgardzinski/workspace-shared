@@ -17,7 +17,6 @@ import com.jrobertgardzinski.security.domain.vo.RefreshTokenValidityInHours;
 import com.jrobertgardzinski.security.domain.vo.SessionFamily;
 import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
 import com.jrobertgardzinski.security.system.federation.FederatedSignIn;
-import com.jrobertgardzinski.security.system.federation.FederatedSignInResult;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
@@ -56,31 +55,35 @@ public class FederatedSignInSteps {
             new com.jrobertgardzinski.security.system.mfa.FactorRegistry(java.util.List.of(
                     new com.jrobertgardzinski.security.system.mfa.CodeFactor(emailChannel, raw -> "h:" + raw,
                             com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(), Clock.systemUTC())));
+    private final com.jrobertgardzinski.security.system.mfa.FakeEnrolmentChallengeStore enrolmentStore =
+            new com.jrobertgardzinski.security.system.mfa.FakeEnrolmentChallengeStore();
     private final com.jrobertgardzinski.security.system.mfa.EnrolFactor enrolFactor =
-            new com.jrobertgardzinski.security.system.mfa.EnrolFactor(registry, enrolledFactors,
-                    new com.jrobertgardzinski.security.system.mfa.FakeEnrolmentChallengeStore());
+            new com.jrobertgardzinski.security.system.mfa.EnrolFactor(registry, enrolmentStore);
+    private final com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment confirmEnrolment =
+            new com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment(registry, enrolledFactors, enrolmentStore);
     private final FederatedSignIn federatedSignIn = new FederatedSignIn(
             identities, users, verifications, sessions, hashAlgorithm,
             new SessionTokensConfig(new RefreshTokenValidityInHours(24), new AccessTokenValidityInHours(1)),
             Clock.systemUTC(), AccessTokenMint.RANDOM, passwordless, enrolledFactors,
-            new com.jrobertgardzinski.security.system.mfa.MfaChain(registry,
-                    com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
-                    new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository(),
-                    raw -> "hash:" + raw, Clock.systemUTC(), 10),
-            new com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore());
+            new com.jrobertgardzinski.security.system.mfa.OpenMfaChain(
+                    new com.jrobertgardzinski.security.system.mfa.MfaChain(registry,
+                            com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
+                            new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository(),
+                            raw -> "hash:" + raw, Clock.systemUTC(), 10),
+                    new com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore()));
 
-    private FederatedSignInResult result;
+    private FederatedSignIn.Result result;
 
     @io.cucumber.java.en.Given("the ACCOUNT {string} has enrolled an e-mail FACTOR")
     public void hasEnrolledFactor(String email) {
-        enrolFactor.start(Email.of(email), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE, email);
-        enrolFactor.confirm(Email.of(email), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE,
+        enrolFactor.execute(Email.of(email), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE, email);
+        confirmEnrolment.execute(Email.of(email), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE,
                 emailChannel.lastCodeFor(email));
     }
 
     @io.cucumber.java.en.Then("the SIGN IN needs a further FACTOR")
     public void needsAFurtherFactor() {
-        assertInstanceOf(FederatedSignInResult.MfaRequired.class, result);
+        assertInstanceOf(FederatedSignIn.Result.MfaRequired.class, result);
     }
 
     @Given("a local ACCOUNT {string} with a verified email and the password {string}")
@@ -129,7 +132,7 @@ public class FederatedSignInSteps {
     @Given("the USER already SIGNED IN with a PROVIDER identity vouching for {string}")
     public void alreadySignedInWith(String email) {
         signIn(email, true);
-        assertInstanceOf(FederatedSignInResult.SignedIn.class, result, "failed to seed the first sign-in");
+        assertInstanceOf(FederatedSignIn.Result.SignedIn.class, result, "failed to seed the first sign-in");
         accountBefore = users.findBy(Email.of(email)).orElseThrow().id();
     }
 
@@ -145,12 +148,15 @@ public class FederatedSignInSteps {
 
     @Then("the USER is SIGNED IN")
     public void isSignedIn() {
-        assertInstanceOf(FederatedSignInResult.SignedIn.class, result);
+        assertInstanceOf(FederatedSignIn.Result.SignedIn.class, result);
     }
 
     @Then("the SIGN IN is refused")
     public void isRefused() {
-        assertInstanceOf(FederatedSignInResult.Refused.class, result);
+        org.junit.jupiter.api.Assertions.assertTrue(
+                result instanceof FederatedSignIn.Result.EmailNotVouched
+                        || result instanceof FederatedSignIn.Result.AccountClosing,
+                "expected a refusal, got " + result);
     }
 
     @Then("the ACCOUNT {string} exists, verified from birth")
@@ -205,6 +211,8 @@ public class FederatedSignInSteps {
 
     private void signIn(String email, boolean vouched) {
         result = federatedSignIn.execute(
-                new ProviderIdentity("stub", "sub-" + email, Email.of(email), vouched));
+                new ProviderIdentity("stub", "sub-" + email, Email.of(email), vouched),
+                com.jrobertgardzinski.security.domain.vo.Source.of(
+                        new com.jrobertgardzinski.security.domain.vo.IpAddress("203.0.113.9")));
     }
 }

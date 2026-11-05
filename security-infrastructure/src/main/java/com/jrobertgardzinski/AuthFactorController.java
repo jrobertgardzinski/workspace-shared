@@ -1,7 +1,6 @@
 package com.jrobertgardzinski;
 
 import com.jrobertgardzinski.security.system.authentication.ContinueAuthentication;
-import com.jrobertgardzinski.security.system.authentication.ContinueAuthenticationResult;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -61,22 +60,22 @@ final class AuthFactorController {
         }
         String ticket = body.get("mfaTicket");
         String proof = body.get("proof");
-        ContinueAuthenticationResult result =
+        ContinueAuthentication.Result result =
                 transactionBoundary.execute(() -> continueAuthentication.execute(ticket, proof));
         return switch (result) {
-            case ContinueAuthenticationResult.Completed completed ->
+            case ContinueAuthentication.Result.Completed completed ->
                     HttpResponse.ok(Map.<String, Object>of("accessToken", completed.session().plainAccessToken()))
                             .cookie(refreshCookies.issue(completed.session().plainRefreshToken()));
-            case ContinueAuthenticationResult.NextFactor next ->
+            case ContinueAuthentication.Result.NextFactor next ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.ACCEPTED)
                             .body(MfaBody.of(ticket, next.type().value(), next.challengeData()));
-            case ContinueAuthenticationResult.WrongProof wrong ->
+            case ContinueAuthentication.Result.WrongProof wrong ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "WRONG_CODE", "attemptsLeft", wrong.attemptsLeft()));
-            case ContinueAuthenticationResult.TooManyAttempts tooMany ->
+            case ContinueAuthentication.Result.TooManyAttempts tooMany ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "TOO_MANY_ATTEMPTS"));
-            case ContinueAuthenticationResult.InvalidTicket invalid ->
+            case ContinueAuthentication.Result.InvalidTicket invalid ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "INVALID_OR_EXPIRED_TICKET"));
         };

@@ -86,9 +86,9 @@ class RegisterTest {
         String email = emailFails ? BLOCKED_EMAIL : EMAIL;
         String password = passwordFails ? WEAK_PASSWORD : PASSWORD;
 
-        RegisterResult result = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
+        Register.Result result = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
 
-        RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
+        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
         assertAll(
                 () -> assertEquals(emailFails ? List.of(EmailError.DOMAIN_BLOCKED) : List.of(), rejected.emailErrors()),
                 () -> assertEquals(passwordFails, !rejected.passwordErrors().isEmpty()),
@@ -100,9 +100,9 @@ class RegisterTest {
     @Example
     @Label("both channels are refused at once, each rule by its code, in policy order")
     void both_channels_refused_at_once() {
-        RegisterResult result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(WEAK_PASSWORD));
+        Register.Result result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(WEAK_PASSWORD));
 
-        RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
+        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(EmailError.DOMAIN_BLOCKED), rejected.emailErrors()),
                 () -> assertEquals(List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.UPPERCASE_REQUIRED,
@@ -116,9 +116,9 @@ class RegisterTest {
     @Example
     @Label("an address that does not construct is a code, not an exception — and the password is still judged")
     void malformed_address_is_a_code_and_the_password_is_still_judged() {
-        RegisterResult result = register.execute(() -> Email.of("invalid"), () -> PlaintextPassword.of(WEAK_PASSWORD));
+        Register.Result result = register.execute(() -> Email.of("invalid"), () -> PlaintextPassword.of(WEAK_PASSWORD));
 
-        RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
+        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(EmailError.EMAIL_FORMAT_INVALID), rejected.emailErrors()),
                 () -> assertFalse(rejected.passwordErrors().isEmpty(), "the password channel must be judged too"),
@@ -129,9 +129,9 @@ class RegisterTest {
     @Example
     @Label("a blank password is a code of its own, with the policy skipped and nothing hashed")
     void blank_password_is_a_code() {
-        RegisterResult result = register.execute(() -> Email.of("a..b@gmail.com"), () -> PlaintextPassword.of("   "));
+        Register.Result result = register.execute(() -> Email.of("a..b@gmail.com"), () -> PlaintextPassword.of("   "));
 
-        RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
+        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(EmailError.LOCAL_PART_CONSECUTIVE_DOTS), rejected.emailErrors()),
                 () -> assertEquals(List.of(PasswordError.PASSWORD_BLANK), rejected.passwordErrors()),
@@ -142,9 +142,9 @@ class RegisterTest {
     @Example
     @Label("a refused address with a fine password carries no password refusal at all")
     void fine_password_carries_no_failure() {
-        RegisterResult result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(PASSWORD));
+        Register.Result result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(PASSWORD));
 
-        RegisterResult.Rejected rejected = assertInstanceOf(RegisterResult.Rejected.class, result);
+        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
         assertEquals(List.of(), rejected.passwordErrors());
     }
 
@@ -153,12 +153,12 @@ class RegisterTest {
     void each_email_rule_by_its_code(@ForAll("addressesUnderEveryRule") Tuple.Tuple2<String, List<EmailError>> row) {
         Register strict = new Register(userRepository, new AdmitEmail(EVERY_RULE), new CreatePasswordHash(algorithm, () -> POLICY));
 
-        RegisterResult result = strict.execute(() -> Email.of(row.get1()), () -> PlaintextPassword.of(PASSWORD));
+        Register.Result result = strict.execute(() -> Email.of(row.get1()), () -> PlaintextPassword.of(PASSWORD));
 
         if (row.get2().isEmpty()) {
-            assertInstanceOf(RegisterResult.Registered.class, result);
+            assertInstanceOf(Register.Result.Registered.class, result);
         } else {
-            assertEquals(row.get2(), assertInstanceOf(RegisterResult.Rejected.class, result).emailErrors());
+            assertEquals(row.get2(), assertInstanceOf(Register.Result.Rejected.class, result).emailErrors());
         }
     }
 
@@ -179,9 +179,9 @@ class RegisterTest {
         Register lenient = new Register(userRepository, new AdmitEmail(new EmailPolicy()), new CreatePasswordHash(algorithm, () -> POLICY));
         Mockito.when(userRepository.save(Mockito.any())).thenAnswer(call -> call.getArgument(0));
 
-        RegisterResult result = lenient.execute(() -> Email.of("user@throwaway.example"), () -> PlaintextPassword.of(PASSWORD));
+        Register.Result result = lenient.execute(() -> Email.of("user@throwaway.example"), () -> PlaintextPassword.of(PASSWORD));
 
-        assertInstanceOf(RegisterResult.Registered.class, result);
+        assertInstanceOf(Register.Result.Registered.class, result);
     }
 
     @Example
@@ -190,9 +190,9 @@ class RegisterTest {
         User user = new User(Email.of(EMAIL), HASH);
         Mockito.when(userRepository.save(Mockito.any())).thenReturn(user);
 
-        RegisterResult result = register.execute(() -> Email.of(EMAIL), () -> PlaintextPassword.of(PASSWORD));
+        Register.Result result = register.execute(() -> Email.of(EMAIL), () -> PlaintextPassword.of(PASSWORD));
 
-        RegisterResult.Registered registered = assertInstanceOf(RegisterResult.Registered.class, result);
+        Register.Result.Registered registered = assertInstanceOf(Register.Result.Registered.class, result);
         assertEquals(user, registered.user());
     }
 
@@ -201,9 +201,9 @@ class RegisterTest {
     void email_already_taken_when_user_exists() {
         Mockito.when(userRepository.existsBy(Mockito.any())).thenReturn(true);
 
-        RegisterResult result = register.execute(() -> Email.of(EMAIL), () -> PlaintextPassword.of(PASSWORD));
+        Register.Result result = register.execute(() -> Email.of(EMAIL), () -> PlaintextPassword.of(PASSWORD));
 
-        RegisterResult.EmailAlreadyTaken alreadyTaken = assertInstanceOf(RegisterResult.EmailAlreadyTaken.class, result);
+        Register.Result.EmailAlreadyTaken alreadyTaken = assertInstanceOf(Register.Result.EmailAlreadyTaken.class, result);
         assertAll(
                 () -> assertEquals(Email.of(EMAIL), alreadyTaken.email()),
                 () -> assertEquals(1, algorithm.hashes.get(), "a taken address must cost the same hash as a fresh one"),
@@ -217,8 +217,8 @@ class RegisterTest {
         Mockito.when(userRepository.existsBy(Mockito.any())).thenReturn(false);
         Mockito.when(userRepository.save(Mockito.any())).thenThrow(new EmailAlreadyTakenException());
 
-        RegisterResult result = register.execute(() -> Email.of(EMAIL), () -> PlaintextPassword.of(PASSWORD));
+        Register.Result result = register.execute(() -> Email.of(EMAIL), () -> PlaintextPassword.of(PASSWORD));
 
-        assertEquals(Email.of(EMAIL), assertInstanceOf(RegisterResult.EmailAlreadyTaken.class, result).email());
+        assertEquals(Email.of(EMAIL), assertInstanceOf(Register.Result.EmailAlreadyTaken.class, result).email());
     }
 }

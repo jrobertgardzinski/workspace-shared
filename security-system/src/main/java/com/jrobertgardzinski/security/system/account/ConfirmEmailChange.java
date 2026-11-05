@@ -1,5 +1,7 @@
 package com.jrobertgardzinski.security.system.account;
 
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException;
 import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
@@ -11,6 +13,10 @@ import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepos
 import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Optional;
 
 /**
  * Completes an email change: a matching, unused token applies the pending change (moving the user
@@ -47,7 +53,7 @@ import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
  * <p>The address is checked for an occupant before anything moves, and the move itself is still
  * allowed to refuse: the window between requesting a change and following the link is up to a day
  * wide and nothing reserves the target, so somebody may register it in the meantime. Either way the
- * answer is {@link ConfirmEmailChangeResult.EmailTaken} and nothing has been moved — the stores
+ * answer is {@link Result.EmailTaken} and nothing has been moved — the stores
  * that follow the account are touched only once the move is known to be possible.
  *
  * <p>A ticket is also refused while the account is being DELETED. The deletion saga locks the
@@ -66,18 +72,21 @@ public class ConfirmEmailChange {
     private final PasswordlessAccountRepository passwordlessAccountRepository;
     private final PasswordResetRepository passwordResetRepository;
     private final SessionRepository sessionRepository;
-    private final java.time.Duration tokenTtl;
-    private final java.time.Clock clock;
+    private final Duration tokenTtl;
+    private final Clock clock;
 
-    public ConfirmEmailChange(EmailChangeRepository emailChangeRepository, UserRepository userRepository,
-                              EmailVerificationRepository emailVerificationRepository,
-                              FederatedIdentityRepository federatedIdentityRepository,
-                              EnrolledFactorRepository enrolledFactorRepository,
-                              RecoveryCodeRepository recoveryCodeRepository,
-                              PasswordlessAccountRepository passwordlessAccountRepository,
-                              PasswordResetRepository passwordResetRepository,
-                              SessionRepository sessionRepository,
-                              java.time.Duration tokenTtl, java.time.Clock clock) {
+    public ConfirmEmailChange(
+                    EmailChangeRepository emailChangeRepository,
+                    UserRepository userRepository,
+                    EmailVerificationRepository emailVerificationRepository,
+                    FederatedIdentityRepository federatedIdentityRepository,
+                    EnrolledFactorRepository enrolledFactorRepository,
+                    RecoveryCodeRepository recoveryCodeRepository,
+                    PasswordlessAccountRepository passwordlessAccountRepository,
+                    PasswordResetRepository passwordResetRepository,
+                    SessionRepository sessionRepository,
+                    Duration tokenTtl,
+                    Clock clock) {
         this.emailChangeRepository = emailChangeRepository;
         this.userRepository = userRepository;
         this.emailVerificationRepository = emailVerificationRepository;
@@ -91,44 +100,95 @@ public class ConfirmEmailChange {
         this.clock = clock;
     }
 
-    public ConfirmEmailChangeResult execute(VerificationToken token) {
-        return emailChangeRepository.confirmChange(token)
-                .filter(this::stillFresh)
-                .map(EmailChangeRepository.PendingEmailChange::change)
-                .filter(change -> !userRepository.isPendingDeletion(change.currentEmail()))
-                .<ConfirmEmailChangeResult>map(change -> {
-                    if (userRepository.existsBy(com.jrobertgardzinski.email.domain.NormalizedEmail
-                            .of(change.newEmail()))) {
-                        return new ConfirmEmailChangeResult.EmailTaken();
-                    }
-                    federatedIdentityRepository.relinkAll(change.currentEmail(), change.newEmail());
-                    enrolledFactorRepository.reassign(change.currentEmail(), change.newEmail());
-                    recoveryCodeRepository.reassign(change.currentEmail(), change.newEmail());
-                    passwordlessAccountRepository.reassign(change.currentEmail(), change.newEmail());
-                    passwordResetRepository.purge(change.currentEmail());
-                    emailChangeRepository.purge(change.currentEmail());
-                    emailVerificationRepository.purge(change.currentEmail());
-                    try {
-                        userRepository.updateEmail(change.currentEmail(), change.newEmail());
-                    } catch (EmailAlreadyTakenException takenSinceWeLooked) {
-                        // the read above lost a race with a registration; the port's contract is
-                        // what settles it, and the same answer is owed either way
-                        return new ConfirmEmailChangeResult.EmailTaken();
-                    }
-                    sessionRepository.revokeAllSessions(change.currentEmail());
-                    emailVerificationRepository.markVerified(change.newEmail());
-                    return new ConfirmEmailChangeResult.EmailChanged(change.currentEmail(), change.newEmail());
-                })
-                .orElseGet(ConfirmEmailChangeResult.InvalidToken::new);
+    public sealed interface Result {
+
+        /**
+         * Both addresses, because the move is announced to the rest of the estate and the
+         * announcement is useless without the one the other services' rows are still keyed by.
+         */
+        record EmailChanged(Email oldEmail, Email newEmail) implements Result {}
+
+        record TokenNotFound() implements Result {}
+
+        record TokenExpired() implements Result {}
+
+        /** The account is being deleted: moving it now would hide it from the deletion saga. */
+        record AccountClosing() implements Result {}
+
+        /**
+         * Somebody else holds the address now.
+         *
+         * <p>A change is requested against a free address and confirmed up to a day later, and
+         * nothing reserves it in between — so this is an ordinary outcome, not an error, and it is
+         * the only one the person can act on ("pick another address"). It is said plainly rather
+         * than folded into the token refusals: the token was perfectly good, and telling its owner
+         * it was not sends them to request a second one that will fail in exactly the same way.
+         *
+         * <p>It does tell the confirming user that the address is taken — which is something the
+         * quiet request endpoint deliberately does not say. The trade is deliberate too: they are
+         * the person who asked to move there, they will find out when they try again, and the
+         * alternative is an account stuck in a loop with no way to learn why.
+         */
+        record EmailTaken() implements Result {}
     }
 
-    /**
-     * An expired ticket is treated exactly like an unknown one — and it is already consumed by the
-     * time we look, so it is spent for good either way. Same answer as a stale password-reset link,
-     * for the same reason: telling the difference would tell a stranger that a change to this
-     * address was once started.
-     */
-    private boolean stillFresh(EmailChangeRepository.PendingEmailChange pending) {
-        return !pending.startedAt().plus(tokenTtl).isBefore(java.time.LocalDateTime.now(clock));
+    public Result execute(VerificationToken token) {
+
+        Optional<EmailChangeRepository.PendingEmailChange> pendingEmailChange =
+                emailChangeRepository.confirmChange(token);
+
+        if (
+                pendingEmailChange.isEmpty()
+        ) {
+            return new Result.TokenNotFound();
+        }
+
+        if (
+                pendingEmailChange.get().expiration(tokenTtl).hasExpired(clock)
+        ) {
+            // already consumed by the time we look, so it is spent for good either way. The edge
+            // answers it exactly like an unknown one: telling the difference on the wire would tell
+            // a stranger that a change to this address was once started.
+            return new Result.TokenExpired();
+        }
+
+        Email currentEmail = pendingEmailChange.get().change().currentEmail();
+        Email newEmail = pendingEmailChange.get().change().newEmail();
+
+        if (
+                userRepository.isPendingDeletion(currentEmail)
+        ) {
+            return new Result.AccountClosing();
+        }
+
+        if (
+                userRepository.existsBy(
+                        NormalizedEmail.of(newEmail))
+        ) {
+            return new Result.EmailTaken();
+        }
+
+        federatedIdentityRepository.relinkAll(currentEmail, newEmail);
+        enrolledFactorRepository.reassign(currentEmail, newEmail);
+        recoveryCodeRepository.reassign(currentEmail, newEmail);
+        passwordlessAccountRepository.reassign(currentEmail, newEmail);
+        passwordResetRepository.purge(currentEmail);
+        emailChangeRepository.purge(currentEmail);
+        emailVerificationRepository.purge(currentEmail);
+
+        try {
+            userRepository.updateEmail(currentEmail, newEmail);
+        } catch (EmailAlreadyTakenException takenSinceWeLooked) {
+            // the read above lost a race with a registration; the port's contract is what settles
+            // it, and the same answer is owed either way
+            return new Result.EmailTaken();
+        }
+
+        sessionRepository.revokeAllSessions(currentEmail);
+        emailVerificationRepository.markVerified(newEmail);
+
+        return new Result.EmailChanged(
+                currentEmail,
+                newEmail);
     }
 }

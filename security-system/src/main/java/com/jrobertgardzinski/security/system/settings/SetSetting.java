@@ -15,43 +15,51 @@ import java.util.Optional;
  */
 public class SetSetting {
 
-    public enum Status { ACCEPTED, REFUSED, UNKNOWN_KEY }
+    private final SettingCatalog catalogue;
+    private final SettingsRepository settingsRepository;
 
-    /** {@code value} is the rule's value as held, {@code reason} the gate's words on a refusal. */
-    public record Result(Status status, String key, Object value, String reason) {
-        static Result accepted(String key, Object value) {
-            return new Result(Status.ACCEPTED, key, value, "");
-        }
-
-        static Result refused(String key, String reason) {
-            return new Result(Status.REFUSED, key, null, reason);
-        }
-
-        static Result unknownKey(String key) {
-            return new Result(Status.UNKNOWN_KEY, key, null, "no live rule goes by '" + key + "'");
-        }
+    public SetSetting(
+                    SettingCatalog catalogue,
+                    SettingsRepository settingsRepository) {
+        this.catalogue = catalogue;
+        this.settingsRepository = settingsRepository;
     }
 
-    private final SettingCatalog catalogue;
-    private final SettingsRepository store;
+    public sealed interface Result {
 
-    public SetSetting(SettingCatalog catalogue, SettingsRepository store) {
-        this.catalogue = catalogue;
-        this.store = store;
+        /** The rule's value as held. */
+        record Accepted(Object value) implements Result {}
+
+        /** The gate's words. */
+        record Refused(String reason) implements Result {}
+
+        record UnknownKey(String reason) implements Result {}
     }
 
     public Result execute(String key, String text) {
-        Optional<LiveKey> live = catalogue.find(key);
-        if (live.isEmpty()) {
-            return Result.unknownKey(key);
+
+        Optional<LiveKey> liveKey = catalogue.find(key);
+
+        if (
+                liveKey.isEmpty()
+        ) {
+            return new Result.UnknownKey(
+                    "no live rule goes by '" + key + "'");
         }
+
         ConfigValue<?> held;
         try {
-            held = live.get().holding(text);
+            held = liveKey.get().holding(text);
         } catch (IllegalArgumentException refused) {
-            return Result.refused(key, refused.getMessage());
+            return new Result.Refused(
+                    refused.getMessage());
         }
-        store.save(key, String.valueOf(held.value()));
-        return Result.accepted(key, held.value());
+
+        settingsRepository.save(
+                key,
+                String.valueOf(held.value()));
+
+        return new Result.Accepted(
+                held.value());
     }
 }

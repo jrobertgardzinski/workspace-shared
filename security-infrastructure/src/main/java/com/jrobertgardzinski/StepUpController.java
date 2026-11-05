@@ -6,6 +6,7 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
+import com.jrobertgardzinski.security.system.mfa.ContinueStepUp;
 import com.jrobertgardzinski.security.system.mfa.StepUp;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import io.micronaut.http.HttpRequest;
@@ -33,12 +34,15 @@ import java.util.Map;
 final class StepUpController {
 
     private final StepUp stepUp;
+    private final ContinueStepUp continueStepUp;
     private final SourceThrottle throttle;
     private final ClientIpResolver clientIpResolver;
 
-    StepUpController(StepUp stepUp, @Named("step-up") SourceThrottle throttle,
+    StepUpController(StepUp stepUp, ContinueStepUp continueStepUp,
+                     @Named("step-up") SourceThrottle throttle,
                      ClientIpResolver clientIpResolver) {
         this.stepUp = stepUp;
+        this.continueStepUp = continueStepUp;
         this.throttle = throttle;
         this.clientIpResolver = clientIpResolver;
     }
@@ -64,7 +68,7 @@ final class StepUpController {
         PlaintextPassword password = JsonBody.missing(body, "password")
                 ? null
                 : PlaintextPassword.of(body.get("password"));
-        return respond(stepUp.start(email, action.get(), token, password), request);
+        return respond(stepUp.execute(email, action.get(), token, password), request);
     }
 
     @Post(value = "/factor", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
@@ -76,7 +80,7 @@ final class StepUpController {
         if (JsonBody.missing(body, "stepUpTicket") || JsonBody.missing(body, "proof")) {
             return HttpResponse.badRequest(Map.of("status", "BAD_REQUEST"));
         }
-        return respond(stepUp.submitFactor(body.get("stepUpTicket"), body.get("proof")), request);
+        return respond(continueStepUp.execute(body.get("stepUpTicket"), body.get("proof")), request);
     }
 
     /** A 429 (with Retry-After) when the CALLER has spent their window, otherwise null (proceed). */
@@ -120,21 +124,36 @@ final class StepUpController {
             case StepUp.Result.WrongPassword wrong ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "WRONG_PASSWORD"));
-            case StepUp.Result.WrongProof wrong ->
-                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
-                            .body(Map.of("status", "WRONG_CODE", "attemptsLeft", wrong.attemptsLeft()));
-            case StepUp.Result.TooManyAttempts tooMany ->
-                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
-                            .body(Map.of("status", "TOO_MANY_ATTEMPTS"));
-            case StepUp.Result.InvalidTicket invalid ->
-                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
-                            .body(Map.of("status", "INVALID_TICKET"));
             // 409, not 401: nothing the caller can type would help. They are who they say they
             // are; the account simply carries nothing to re-prove with, and the way out is to
             // enrol a factor — which is a SECOND_FACTORS action and therefore still reachable.
             case StepUp.Result.NothingToProveWith nothing ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.CONFLICT)
                             .body(Map.of("status", "ENROL_A_FACTOR_FIRST"));
+        };
+    }
+
+    private HttpResponse<Map<String, Object>> respond(ContinueStepUp.Result result, HttpRequest<?> request) {
+        // a caller who has just re-proved themselves is not the volume this throttle defends
+        // against — same rule the brute-force guard follows on a correct password
+        if (result instanceof ContinueStepUp.Result.Elevated) {
+            throttle.forgive(subjectOf(request));
+        }
+        return switch (result) {
+            case ContinueStepUp.Result.Elevated elevated ->
+                    HttpResponse.ok(Map.of("status", "ELEVATED"));
+            case ContinueStepUp.Result.FactorRequired next ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.ACCEPTED)
+                            .body(MfaBody.stepUp(next.ticket(), next.nextFactor().value(), next.challengeData()));
+            case ContinueStepUp.Result.WrongProof wrong ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
+                            .body(Map.of("status", "WRONG_CODE", "attemptsLeft", wrong.attemptsLeft()));
+            case ContinueStepUp.Result.TooManyAttempts tooMany ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
+                            .body(Map.of("status", "TOO_MANY_ATTEMPTS"));
+            case ContinueStepUp.Result.InvalidTicket invalid ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
+                            .body(Map.of("status", "INVALID_TICKET"));
         };
     }
 }

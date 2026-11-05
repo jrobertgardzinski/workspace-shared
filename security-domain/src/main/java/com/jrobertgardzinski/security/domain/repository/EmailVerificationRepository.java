@@ -2,7 +2,9 @@ package com.jrobertgardzinski.security.domain.repository;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
+import com.jrobertgardzinski.security.domain.vo.token.expiration.MailedLinkExpiration;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -23,7 +25,11 @@ public interface EmailVerificationRepository {
      * carry no date at all, so a link from a year ago verified an address as happily as one from a
      * minute ago — which matters most for exactly the addresses nobody is watching.
      */
-    record PendingVerification(Email email, java.time.LocalDateTime requestedAt) {}
+    record PendingVerification(Email email, java.time.LocalDateTime requestedAt) {
+        public MailedLinkExpiration expiration(Duration window) {
+            return new MailedLinkExpiration(requestedAt, window);
+        }
+    }
 
     /**
      * If the token matches a pending verification, mark that address verified and return what was

@@ -37,43 +37,43 @@ class EnrolmentAttemptsTest {
     @DisplayName("wrong proofs are counted, and running out ends the enrolment")
     void a_wrong_proof_costs_an_attempt() {
         RememberedCodes channel = new RememberedCodes();
-        EnrolFactor enrol = new EnrolFactor(
-                new FactorRegistry(List.of(new CodeFactor(
-                        channel, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC()))),
-                new FactorStore(),
-                new FakeEnrolmentChallengeStore());
+        FactorRegistry registry = new FactorRegistry(List.of(new CodeFactor(
+                channel, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC())));
+        FakeEnrolmentChallengeStore pending = new FakeEnrolmentChallengeStore();
+        EnrolFactor enrolFactor = new EnrolFactor(registry, pending);
+        ConfirmEnrolment confirmEnrolment = new ConfirmEnrolment(registry, new FactorStore(), pending);
 
-        enrol.start(USER, FactorType.EMAIL_CODE, USER.value());
+        enrolFactor.execute(USER, FactorType.EMAIL_CODE, USER.value());
 
         for (int attempt = 1; attempt <= EnrolmentChallengeStore.PendingEnrolment.ATTEMPTS; attempt++) {
-            assertThat(enrol.confirm(USER, FactorType.EMAIL_CODE, "000000"))
+            assertThat(confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, "000000"))
                     .as("attempt %d is simply wrong, and the enrolment is still open", attempt)
-                    .isInstanceOf(EnrolFactor.Result.WrongProof.class);
+                    .isInstanceOf(ConfirmEnrolment.Result.WrongProof.class);
         }
 
-        assertThat(enrol.confirm(USER, FactorType.EMAIL_CODE, channel.lastCode))
+        assertThat(confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, channel.lastCode))
                 .as("the attempts are spent, so even the RIGHT code finds nothing pending — a"
                         + " guesser has to start a new enrolment, which is itself guarded and"
                         + " throttled")
-                .isInstanceOf(EnrolFactor.Result.NoPendingEnrolment.class);
+                .isInstanceOf(ConfirmEnrolment.Result.NoPendingEnrolment.class);
     }
 
     @Test
     @DisplayName("a typo does not cost the enrolment")
     void the_right_code_still_works_after_a_mistake() {
         RememberedCodes channel = new RememberedCodes();
-        EnrolFactor enrol = new EnrolFactor(
-                new FactorRegistry(List.of(new CodeFactor(
-                        channel, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC()))),
-                new FactorStore(),
-                new FakeEnrolmentChallengeStore());
+        FactorRegistry registry = new FactorRegistry(List.of(new CodeFactor(
+                channel, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC())));
+        FakeEnrolmentChallengeStore pending = new FakeEnrolmentChallengeStore();
+        EnrolFactor enrolFactor = new EnrolFactor(registry, pending);
+        ConfirmEnrolment confirmEnrolment = new ConfirmEnrolment(registry, new FactorStore(), pending);
 
-        enrol.start(USER, FactorType.EMAIL_CODE, USER.value());
-        enrol.confirm(USER, FactorType.EMAIL_CODE, "000000");
+        enrolFactor.execute(USER, FactorType.EMAIL_CODE, USER.value());
+        confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, "000000");
 
-        assertThat(enrol.confirm(USER, FactorType.EMAIL_CODE, channel.lastCode))
+        assertThat(confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, channel.lastCode))
                 .as("people mistype; the cap is for the machine that does not")
-                .isInstanceOf(EnrolFactor.Result.Enrolled.class);
+                .isInstanceOf(ConfirmEnrolment.Result.Enrolled.class);
     }
 
     /** A channel that keeps the code instead of sending it. */

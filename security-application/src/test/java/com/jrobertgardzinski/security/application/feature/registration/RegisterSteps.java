@@ -11,7 +11,6 @@ import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.system.registration.Register;
-import com.jrobertgardzinski.security.system.registration.RegisterResult;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
@@ -35,7 +34,7 @@ public class RegisterSteps {
             // the shipped policy does not hold.
             new CreatePasswordHash(new Argon2HashAlgorithm(), PasswordPolicy::withDefaults));
 
-    private RegisterResult result;
+    private Register.Result result;
 
     @Given("the EMAIL {string} is already REGISTERED")
     public void theEmailIsAlreadyRegistered(String email) {
@@ -49,12 +48,12 @@ public class RegisterSteps {
 
     @Then("the USER is REGISTERED")
     public void theUserIsRegistered() {
-        assertInstanceOf(RegisterResult.Registered.class, result);
+        assertInstanceOf(Register.Result.Registered.class, result);
     }
 
     @Then("REGISTRATION is rejected")
     public void registrationIsRejected() {
-        assertInstanceOf(RegisterResult.Rejected.class, result);
+        assertInstanceOf(Register.Result.Rejected.class, result);
     }
 
     /**
@@ -64,7 +63,7 @@ public class RegisterSteps {
      */
     @Then("REGISTRATION is quietly refused, indistinguishable from a fresh one")
     public void registrationIsQuietlyRefused() {
-        assertInstanceOf(RegisterResult.EmailAlreadyTaken.class, result);
+        assertInstanceOf(Register.Result.EmailAlreadyTaken.class, result);
     }
 
     @Then("the EMAIL is flagged as {word}")
@@ -77,8 +76,8 @@ public class RegisterSteps {
         assertFlag(flag, rejected().passwordErrors());
     }
 
-    private RegisterResult.Rejected rejected() {
-        return assertInstanceOf(RegisterResult.Rejected.class, result);
+    private Register.Result.Rejected rejected() {
+        return assertInstanceOf(Register.Result.Rejected.class, result);
     }
 
     private void assertFlag(String flag, List<?> errors) {

@@ -1,16 +1,16 @@
 package com.jrobertgardzinski;
 
 import com.jrobertgardzinski.security.domain.vo.Role;
+import com.jrobertgardzinski.security.domain.vo.RoleError;
 import com.jrobertgardzinski.security.system.roles.RequireRole;
-import com.jrobertgardzinski.util.constraint.Outcome;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
 import jakarta.inject.Singleton;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The role gate an admin endpoint puts in front of itself: the caller must hold the role, from a
@@ -28,11 +28,11 @@ public final class RoleGuard {
 
     /** A 403 response if the caller lacks the role, otherwise empty (proceed). */
     public Optional<HttpResponse<Map<String, Object>>> require(HttpRequest<?> request, Role role) {
-        Outcome<Set<Role>> outcome = requireRole.check(Caller.of(request), role);
-        if (outcome.errorCodes().isEmpty()) {
+        List<RoleError> errors = requireRole.check(Caller.of(request), role);
+        if (errors.isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(HttpResponse.<Map<String, Object>>status(HttpStatus.FORBIDDEN)
-                .body(Map.of("status", outcome.errorCodes().getFirst())));
+                .body(Map.of("status", errors.getFirst().name())));
     }
 }

@@ -4,20 +4,27 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
+import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
+import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
+import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
+import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.domain.vo.ProviderIdentity;
 import com.jrobertgardzinski.security.domain.vo.SessionFamily;
 import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
+import com.jrobertgardzinski.security.domain.vo.Source;
+import com.jrobertgardzinski.security.system.mfa.OpenMfaChain;
 
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -42,49 +49,79 @@ public class FederatedSignIn {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final FederatedIdentityRepository identities;
-    private final UserRepository users;
-    private final EmailVerificationRepository verifications;
-    private final SessionRepository sessions;
+    private final FederatedIdentityRepository federatedIdentityRepository;
+    private final UserRepository userRepository;
+    private final EmailVerificationRepository emailVerificationRepository;
+    private final SessionRepository sessionRepository;
     private final HashAlgorithmPort hashAlgorithm;
     private final SessionTokensConfig config;
     private final Clock clock;
     private final AccessTokenMint accessTokenMint;
-    private final com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless;
-    private final com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors;
-    private final com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain;
-    private final com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingStore;
+    private final PasswordlessAccountRepository passwordlessAccountRepository;
+    private final EnrolledFactorRepository enrolledFactorRepository;
+    private final OpenMfaChain openMfaChain;
 
-    public FederatedSignIn(FederatedIdentityRepository identities, UserRepository users,
-                           EmailVerificationRepository verifications, SessionRepository sessions,
-                           HashAlgorithmPort hashAlgorithm, SessionTokensConfig config, Clock clock,
-                           AccessTokenMint accessTokenMint,
-                           com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
-                           com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
-                           com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
-                           com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingStore) {
-        this.identities = identities;
-        this.users = users;
-        this.verifications = verifications;
-        this.sessions = sessions;
+    public FederatedSignIn(
+                    FederatedIdentityRepository federatedIdentityRepository,
+                    UserRepository userRepository,
+                    EmailVerificationRepository emailVerificationRepository,
+                    SessionRepository sessionRepository,
+                    HashAlgorithmPort hashAlgorithm,
+                    SessionTokensConfig config,
+                    Clock clock,
+                    AccessTokenMint accessTokenMint,
+                    PasswordlessAccountRepository passwordlessAccountRepository,
+                    EnrolledFactorRepository enrolledFactorRepository,
+                    OpenMfaChain openMfaChain) {
+        this.federatedIdentityRepository = federatedIdentityRepository;
+        this.userRepository = userRepository;
+        this.emailVerificationRepository = emailVerificationRepository;
+        this.sessionRepository = sessionRepository;
         this.hashAlgorithm = hashAlgorithm;
         this.config = config;
         this.clock = clock;
         this.accessTokenMint = accessTokenMint;
-        this.passwordless = passwordless;
-        this.enrolledFactors = enrolledFactors;
-        this.mfaChain = mfaChain;
-        this.pendingStore = pendingStore;
+        this.passwordlessAccountRepository = passwordlessAccountRepository;
+        this.enrolledFactorRepository = enrolledFactorRepository;
+        this.openMfaChain = openMfaChain;
     }
 
-    public FederatedSignInResult execute(ProviderIdentity identity) {
-        if (!identity.emailVerified()) {
-            return new FederatedSignInResult.Refused("EMAIL_NOT_VOUCHED");
+    public sealed interface Result {
+
+        record SignedIn(SessionTokens session) implements Result {}
+
+        /**
+         * The provider login proved link #1, but the account has enrolled factors: no session yet.
+         * The client presents proofs against {@code ticket} (the same {@code /authenticate/factor}
+         * endpoint the password chain uses) until the chain completes.
+         */
+        record MfaRequired(String ticket, FactorType nextFactor, String challengeData) implements Result {}
+
+        /** The provider did not vouch for the address, so it proves nothing about an inbox. */
+        record EmailNotVouched() implements Result {}
+
+        /** The account is being deleted. */
+        record AccountClosing() implements Result {}
+    }
+
+    public Result execute(ProviderIdentity identity, Source source) {
+
+        if (
+                !identity.emailVerified()
+        ) {
+            return new Result.EmailNotVouched();
         }
-        Optional<Email> linked = identities.findUserBy(identity.provider(), identity.subject())
-                // a link pointing at a user that no longer exists (e.g. the email changed
-                // locally) is stale — fall through to the email rules and re-link
-                .filter(existing -> users.findBy(existing).isPresent());
+
+        Optional<Email> linkedEmail = federatedIdentityRepository.findUserBy(
+                identity.provider(),
+                identity.subject());
+
+        // a link pointing at a user that no longer exists (e.g. the email changed locally) is stale
+        // — fall through to the email rules and re-link
+        boolean linked =
+                linkedEmail.isPresent() &&
+                userRepository.findBy(linkedEmail.get()).isPresent();
+
         // The lock is checked BEFORE claimByEmail, not after. claimByEmail WRITES — it can wipe the
         // password, revoke every session, mark the address verified and link the provider identity —
         // and it used to run first, so an account with a running deletion saga got a fresh provider
@@ -92,25 +129,46 @@ public class FederatedSignIn {
         // in a state nobody asked for). Sign-in was refused either way; the side effects were not.
         // The address claimByEmail would act on is exactly the one it returns, so asking about it up
         // front costs nothing: for an unknown address isPendingDeletion is simply false.
-        Email account = linked.orElseGet(identity::email);
-        if (users.isPendingDeletion(account)) {
-            return new FederatedSignInResult.Refused("ACCOUNT_CLOSING");
+        Email account;
+        if (
+                linked
+        ) {
+            account = linkedEmail.get();
+        } else {
+            account = identity.email();
         }
-        if (linked.isEmpty()) {
+
+        if (
+                userRepository.isPendingDeletion(account)
+        ) {
+            return new Result.AccountClosing();
+        }
+
+        if (
+                !linked
+        ) {
             claimByEmail(identity);
         }
+
         // the provider login is link #1; if the account has enrolled factors, they must be passed
         // too before a session — the same chain the password sign-in walks
-        java.util.List<com.jrobertgardzinski.security.domain.entity.EnrolledFactor> factors =
-                enrolledFactors.findByUser(account);
-        if (factors.isEmpty()) {
-            return new FederatedSignInResult.SignedIn(sessions.create(
-                    SessionTokens.createFor(account, config, clock, accessTokenMint), SessionFamily.start()));
+        List<EnrolledFactor> factors = enrolledFactorRepository.findByUser(account);
+
+        if (
+                factors.isEmpty()
+        ) {
+            return new Result.SignedIn(
+                    sessionRepository.create(
+                            SessionTokens.createFor(account, config, clock, accessTokenMint),
+                            SessionFamily.start()));
         }
-        com.jrobertgardzinski.security.system.mfa.PendingAuthentication pending =
-                mfaChain.begin(account, factors);
-        String ticket = pendingStore.open(pending);
-        return new FederatedSignInResult.MfaRequired(ticket, factors.get(0).type(), pending.challengeData());
+
+        OpenMfaChain.Result openMfaChainResult = openMfaChain.open(account, factors, source);
+
+        return new Result.MfaRequired(
+                openMfaChainResult.ticket(),
+                openMfaChainResult.nextFactor(),
+                openMfaChainResult.challengeData());
     }
 
     /**
@@ -118,21 +176,38 @@ public class FederatedSignIn {
      * only; the address it acts on is {@code identity.email()}, which the caller already holds.
      */
     private void claimByEmail(ProviderIdentity identity) {
+
         Email email = identity.email();
-        Optional<User> existing = users.findBy(email);
-        if (existing.isEmpty()) {
-            users.save(new User(email, unusablePassword()));
-            verifications.markVerified(email);
-            passwordless.setPasswordless(email, true);   // born through the provider, no password of its own
-        } else if (!verifications.isVerified(email)) {
+        Optional<User> existing = userRepository.findBy(email);
+
+        if (
+                existing.isEmpty()
+        ) {
+            userRepository.save(
+                    new User(
+                            email,
+                            unusablePassword()));
+            emailVerificationRepository.markVerified(email);
+            // born through the provider, no password of its own
+            passwordlessAccountRepository.setPasswordless(email, true);
+        } else if (
+                !emailVerificationRepository.isVerified(email)
+        ) {
             // the squatter case: the provider's proof of the inbox beats the unproven password
-            users.updatePassword(email, unusablePassword());
-            sessions.revokeAllSessions(email);
-            verifications.markVerified(email);
-            passwordless.setPasswordless(email, true);   // the wiped password no longer counts
+            userRepository.updatePassword(
+                    email,
+                    unusablePassword());
+            sessionRepository.revokeAllSessions(email);
+            emailVerificationRepository.markVerified(email);
+            // the wiped password no longer counts
+            passwordlessAccountRepository.setPasswordless(email, true);
         }
+
         // the auto-link case (existing, verified) keeps its password — it stays a password account
-        identities.link(identity.provider(), identity.subject(), email);
+        federatedIdentityRepository.link(
+                identity.provider(),
+                identity.subject(),
+                email);
     }
 
     /**

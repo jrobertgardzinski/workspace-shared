@@ -21,28 +21,48 @@ import java.util.Set;
  */
 public class SetUserRoles {
 
-    public enum Status { UPDATED, NO_SUCH_USER, WOULD_LEAVE_NO_ADMIN }
-
-    public record Result(Status status, Set<Role> roles) {}
-
-    private final UserRepository users;
+    private final UserRepository userRepository;
     private final BootstrapAdmins bootstrapAdmins;
 
-    public SetUserRoles(UserRepository users, BootstrapAdmins bootstrapAdmins) {
-        this.users = users;
+    public SetUserRoles(
+                    UserRepository userRepository,
+                    BootstrapAdmins bootstrapAdmins) {
+        this.userRepository = userRepository;
         this.bootstrapAdmins = bootstrapAdmins;
     }
 
+    public sealed interface Result {
+
+        /** The roles the account holds now. */
+        record Updated(Set<Role> roles) implements Result {}
+
+        record NoSuchUser() implements Result {}
+
+        /** The roles the account still holds, so a client can show the truth. */
+        record WouldLeaveNoAdmin(Set<Role> roles) implements Result {}
+    }
+
     public Result execute(Email target, Set<Role> roles) {
-        Optional<User> user = users.findBy(target);
-        if (user.isEmpty()) {
-            return new Result(Status.NO_SUCH_USER, Set.of());
+
+        Optional<User> user = userRepository.findBy(target);
+
+        if (
+                user.isEmpty()
+        ) {
+            return new Result.NoSuchUser();
         }
-        if (wouldLeaveNoAdmin(user.get(), roles)) {
-            return new Result(Status.WOULD_LEAVE_NO_ADMIN, user.get().roles());
+
+        if (
+                wouldLeaveNoAdmin(user.get(), roles)
+        ) {
+            return new Result.WouldLeaveNoAdmin(
+                    user.get().roles());
         }
-        users.setRoles(target, roles);
-        return new Result(Status.UPDATED, users.findBy(target).map(User::roles).orElse(Set.of(Role.USER)));
+
+        userRepository.setRoles(target, roles);
+
+        return new Result.Updated(
+                userRepository.findBy(target).map(User::roles).orElse(Set.of(Role.USER)));
     }
 
     /**
@@ -54,6 +74,6 @@ public class SetUserRoles {
      */
     private boolean wouldLeaveNoAdmin(User user, Set<Role> roles) {
         boolean losesAdmin = user.hasRole(Role.ADMIN) && !roles.contains(Role.ADMIN);
-        return losesAdmin && users.countAdmins() <= 1 && bootstrapAdmins.admins().isEmpty();
+        return losesAdmin && userRepository.countAdmins() <= 1 && bootstrapAdmins.admins().isEmpty();
     }
 }

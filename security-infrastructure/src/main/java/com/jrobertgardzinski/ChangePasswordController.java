@@ -4,7 +4,6 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.system.account.ChangePassword;
-import com.jrobertgardzinski.security.system.account.ChangePasswordResult;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -29,6 +28,14 @@ import java.util.Map;
  * oracle — and a hit is a takeover, because changing the password revokes every session, the
  * owner's included. Hence a per-source window of its own, the same shape the anonymous endpoints
  * and the step-up already use.
+ *
+ * <p>The use case says plainly why the proof failed, {@code UserNotFound} or {@code WrongPassword};
+ * the wire does not. Both answer one {@code FAILED_AUTHENTICATION_ATTEMPT}, so a guess learns
+ * nothing about which half it got wrong.
+ *
+ * <p>A new password the policy refuses answers 422 with {@code {"passwordErrors": [{"CODE":
+ * parameter}]}}, the password half of what {@code /register} answers: one code per broken rule,
+ * valued by the parameter in force for this very attempt.
  */
 // controllers do blocking work (JDBC, the mail service's HTTP client) — keep it off the event loop
 @ExecuteOn(TaskExecutors.BLOCKING)
@@ -62,15 +69,17 @@ final class ChangePasswordController {
         Email email = Caller.of(request);
         String current = JsonBody.text(body, "currentPassword");
         String next = JsonBody.text(body, "newPassword");
-        ChangePasswordResult result = transactionBoundary.execute(() -> changePassword.execute(
+        ChangePassword.Result result = transactionBoundary.execute(() -> changePassword.execute(
                 email, () -> PlaintextPassword.of(current), () -> PlaintextPassword.of(next)));
         return switch (result) {
-            case ChangePasswordResult.Changed ignored ->
+            case ChangePassword.Result.Changed ignored ->
                     HttpResponse.ok(Map.of("status", "PASSWORD_CHANGED"));
-            case ChangePasswordResult.WrongCurrentPassword ignored ->
-                    HttpResponse.badRequest().body(Map.of("status", "WRONG_CURRENT_PASSWORD"));
-            case ChangePasswordResult.WeakPassword ignored ->
-                    HttpResponse.badRequest().body(Map.of("status", "WEAK_PASSWORD"));
+            case ChangePassword.Result.UserNotFound _, ChangePassword.Result.WrongPassword _ ->
+                    HttpResponse.badRequest().body(Map.of("status", "FAILED_AUTHENTICATION_ATTEMPT"));
+            case ChangePassword.Result.Rejected rejected ->
+                    HttpResponse.unprocessableEntity().body(Map.of(
+                            "passwordErrors",
+                            SecurityController.passwordErrors(rejected.passwordErrors(), rejected.policy())));
         };
     }
 }

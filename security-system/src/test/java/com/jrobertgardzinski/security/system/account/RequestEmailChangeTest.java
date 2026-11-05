@@ -50,7 +50,7 @@ class RequestEmailChangeTest {
     void free_address_starts_the_change() {
         Mockito.when(userRepository.existsBy(NormalizedEmail.of(NEW))).thenReturn(false);
 
-        assertInstanceOf(RequestEmailChangeResult.Requested.class, requestEmailChange.execute(CURRENT, NEW));
+        assertInstanceOf(RequestEmailChange.Result.Requested.class, requestEmailChange.execute(CURRENT, NEW));
         Mockito.verify(emailChangeRepository).startChange(Mockito.any(), Mockito.any());
         Mockito.verify(notifier).sendVerificationLink(Mockito.eq(NEW), Mockito.any());
     }
@@ -58,10 +58,10 @@ class RequestEmailChangeTest {
     @Example
     @Label("An address the deployment does not admit is refused before anything else is asked")
     void the_email_policy_guards_the_change_too() {
-        RequestEmailChangeResult result = requestEmailChange.execute(CURRENT, BLOCKED);
+        RequestEmailChange.Result result = requestEmailChange.execute(CURRENT, BLOCKED);
 
-        RequestEmailChangeResult.Rejected rejected =
-                assertInstanceOf(RequestEmailChangeResult.Rejected.class, result);
+        RequestEmailChange.Result.Rejected rejected =
+                assertInstanceOf(RequestEmailChange.Result.Rejected.class, result);
         assertEquals(java.util.List.of(com.jrobertgardzinski.email.domain.EmailError.DOMAIN_BLOCKED), rejected.emailErrors());
         // a closed shop that only checks at registration is not closed: the account could walk out
         // through a change, taking its roles, factors and federated links with it
@@ -75,7 +75,7 @@ class RequestEmailChangeTest {
     void taken_address_is_refused() {
         Mockito.when(userRepository.existsBy(NormalizedEmail.of(NEW))).thenReturn(true);
 
-        assertInstanceOf(RequestEmailChangeResult.EmailTaken.class, requestEmailChange.execute(CURRENT, NEW));
+        assertInstanceOf(RequestEmailChange.Result.EmailTaken.class, requestEmailChange.execute(CURRENT, NEW));
         Mockito.verify(emailChangeRepository, Mockito.never()).startChange(Mockito.any(), Mockito.any());
         Mockito.verify(notifier, Mockito.never()).sendVerificationLink(Mockito.any(), Mockito.any());
     }

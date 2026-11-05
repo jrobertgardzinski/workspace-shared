@@ -77,12 +77,14 @@ final class AdminSettingsController {
         if (told == null) {
             return HttpResponse.badRequest(Map.of("status", "NO_VALUE"));
         }
-        SetSetting.Result result = setSetting.execute(key, String.valueOf(told));
-        return switch (result.status()) {
-            case ACCEPTED -> HttpResponse.ok(Map.of("status", "ACCEPTED", "key", key, "value", result.value()));
-            case REFUSED -> HttpResponse.badRequest(Map.of("status", "REFUSED", "key", key, "reason", result.reason()));
-            case UNKNOWN_KEY -> HttpResponse.status(HttpStatus.NOT_FOUND)
-                    .body(Map.of("status", "UNKNOWN_KEY", "key", key, "reason", result.reason()));
+        return switch (setSetting.execute(key, String.valueOf(told))) {
+            case SetSetting.Result.Accepted accepted ->
+                    HttpResponse.ok(Map.of("status", "ACCEPTED", "key", key, "value", accepted.value()));
+            case SetSetting.Result.Refused refused ->
+                    HttpResponse.badRequest(Map.of("status", "REFUSED", "key", key, "reason", refused.reason()));
+            case SetSetting.Result.UnknownKey unknown ->
+                    HttpResponse.status(HttpStatus.NOT_FOUND)
+                            .body(Map.of("status", "UNKNOWN_KEY", "key", key, "reason", unknown.reason()));
         };
     }
 

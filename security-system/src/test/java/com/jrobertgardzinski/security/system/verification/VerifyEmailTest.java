@@ -45,20 +45,20 @@ class VerifyEmailTest {
     void matching_token_verifies() {
         Mockito.when(repository.completeVerification(TOKEN)).thenReturn(pending(NOW.minusHours(1)));
 
-        VerifyEmailResult result = verifyEmail.execute(TOKEN);
+        VerifyEmail.Result result = verifyEmail.execute(TOKEN);
 
-        assertEquals(new VerifyEmailResult.Verified(EMAIL), result);
+        assertEquals(new VerifyEmail.Result.Verified(EMAIL), result);
     }
 
     @Example
-    @Label("A link older than the window is rejected — and answered exactly like an unknown one")
+    @Label("A link older than the window is refused as expired; the edge answers it like an unknown one")
     void an_expired_link_no_longer_verifies() {
         Mockito.when(repository.completeVerification(TOKEN)).thenReturn(pending(NOW.minus(TTL).minusMinutes(1)));
 
         // it verified an address for ever before this: the row carried no date at all, so a link
         // from a year ago was as good as one from a minute ago — and this is the address nobody is
         // watching, by definition
-        assertInstanceOf(VerifyEmailResult.Rejected.class, verifyEmail.execute(TOKEN));
+        assertInstanceOf(VerifyEmail.Result.TokenExpired.class, verifyEmail.execute(TOKEN));
     }
 
     @Example
@@ -66,7 +66,7 @@ class VerifyEmailTest {
     void the_edge_of_the_window_is_inside_it() {
         Mockito.when(repository.completeVerification(TOKEN)).thenReturn(pending(NOW.minus(TTL)));
 
-        assertInstanceOf(VerifyEmailResult.Verified.class, verifyEmail.execute(TOKEN));
+        assertInstanceOf(VerifyEmail.Result.Verified.class, verifyEmail.execute(TOKEN));
     }
 
     private static Optional<EmailVerificationRepository.PendingVerification> pending(LocalDateTime requestedAt) {
@@ -78,6 +78,6 @@ class VerifyEmailTest {
     void unknown_token_is_rejected() {
         Mockito.when(repository.completeVerification(TOKEN)).thenReturn(Optional.empty());
 
-        assertInstanceOf(VerifyEmailResult.Rejected.class, verifyEmail.execute(TOKEN));
+        assertInstanceOf(VerifyEmail.Result.TokenNotFound.class, verifyEmail.execute(TOKEN));
     }
 }

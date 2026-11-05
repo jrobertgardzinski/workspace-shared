@@ -8,7 +8,7 @@ import java.util.function.UnaryOperator;
  * lived and in memory — a lost entry only means the user starts over from the password. The same
  * shape as the OAuth flow store.
  */
-public interface PendingAuthenticationStore {
+public interface PendingAuthenticationStore extends ChainTickets {
 
     /** Store a pending authentication and return the fresh ticket that addresses it. */
     String open(PendingAuthentication pending);

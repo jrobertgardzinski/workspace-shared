@@ -1,20 +1,23 @@
 package com.jrobertgardzinski.security.system.authentication;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.entity.AuthenticationBlock;
 import com.jrobertgardzinski.security.domain.entity.SessionTokens;
-import com.jrobertgardzinski.security.domain.event.AuthenticationEvent;
-import com.jrobertgardzinski.security.domain.event.BruteForceProtectionEvent;
+import com.jrobertgardzinski.security.domain.entity.User;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AccessTokenValidityInHours;
 import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
-import com.jrobertgardzinski.security.domain.vo.Credentials;
+import com.jrobertgardzinski.security.domain.vo.CredentialsError;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.domain.vo.AttemptedAccount;
 import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
 import com.jrobertgardzinski.security.domain.vo.Source;
 import com.jrobertgardzinski.security.domain.vo.RefreshTokenValidityInHours;
 import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
+import com.jrobertgardzinski.security.system.mfa.OpenMfaChain;
+import com.jrobertgardzinski.security.system.password.VerifyPassword;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import net.jqwik.api.Example;
@@ -26,6 +29,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class AuthenticationTest {
 
     record Given(Source ipAddress, Email email, PlaintextPassword password,
-                 AuthenticationRequest request, Credentials credentials) {}
+                 AuthenticationRequest request, User user) {}
     private static final Given GIVEN = given();
     private static Given given() {
         Source ipAddress = Source.of(new IpAddress("192.168.0.1"));
@@ -44,7 +49,7 @@ class AuthenticationTest {
         PlaintextPassword password = PlaintextPassword.of("plaintext");
         return new Given(ipAddress, email, password,
                 new AuthenticationRequest(ipAddress, email, password),
-                new Credentials(email, password));
+                new User(email, new HashedPassword("hash")));
     }
 
     private static final SessionTokensConfig CONFIG = new SessionTokensConfig(
@@ -53,7 +58,8 @@ class AuthenticationTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
 
     private _BruteForceGuard bruteForceGuard;
-    private _VerifyCredentials verifyCredentials;
+    private VerifyPassword verifyPassword;
+    private UserRepository userRepository;
     private _RequireVerifiedEmail requireVerifiedEmail;
     private _GenerateSession generateSession;
     private _CleanBruteForceRecords cleanBruteForceRecords;
@@ -64,7 +70,9 @@ class AuthenticationTest {
     @BeforeTry
     void init() {
         bruteForceGuard = Mockito.mock(_BruteForceGuard.class);
-        verifyCredentials = Mockito.mock(_VerifyCredentials.class);
+        verifyPassword = Mockito.mock(VerifyPassword.class);
+        // no deletion is running in these examples; the one that needs it overrides this
+        userRepository = Mockito.mock(UserRepository.class);
         requireVerifiedEmail = Mockito.mock(_RequireVerifiedEmail.class);
         // most examples exercise a completed onboarding; the unverified example overrides this
         Mockito.when(requireVerifiedEmail.isVerified(Mockito.any())).thenReturn(true);
@@ -80,9 +88,9 @@ class AuthenticationTest {
                 noRecoveryCodes(), raw -> "hash:" + raw, CLOCK, 10);
         var pendingStore = Mockito.mock(com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore.class);
         authentication = new Authentication(
-                bruteForceGuard, verifyCredentials, requireVerifiedEmail, generateSession,
+                bruteForceGuard, verifyPassword, userRepository, requireVerifiedEmail, generateSession,
                 cleanBruteForceRecords, updateBruteForceRecords,
-                enrolledFactors, mfaChain, pendingStore);
+                enrolledFactors, new OpenMfaChain(mfaChain, pendingStore));
     }
 
     /** No recovery codes exist in these examples — nothing consumes. */
@@ -119,14 +127,14 @@ class AuthenticationTest {
     void blocked_when_guard_blocks() {
         AuthenticationBlock block = new AuthenticationBlock(GIVEN.ipAddress, LocalDateTime.now(CLOCK).plusMinutes(15));
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
-                .thenReturn(new BruteForceProtectionEvent.Blocked(block));
+                .thenReturn(Optional.of(block));
 
-        AuthenticationResult result = authentication.execute(GIVEN.request);
+        Authentication.Result result = authentication.execute(GIVEN.request);
 
-        AuthenticationResult.Blocked blocked = assertInstanceOf(AuthenticationResult.Blocked.class, result);
+        Authentication.Result.Blocked blocked = assertInstanceOf(Authentication.Result.Blocked.class, result);
         assertAll(
                 () -> assertEquals(block, blocked.authenticationBlock()),
-                () -> Mockito.verifyNoInteractions(verifyCredentials),
+                () -> Mockito.verifyNoInteractions(verifyPassword),
                 () -> Mockito.verifyNoInteractions(generateSession),
                 () -> Mockito.verifyNoInteractions(cleanBruteForceRecords),
                 () -> Mockito.verifyNoInteractions(updateBruteForceRecords)
@@ -138,14 +146,14 @@ class AuthenticationTest {
     void authenticated_when_guard_allows_and_credentials_valid() {
         SessionTokens sessionTokens = SessionTokens.createFor(GIVEN.email, CONFIG, CLOCK, com.jrobertgardzinski.security.domain.port.AccessTokenMint.RANDOM);
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
-                .thenReturn(new BruteForceProtectionEvent.Allowed());
-        Mockito.when(verifyCredentials.execute(GIVEN.credentials))
-                .thenReturn(new AuthenticationEvent.Valid(GIVEN.email));
+                .thenReturn(Optional.empty());
+        Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, List.of()));
         Mockito.when(generateSession.create(GIVEN.email)).thenReturn(sessionTokens);
 
-        AuthenticationResult result = authentication.execute(GIVEN.request);
+        Authentication.Result result = authentication.execute(GIVEN.request);
 
-        AuthenticationResult.Authenticated authenticated = assertInstanceOf(AuthenticationResult.Authenticated.class, result);
+        Authentication.Result.Authenticated authenticated = assertInstanceOf(Authentication.Result.Authenticated.class, result);
         assertAll(
                 () -> assertEquals(sessionTokens, authenticated.session()),
                 // A successful sign-in clears THIS PAIR's failures and nothing else. The assertion
@@ -165,13 +173,13 @@ class AuthenticationTest {
     @Label("Rejected when the guard allows but credentials are invalid")
     void rejected_when_guard_allows_but_credentials_invalid() {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
-                .thenReturn(new BruteForceProtectionEvent.Allowed());
-        Mockito.when(verifyCredentials.execute(GIVEN.credentials))
-                .thenReturn(new AuthenticationEvent.Invalid(GIVEN.email));
+                .thenReturn(Optional.empty());
+        Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
+                .thenReturn(new VerifyPassword.Result(null, List.of(CredentialsError.WRONG_PASSWORD)));
 
-        AuthenticationResult result = authentication.execute(GIVEN.request);
+        Authentication.Result result = authentication.execute(GIVEN.request);
 
-        assertInstanceOf(AuthenticationResult.Rejected.class, result);
+        assertInstanceOf(Authentication.Result.Rejected.class, result);
         assertAll(
                 // charged to the PAIR now: this address against the account that was aimed at
                 () -> Mockito.verify(updateBruteForceRecords).execute(
@@ -185,18 +193,38 @@ class AuthenticationTest {
     @Label("Email-not-verified when credentials are valid but the address is unverified")
     void email_not_verified_when_address_unverified() {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
-                .thenReturn(new BruteForceProtectionEvent.Allowed());
-        Mockito.when(verifyCredentials.execute(GIVEN.credentials))
-                .thenReturn(new AuthenticationEvent.Valid(GIVEN.email));
+                .thenReturn(Optional.empty());
+        Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, List.of()));
         Mockito.when(requireVerifiedEmail.isVerified(GIVEN.email)).thenReturn(false);
 
-        AuthenticationResult result = authentication.execute(GIVEN.request);
+        Authentication.Result result = authentication.execute(GIVEN.request);
 
-        assertInstanceOf(AuthenticationResult.EmailNotVerified.class, result);
+        assertInstanceOf(Authentication.Result.EmailNotVerified.class, result);
         assertAll(
                 () -> Mockito.verify(generateSession, Mockito.never()).create(Mockito.any()),
                 () -> Mockito.verify(cleanBruteForceRecords, Mockito.never()).execute(Mockito.any()),
                 () -> Mockito.verify(updateBruteForceRecords, Mockito.never()).execute(Mockito.any())
+        );
+    }
+
+    @Example
+    @Label("Rejected when the password is right but the account is being deleted — and the miss is written down")
+    void rejected_when_the_account_is_being_deleted() {
+        Mockito.when(bruteForceGuard.execute(Mockito.any()))
+                .thenReturn(Optional.empty());
+        Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, List.of()));
+        Mockito.when(userRepository.isPendingDeletion(GIVEN.email)).thenReturn(true);
+
+        Authentication.Result result = authentication.execute(GIVEN.request);
+
+        assertInstanceOf(Authentication.Result.Rejected.class, result);
+        assertAll(
+                // an account locked by a running deletion behaves like a wrong password
+                () -> Mockito.verify(updateBruteForceRecords).execute(
+                        new LockoutSubject(GIVEN.ipAddress, AttemptedAccount.of(GIVEN.email))),
+                () -> Mockito.verify(generateSession, Mockito.never()).create(Mockito.any())
         );
     }
 }

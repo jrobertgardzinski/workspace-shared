@@ -2,7 +2,6 @@ package com.jrobertgardzinski.security.system.authentication;
 
 import com.jrobertgardzinski.security.config.bruteforce.BruteForceConfig;
 import com.jrobertgardzinski.security.domain.entity.AuthenticationBlock;
-import com.jrobertgardzinski.security.domain.event.BruteForceProtectionEvent;
 import com.jrobertgardzinski.security.domain.repository.AuthenticationBlockRepository;
 import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
@@ -20,10 +19,12 @@ class _BruteForceGuard {
     private final BruteForceConfig config;
     private final BlockDurationPolicy blockDurationPolicy;
 
-    public _BruteForceGuard(RejectedAuthenticationRepository rejectedAuthenticationRepository,
-                            AuthenticationBlockRepository authenticationBlockRepository,
-                            Clock clock, BruteForceConfig config,
-                            BlockDurationPolicy blockDurationPolicy) {
+    public _BruteForceGuard(
+                    RejectedAuthenticationRepository rejectedAuthenticationRepository,
+                    AuthenticationBlockRepository authenticationBlockRepository,
+                    Clock clock,
+                    BruteForceConfig config,
+                    BlockDurationPolicy blockDurationPolicy) {
         this.rejectedAuthenticationRepository = rejectedAuthenticationRepository;
         this.authenticationBlockRepository = authenticationBlockRepository;
         this.clock = clock;
@@ -39,28 +40,39 @@ class _BruteForceGuard {
      *
      * <p>Either way the BLOCK is placed on the source, never on the account: a block that followed
      * the account would let anyone lock a victim out on demand, from anywhere.
+     *
+     * <p>The answer is the block in force for this source, the one already standing or the one
+     * this very call placed; empty lets the attempt through.
      */
-    public BruteForceProtectionEvent execute(LockoutSubject subject) {
+    public Optional<AuthenticationBlock> execute(LockoutSubject subject) {
+
         Source source = subject.source();
-        Optional<AuthenticationBlock> existing = existingActiveBlockFor(source);
-        if (existing.isPresent()) {
-            return new BruteForceProtectionEvent.Blocked(existing.get());
+
+        Optional<AuthenticationBlock> standingBlock = authenticationBlockRepository.findBy(source);
+
+        if (
+                standingBlock.isPresent() &&
+                standingBlock.get().isStillActive(clock)
+        ) {
+            return standingBlock;
         }
+
         // The ceiling is asked only when the pair's own limit has not been reached — the same
         // short-circuit the `||` always had, so no attempt pays for a count it does not need. It
         // doubles as the ANSWER to "what is this block for": a block the pair earned answers for
         // the pair, one the ceiling earned answers for the whole address.
         boolean pairLimitReached = failureLimitReachedFor(subject);
         boolean ceilingReached = !pairLimitReached && sourceCeilingReachedFor(source);
-        if (pairLimitReached || ceilingReached) {
-            return new BruteForceProtectionEvent.Blocked(createNewBlockFor(subject, ceilingReached));
-        }
-        return new BruteForceProtectionEvent.Allowed();
-    }
 
-    private Optional<AuthenticationBlock> existingActiveBlockFor(Source source) {
-        return authenticationBlockRepository.findBy(source)
-                .filter(block -> block.isStillActive(clock));
+        if (
+                pairLimitReached ||
+                ceilingReached
+        ) {
+            return Optional.of(
+                    createNewBlockFor(subject, ceilingReached));
+        }
+
+        return Optional.empty();
     }
 
     private boolean failureLimitReachedFor(LockoutSubject subject) {

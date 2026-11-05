@@ -1,14 +1,16 @@
 package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
+import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
-import com.jrobertgardzinski.security.domain.entity.User;
+import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
+import com.jrobertgardzinski.security.domain.vo.CredentialsError;
+import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
-import java.util.Optional;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -27,30 +29,77 @@ import java.util.function.Supplier;
 public class ChangePassword {
 
     private final UserRepository userRepository;
-    private final HashAlgorithmPort hashAlgorithm;
+    private final VerifyPassword verifyPassword;
     private final CreatePasswordHash createPasswordHash;
-    private final SessionRepository sessions;
+    private final SessionRepository sessionRepository;
 
-    public ChangePassword(UserRepository userRepository, HashAlgorithmPort hashAlgorithm,
-                          CreatePasswordHash createPasswordHash, SessionRepository sessions) {
+    public ChangePassword(
+                    UserRepository userRepository,
+                    VerifyPassword verifyPassword,
+                    CreatePasswordHash createPasswordHash,
+                    SessionRepository sessionRepository) {
         this.userRepository = userRepository;
-        this.hashAlgorithm = hashAlgorithm;
+        this.verifyPassword = verifyPassword;
         this.createPasswordHash = createPasswordHash;
-        this.sessions = sessions;
+        this.sessionRepository = sessionRepository;
     }
 
-    public ChangePasswordResult execute(Email email, Supplier<PlaintextPassword> currentPassword,
-                                        Supplier<PlaintextPassword> newPassword) {
-        Optional<User> found = userRepository.findBy(email);
-        if (found.isEmpty() || !hashAlgorithm.verify(found.get().passwordHash(), currentPassword.get())) {
-            return new ChangePasswordResult.WrongCurrentPassword();
+    public sealed interface Result {
+
+        record Changed() implements Result {}
+
+        record UserNotFound() implements Result {}
+
+        record WrongPassword() implements Result {}
+
+        /**
+         * The rules the new password broke, never empty, and the policy it was judged against,
+         * because that policy can change between attempts: the password half of what registration
+         * answers with.
+         */
+        record Rejected(List<PasswordError> passwordErrors, PasswordPolicy policy) implements Result {
+            public Rejected {
+                passwordErrors = List.copyOf(passwordErrors);
+            }
         }
-        CreatePasswordHash.Result judged = createPasswordHash.create(newPassword);
-        if (!judged.errors().isEmpty()) {
-            return new ChangePasswordResult.WeakPassword();
+    }
+
+    public Result execute(
+                    Email email,
+                    Supplier<PlaintextPassword> currentPasswordCandidate,
+                    Supplier<PlaintextPassword> newPasswordCandidate) {
+
+        VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, currentPasswordCandidate);
+
+        if (
+                verifyPasswordResult.errors().contains(CredentialsError.USER_NOT_FOUND)
+        ) {
+            return new Result.UserNotFound();
         }
-        userRepository.updatePassword(email, judged.hashedPassword());
-        sessions.revokeAllSessions(email);   // the old password's sessions do not survive it
-        return new ChangePasswordResult.Changed();
+
+        if (
+                verifyPasswordResult.errors().contains(CredentialsError.WRONG_PASSWORD)
+        ) {
+            return new Result.WrongPassword();
+        }
+
+        CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
+
+        if (
+                !createPasswordHashResult.errors().isEmpty()
+        ) {
+            return new Result.Rejected(
+                    createPasswordHashResult.errors(),
+                    createPasswordHashResult.policy());
+        }
+
+        userRepository.updatePassword(
+                email,
+                createPasswordHashResult.hashedPassword());
+
+        // the old password's sessions do not survive it
+        sessionRepository.revokeAllSessions(email);
+
+        return new Result.Changed();
     }
 }

@@ -71,7 +71,7 @@ class ConfirmEmailChangeTest {
     void matching_token_changes_the_email() {
         Mockito.when(emailChangeRepository.confirmChange(TOKEN)).thenReturn(Optional.of(fresh(new EmailChange(OLD, NEW))));
 
-        assertEquals(new ConfirmEmailChangeResult.EmailChanged(OLD, NEW), confirmEmailChange.execute(TOKEN));
+        assertEquals(new ConfirmEmailChange.Result.EmailChanged(OLD, NEW), confirmEmailChange.execute(TOKEN));
         Mockito.verify(userRepository).updateEmail(OLD, NEW);
         Mockito.verify(emailVerificationRepository).markVerified(NEW);
     }
@@ -83,7 +83,7 @@ class ConfirmEmailChangeTest {
         Mockito.when(userRepository.existsBy(com.jrobertgardzinski.email.domain.NormalizedEmail.of(NEW)))
                 .thenReturn(true);
 
-        assertInstanceOf(ConfirmEmailChangeResult.EmailTaken.class, confirmEmailChange.execute(TOKEN));
+        assertInstanceOf(ConfirmEmailChange.Result.EmailTaken.class, confirmEmailChange.execute(TOKEN));
         // the stores that follow the account are touched only once the move is known to be possible
         Mockito.verify(userRepository, Mockito.never()).updateEmail(Mockito.any(), Mockito.any());
         Mockito.verifyNoInteractions(enrolledFactorRepository, recoveryCodeRepository,
@@ -97,7 +97,7 @@ class ConfirmEmailChangeTest {
         Mockito.doThrow(new com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException())
                 .when(userRepository).updateEmail(OLD, NEW);
 
-        assertInstanceOf(ConfirmEmailChangeResult.EmailTaken.class, confirmEmailChange.execute(TOKEN));
+        assertInstanceOf(ConfirmEmailChange.Result.EmailTaken.class, confirmEmailChange.execute(TOKEN));
     }
 
     @Example
@@ -105,7 +105,7 @@ class ConfirmEmailChangeTest {
     void sessions_do_not_survive_the_move() {
         Mockito.when(emailChangeRepository.confirmChange(TOKEN)).thenReturn(Optional.of(fresh(new EmailChange(OLD, NEW))));
 
-        assertInstanceOf(ConfirmEmailChangeResult.EmailChanged.class, confirmEmailChange.execute(TOKEN));
+        assertInstanceOf(ConfirmEmailChange.Result.EmailChanged.class, confirmEmailChange.execute(TOKEN));
         // a session remembers only the address, so one left alive keeps authorizing as OLD — and
         // starts resolving to whoever registers OLD next
         Mockito.verify(sessionRepository).revokeAllSessions(OLD);
@@ -117,7 +117,7 @@ class ConfirmEmailChangeTest {
         Mockito.when(emailChangeRepository.confirmChange(TOKEN)).thenReturn(Optional.of(fresh(new EmailChange(OLD, NEW))));
         Mockito.when(userRepository.isPendingDeletion(OLD)).thenReturn(true);
 
-        assertInstanceOf(ConfirmEmailChangeResult.InvalidToken.class, confirmEmailChange.execute(TOKEN));
+        assertInstanceOf(ConfirmEmailChange.Result.AccountClosing.class, confirmEmailChange.execute(TOKEN));
         // moving a locked user would hide them from both ends of the saga: the compensation that
         // unlocks them and the completion that deletes them both look under the old address
         Mockito.verify(userRepository, Mockito.never()).updateEmail(OLD, NEW);
@@ -170,7 +170,7 @@ class ConfirmEmailChangeTest {
     void unknown_token_is_rejected() {
         Mockito.when(emailChangeRepository.confirmChange(TOKEN)).thenReturn(Optional.empty());
 
-        assertInstanceOf(ConfirmEmailChangeResult.InvalidToken.class, confirmEmailChange.execute(TOKEN));
+        assertInstanceOf(ConfirmEmailChange.Result.TokenNotFound.class, confirmEmailChange.execute(TOKEN));
         Mockito.verify(userRepository, Mockito.never()).updateEmail(Mockito.any(), Mockito.any());
         Mockito.verify(enrolledFactorRepository, Mockito.never()).reassign(Mockito.any(), Mockito.any());
         Mockito.verify(passwordResetRepository, Mockito.never()).purge(Mockito.any());
@@ -182,7 +182,7 @@ class ConfirmEmailChangeTest {
     }
 
     @Example
-    @Label("A ticket older than the window is refused, exactly like an unknown one")
+    @Label("A ticket older than the window is refused as expired; the edge answers it like an unknown one")
     void an_expired_ticket_is_refused() {
         // It MOVES the account: one sitting unnoticed in an old mailbox must stop working, the same
         // way a password-reset link does. It did not, until the moment it was issued was stored.
@@ -190,7 +190,7 @@ class ConfirmEmailChangeTest {
                 new EmailChangeRepository.PendingEmailChange(new EmailChange(OLD, NEW),
                         NOW.minusMinutes(TOKEN_TTL_MINUTES + 1))));
 
-        assertEquals(new ConfirmEmailChangeResult.InvalidToken(), confirmEmailChange.execute(TOKEN));
+        assertEquals(new ConfirmEmailChange.Result.TokenExpired(), confirmEmailChange.execute(TOKEN));
         Mockito.verify(userRepository, Mockito.never()).updateEmail(OLD, NEW);
     }
 }

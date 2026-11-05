@@ -12,14 +12,14 @@ import java.util.stream.Collectors;
 /** The names to show for a batch of ids. An id with no account is absent, not an error. */
 public final class DisplayNames {
 
-    private final UserRepository users;
+    private final UserRepository userRepository;
 
-    public DisplayNames(UserRepository users) {
-        this.users = users;
+    public DisplayNames(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     public Map<UserId, DisplayName> of(Collection<UserId> ids) {
-        return users.findAllBy(ids).stream()
+        return userRepository.findAllBy(ids).stream()
                 .collect(Collectors.toMap(User::id, user -> DisplayName.of(user.email())));
     }
 }

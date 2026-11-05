@@ -20,23 +20,40 @@ import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
  */
 public class RequestPasswordReset {
 
-    private final PasswordResetRepository repository;
-    private final UserRepository users;
+    private final PasswordResetRepository passwordResetRepository;
+    private final UserRepository userRepository;
     private final PasswordResetNotifier notifier;
 
-    public RequestPasswordReset(PasswordResetRepository repository, UserRepository users,
-                                PasswordResetNotifier notifier) {
-        this.repository = repository;
-        this.users = users;
+    public RequestPasswordReset(
+                    PasswordResetRepository passwordResetRepository,
+                    UserRepository userRepository,
+                    PasswordResetNotifier notifier) {
+        this.passwordResetRepository = passwordResetRepository;
+        this.userRepository = userRepository;
         this.notifier = notifier;
     }
 
-    public void execute(Email email) {
-        if (!users.existsBy(NormalizedEmail.of(email))) {
-            return;   // nothing to reset, and nobody to write to
+    public sealed interface Result {
+
+        record LinkSent() implements Result {}
+
+        /** Nothing to reset, and nobody to write to. */
+        record UserNotFound() implements Result {}
+    }
+
+    public Result execute(Email email) {
+
+        if (
+                !userRepository.existsBy(
+                        NormalizedEmail.of(email))
+        ) {
+            return new Result.UserNotFound();
         }
+
         PasswordResetToken token = PasswordResetToken.random();
-        repository.startReset(email, token);
+        passwordResetRepository.startReset(email, token);
         notifier.sendResetLink(email, token);
+
+        return new Result.LinkSent();
     }
 }

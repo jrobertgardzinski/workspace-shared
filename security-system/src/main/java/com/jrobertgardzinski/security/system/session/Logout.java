@@ -1,7 +1,10 @@
 package com.jrobertgardzinski.security.system.session;
 
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
+import com.jrobertgardzinski.security.domain.vo.StoredSession;
 import com.jrobertgardzinski.security.domain.vo.token.RefreshToken;
+
+import java.util.Optional;
 
 /**
  * Ends a session: the refresh token names the session, and removing it invalidates the whole
@@ -18,8 +21,17 @@ public class Logout {
     }
 
     public void execute(RefreshToken refreshToken) {
+
+        Optional<StoredSession> session = sessionRepository.findByRefreshToken(refreshToken);
+
+        if (
+                session.isEmpty()
+        ) {
+            return;
+        }
+
         // end the whole lineage, not just this token, so no rotated remnant lingers
-        sessionRepository.findByRefreshToken(refreshToken)
-                .ifPresent(session -> sessionRepository.revokeFamily(session.family()));
+        sessionRepository.revokeFamily(
+                session.get().family());
     }
 }

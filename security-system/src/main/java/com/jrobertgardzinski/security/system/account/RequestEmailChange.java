@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
@@ -8,6 +9,8 @@ import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
+
+import java.util.List;
 
 
 /**
@@ -29,27 +32,61 @@ public class RequestEmailChange {
     private final EmailVerificationNotifier notifier;
     private final AdmitEmail admitEmail;
 
-    public RequestEmailChange(UserRepository userRepository, EmailChangeRepository emailChangeRepository,
-                              EmailVerificationNotifier notifier, AdmitEmail admitEmail) {
+    public RequestEmailChange(
+                    UserRepository userRepository,
+                    EmailChangeRepository emailChangeRepository,
+                    EmailVerificationNotifier notifier,
+                    AdmitEmail admitEmail) {
         this.userRepository = userRepository;
         this.emailChangeRepository = emailChangeRepository;
         this.notifier = notifier;
         this.admitEmail = admitEmail;
     }
 
-    public RequestEmailChangeResult execute(Email currentEmail, Email newEmail) {
+    /**
+     * Outcome of {@link RequestEmailChange}: a verification link was sent to the new address, that
+     * address is already taken, or the address is one this deployment does not admit at all.
+     */
+    public sealed interface Result {
+
+        record Requested() implements Result {}
+
+        record EmailTaken() implements Result {}
+
+        /**
+         * The address broke the e-mail policy: the rules it broke, exactly as registration reports
+         * them, so one client renders both refusals with one piece of code. The policy itself is a
+         * boot value the edge already holds.
+         */
+        record Rejected(List<EmailError> emailErrors) implements Result {}
+    }
+
+    public Result execute(Email currentEmail, Email newEmail) {
+
         // the same question Register asks of a new address, asked again of the one an account wants
         // to move to: a closed shop that only checks at registration is not closed
-        AdmitEmail.Result admission = admitEmail.evaluate(newEmail);
-        if (!admission.errors().isEmpty()) {
-            return new RequestEmailChangeResult.Rejected(admission.errors());
+        AdmitEmail.Result admitEmailResult = admitEmail.evaluate(newEmail);
+
+        if (
+                !admitEmailResult.errors().isEmpty()
+        ) {
+            return new Result.Rejected(
+                    admitEmailResult.errors());
         }
-        if (userRepository.existsBy(NormalizedEmail.of(newEmail))) {
-            return new RequestEmailChangeResult.EmailTaken();
+
+        if (
+                userRepository.existsBy(
+                        NormalizedEmail.of(newEmail))
+        ) {
+            return new Result.EmailTaken();
         }
+
         VerificationToken token = VerificationToken.random();
-        emailChangeRepository.startChange(new EmailChange(currentEmail, newEmail), token);
+        emailChangeRepository.startChange(
+                new EmailChange(currentEmail, newEmail),
+                token);
         notifier.sendVerificationLink(newEmail, token);
-        return new RequestEmailChangeResult.Requested();
+
+        return new Result.Requested();
     }
 }

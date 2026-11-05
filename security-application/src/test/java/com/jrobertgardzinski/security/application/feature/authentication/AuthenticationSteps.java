@@ -23,7 +23,6 @@ import com.jrobertgardzinski.security.domain.vo.RejectedAuthenticationDetails;
 import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
 import com.jrobertgardzinski.security.system.authentication.Authentication;
 import com.jrobertgardzinski.security.system.authentication.AuthenticationFactory;
-import com.jrobertgardzinski.security.system.authentication.AuthenticationResult;
 import com.jrobertgardzinski.security.system.authentication.BlockDurationPolicy;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
@@ -66,7 +65,7 @@ public class AuthenticationSteps {
     private PlaintextPassword registeredPassword;
     private BruteForceConfig config;
     private Authentication authentication;
-    private AuthenticationResult result;
+    private Authentication.Result result;
 
     // --- Background -----------------------------------------------------------
 
@@ -161,22 +160,22 @@ public class AuthenticationSteps {
 
     @Then("the USER is AUTHENTICATED")
     public void userIsAuthenticated() {
-        assertInstanceOf(AuthenticationResult.Authenticated.class, result);
+        assertInstanceOf(Authentication.Result.Authenticated.class, result);
     }
 
     @Then("the AUTHENTICATION is rejected")
     public void authenticationIsRejected() {
-        assertInstanceOf(AuthenticationResult.Rejected.class, result);
+        assertInstanceOf(Authentication.Result.Rejected.class, result);
     }
 
     @Then("the AUTHENTICATION is rejected because the source is blocked")
     public void authenticationIsBlocked() {
-        assertInstanceOf(AuthenticationResult.Blocked.class, result);
+        assertInstanceOf(Authentication.Result.Blocked.class, result);
     }
 
     @Then("the AUTHENTICATION is rejected because the EMAIL is not verified")
     public void authenticationIsRejectedAsUnverified() {
-        assertInstanceOf(AuthenticationResult.EmailNotVerified.class, result);
+        assertInstanceOf(Authentication.Result.EmailNotVerified.class, result);
     }
 
     // --- Helpers --------------------------------------------------------------
@@ -184,17 +183,21 @@ public class AuthenticationSteps {
     private Authentication authentication() {
         if (authentication == null) {
             // these scenarios enrol no factors, so the chain is empty and sign-in is single-factor
+            var mfaChain = new com.jrobertgardzinski.security.system.mfa.MfaChain(
+                    new com.jrobertgardzinski.security.system.mfa.FactorRegistry(java.util.List.of()),
+                    com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
+                    new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository(),
+                    raw -> "hash:" + raw, clock, 10);
+            var pendingStore = new com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore();
             authentication = AuthenticationFactory.assemble(
-                    users, verifications, rejections, blocks, sessions, hashAlgorithm,
+                    users, verifications, rejections, blocks, sessions,
+                    new com.jrobertgardzinski.security.system.password.VerifyPassword(users, hashAlgorithm),
                     config, SESSION_TOKENS_CONFIG, clock, blockDuration,
                     com.jrobertgardzinski.security.domain.port.AccessTokenMint.RANDOM,
                     new com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository(),
-                    new com.jrobertgardzinski.security.system.mfa.MfaChain(
-                            new com.jrobertgardzinski.security.system.mfa.FactorRegistry(java.util.List.of()),
-                            com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
-                            new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository(),
-                            raw -> "hash:" + raw, clock, 10),
-                    new com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore()
+                    mfaChain,
+                    pendingStore,
+                    new com.jrobertgardzinski.security.system.mfa.OpenMfaChain(mfaChain, pendingStore)
                     ).authentication();
         }
         return authentication;

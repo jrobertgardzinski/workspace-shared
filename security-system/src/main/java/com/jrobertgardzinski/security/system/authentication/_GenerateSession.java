@@ -10,13 +10,17 @@ import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
 import java.time.Clock;
 
 class _GenerateSession {
+
     private final SessionRepository sessionRepository;
     private final Clock clock;
     private final SessionTokensConfig config;
     private final AccessTokenMint accessTokenMint;
 
-    public _GenerateSession(SessionRepository sessionRepository, Clock clock,
-                            SessionTokensConfig config, AccessTokenMint accessTokenMint) {
+    public _GenerateSession(
+                    SessionRepository sessionRepository,
+                    Clock clock,
+                    SessionTokensConfig config,
+                    AccessTokenMint accessTokenMint) {
         this.sessionRepository = sessionRepository;
         this.clock = clock;
         this.config = config;
@@ -24,8 +28,10 @@ class _GenerateSession {
     }
 
     public SessionTokens create(Email email) {
+
         // each authentication starts a fresh session lineage
         return sessionRepository.create(
-                SessionTokens.createFor(email, config, clock, accessTokenMint), SessionFamily.start());
+                SessionTokens.createFor(email, config, clock, accessTokenMint),
+                SessionFamily.start());
     }
 }

@@ -12,7 +12,6 @@ import com.jrobertgardzinski.security.domain.vo.token.RefreshToken;
 import com.jrobertgardzinski.security.domain.vo.token.expiration.AccessTokenExpiration;
 import com.jrobertgardzinski.security.domain.vo.token.expiration.RefreshTokenExpiration;
 import com.jrobertgardzinski.security.system.session.RefreshSession;
-import com.jrobertgardzinski.security.system.session.RefreshSessionResult;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
@@ -36,7 +35,7 @@ public class SessionSteps {
             java.time.Duration.ofDays(30));
 
     private Email email;
-    private RefreshSessionResult result;
+    private RefreshSession.Result result;
 
     @Given("a registered USER {string}")
     public void aRegisteredUser(String email) {
@@ -65,17 +64,17 @@ public class SessionSteps {
 
     @Then("a fresh session is returned")
     public void aFreshSessionIsReturned() {
-        assertInstanceOf(RefreshSessionResult.Refreshed.class, result);
+        assertInstanceOf(RefreshSession.Result.Refreshed.class, result);
     }
 
     @Then("the REFRESH is rejected because the session has expired")
     public void rejectedAsExpired() {
-        assertInstanceOf(RefreshSessionResult.Expired.class, result);
+        assertInstanceOf(RefreshSession.Result.Expired.class, result);
     }
 
     @Then("the REFRESH is rejected because there is no session to REFRESH")
     public void rejectedAsNotFound() {
-        assertInstanceOf(RefreshSessionResult.NotFound.class, result);
+        assertInstanceOf(RefreshSession.Result.NotFound.class, result);
     }
 
     private SessionTokens sessionExpiringAt(LocalDateTime refreshExpiry) {

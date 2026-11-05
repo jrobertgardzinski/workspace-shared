@@ -74,20 +74,20 @@ final class AdminRolesController {
         if (stepUp.isPresent()) {
             return stepUp.get();
         }
-        SetUserRoles.Result result = setUserRoles.execute(target, roles);
-        if (result.status() == SetUserRoles.Status.NO_SUCH_USER) {
-            return HttpResponse.notFound(Map.of("status", "NO_SUCH_USER"));
-        }
-        if (result.status() == SetUserRoles.Status.WOULD_LEAVE_NO_ADMIN) {
+        return switch (setUserRoles.execute(target, roles)) {
+            case SetUserRoles.Result.NoSuchUser ignored ->
+                    HttpResponse.notFound(Map.of("status", "NO_SUCH_USER"));
             // 409, not 403: the caller IS allowed to do this, and the state of the system is what
             // refuses. Telling them which is the difference between "try again with proof" and
             // "grant somebody else first".
-            return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.CONFLICT)
-                    .body(Map.of("status", "WOULD_LEAVE_NO_ADMIN",
-                            "roles", result.roles().stream().map(Role::name).sorted().toList()));
-        }
-        return HttpResponse.ok(Map.of("email", email,
-                "roles", result.roles().stream().map(Role::name).sorted().toList()));
+            case SetUserRoles.Result.WouldLeaveNoAdmin refused ->
+                    HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.CONFLICT)
+                            .body(Map.of("status", "WOULD_LEAVE_NO_ADMIN",
+                                    "roles", refused.roles().stream().map(Role::name).sorted().toList()));
+            case SetUserRoles.Result.Updated updated ->
+                    HttpResponse.ok(Map.of("email", email,
+                            "roles", updated.roles().stream().map(Role::name).sorted().toList()));
+        };
     }
 
     @SuppressWarnings("unchecked")

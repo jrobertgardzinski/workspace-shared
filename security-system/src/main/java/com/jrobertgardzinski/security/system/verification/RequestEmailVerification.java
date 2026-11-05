@@ -18,20 +18,36 @@ import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
  */
 public class RequestEmailVerification {
 
-    private final EmailVerificationRepository repository;
+    private final EmailVerificationRepository emailVerificationRepository;
     private final EmailVerificationNotifier notifier;
 
-    public RequestEmailVerification(EmailVerificationRepository repository, EmailVerificationNotifier notifier) {
-        this.repository = repository;
+    public RequestEmailVerification(
+                    EmailVerificationRepository emailVerificationRepository,
+                    EmailVerificationNotifier notifier) {
+        this.emailVerificationRepository = emailVerificationRepository;
         this.notifier = notifier;
     }
 
-    public void execute(Email email) {
-        if (repository.isVerified(email)) {
-            return;   // nothing to prove, and nothing to take away
+    public sealed interface Result {
+
+        record LinkSent() implements Result {}
+
+        /** Nothing to prove, and nothing to take away. */
+        record AlreadyVerified() implements Result {}
+    }
+
+    public Result execute(Email email) {
+
+        if (
+                emailVerificationRepository.isVerified(email)
+        ) {
+            return new Result.AlreadyVerified();
         }
+
         VerificationToken token = VerificationToken.random();
-        repository.startVerification(email, token);
+        emailVerificationRepository.startVerification(email, token);
         notifier.sendVerificationLink(email, token);
+
+        return new Result.LinkSent();
     }
 }

@@ -26,9 +26,7 @@ import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
 import com.jrobertgardzinski.security.domain.vo.Source;
 import com.jrobertgardzinski.security.system.authentication.Authentication;
 import com.jrobertgardzinski.security.system.authentication.AuthenticationFactory;
-import com.jrobertgardzinski.security.system.authentication.AuthenticationResult;
 import com.jrobertgardzinski.security.system.authentication.ContinueAuthentication;
-import com.jrobertgardzinski.security.system.authentication.ContinueAuthenticationResult;
 import com.jrobertgardzinski.security.system.mfa.CodeFactor;
 import com.jrobertgardzinski.security.system.mfa.EnrolFactor;
 import com.jrobertgardzinski.security.system.mfa.FactorRegistry;
@@ -73,26 +71,32 @@ public class MfaSteps {
 
     private final FactorRegistry registry = new FactorRegistry(List.of(
             new CodeFactor(emailChannel, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), clock)));
-    private final EnrolFactor enrolFactor = new EnrolFactor(registry, enrolledFactors, enrolmentStore);
+    private final EnrolFactor enrolFactor = new EnrolFactor(registry, enrolmentStore);
+    private final com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment confirmEnrolment =
+            new com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment(registry, enrolledFactors, enrolmentStore);
+    private final com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain =
+            new com.jrobertgardzinski.security.system.mfa.MfaChain(registry, ChallengeCodeConfig.withDefaults(),
+                    recoveryCodes, raw -> "hash:" + raw, clock, 10);
     private final com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes generateRecoveryCodes =
             new com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes(
                     recoveryCodes, raw -> "hash:" + raw,
                     com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig.withDefaults());
 
     private final AuthenticationFactory.AuthenticationUseCases useCases = AuthenticationFactory.assemble(
-            users, verifications, rejections, blocks, sessions, hashAlgorithm,
+            users, verifications, rejections, blocks, sessions,
+            new com.jrobertgardzinski.security.system.password.VerifyPassword(users, hashAlgorithm),
             BruteForceConfig.builder().build(), SESSION_TOKENS_CONFIG, clock,
             () -> 5, AccessTokenMint.RANDOM,
             enrolledFactors,
-            new com.jrobertgardzinski.security.system.mfa.MfaChain(registry, ChallengeCodeConfig.withDefaults(),
-                    recoveryCodes, raw -> "hash:" + raw, clock, 10),
-            pendingStore);
+            mfaChain,
+            pendingStore,
+            new com.jrobertgardzinski.security.system.mfa.OpenMfaChain(mfaChain, pendingStore));
     private final Authentication authentication = useCases.authentication();
     private final ContinueAuthentication continueAuthentication = useCases.continueAuthentication();
 
     private String email;
-    private AuthenticationResult authResult;
-    private ContinueAuthenticationResult factorResult;
+    private Authentication.Result authResult;
+    private ContinueAuthentication.Result factorResult;
     private List<String> generatedRecoveryCodes;
     private String spentRecoveryCode;
 
@@ -105,15 +109,17 @@ public class MfaSteps {
 
     @Given("the USER has enrolled the e-mail FACTOR")
     public void enrolledEmailFactor() {
-        enrolFactor.start(Email.of(email), FactorType.EMAIL_CODE, email);
-        EnrolFactor.Result result = enrolFactor.confirm(Email.of(email), FactorType.EMAIL_CODE, mailedCode());
-        assertInstanceOf(EnrolFactor.Result.Enrolled.class, result, "failed to seed the e-mail factor");
+        enrolFactor.execute(Email.of(email), FactorType.EMAIL_CODE, email);
+        com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment.Result result =
+                confirmEnrolment.execute(Email.of(email), FactorType.EMAIL_CODE, mailedCode());
+        assertInstanceOf(com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment.Result.Enrolled.class, result,
+                "failed to seed the e-mail factor");
     }
 
     @Given("the USER has AUTHENTICATED the password step")
     public void authenticatedPasswordStep() {
         authenticateWithPassword();
-        assertInstanceOf(AuthenticationResult.MfaRequired.class, authResult, "the password step did not reach MFA");
+        assertInstanceOf(Authentication.Result.MfaRequired.class, authResult, "the password step did not reach MFA");
     }
 
     @When("the USER AUTHENTICATES with the correct password")
@@ -147,7 +153,7 @@ public class MfaSteps {
     public void signedInWithRecoveryCodeOnce() {
         authenticatedPasswordStep();
         submitRecoveryCode();
-        assertInstanceOf(ContinueAuthenticationResult.Completed.class, factorResult,
+        assertInstanceOf(ContinueAuthentication.Result.Completed.class, factorResult,
                 "the first recovery-code sign-in should have succeeded");
     }
 
@@ -158,21 +164,21 @@ public class MfaSteps {
 
     @Then("a FACTOR CODE is required, not a session")
     public void aFactorCodeIsRequired() {
-        assertInstanceOf(AuthenticationResult.MfaRequired.class, authResult);
+        assertInstanceOf(Authentication.Result.MfaRequired.class, authResult);
     }
 
     @Then("the USER is signed in")
     public void userIsSignedIn() {
-        assertInstanceOf(ContinueAuthenticationResult.Completed.class, factorResult);
+        assertInstanceOf(ContinueAuthentication.Result.Completed.class, factorResult);
     }
 
     @Then("the sign-in is refused and a session is not issued")
     public void signInRefused() {
-        assertInstanceOf(ContinueAuthenticationResult.WrongProof.class, factorResult);
+        assertInstanceOf(ContinueAuthentication.Result.WrongProof.class, factorResult);
     }
 
     private String ticket() {
-        return ((AuthenticationResult.MfaRequired) authResult).ticket();
+        return ((Authentication.Result.MfaRequired) authResult).ticket();
     }
 
     private String mailedCode() {

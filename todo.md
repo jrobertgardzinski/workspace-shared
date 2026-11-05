@@ -835,6 +835,150 @@ w UI zadziała bez przebudowy.
 czy sekwencja czyta się jako historia. Powiązane otwarte: password-policy przez 3 warstwy
 (brak: kroki application dla `SetSetting` + panel admina w security-ui).
 
+## Use case'y na podobieństwo `Register` (2026-11-05, gałąź RegisterRebuild)
+
+Dekret Roberta: „Przerób usecase'y w security na podobieństwo Register. Na pierwszy ogień
+ChangePassword." Wzorzec: wynik sędziego w nazwanej zmiennej (`createPasswordHashResult`), bramka
+`errors().isEmpty()`, `Rejected` niesie listę kodów i politykę, wobec której sądzono; linie łamane
+jak w `273f693`.
+
+- [x] `ChangePassword` — STAN OBECNY (werdykty Roberta z tego dnia, po kolei): wynik to sealed
+      `Result` ZAGNIEŻDŻONY w klasie use case'u („ChangePasswordResult uczyń wewnętrzną klasą
+      Result w ChangePassword wzorem Register"), z czterema rekordami: `Changed()`,
+      `UserNotFound()`, `WrongPassword()`, `Rejected(passwordErrors, policy)`. Sukces jest
+      nazwany (`return new Result.Changed()`), brak konta i złe hasło to WARIANTY wyniku, nie
+      wyjątki („UserNotFound i WrongPassword powinny być jego częścią"), każdy warunek w osobnym
+      `if`. Brzeg zlewa oba w jedno ramię `switch` i odpowiada `400
+      FAILED_AUTHENTICATION_ATTEMPT` (było `WRONG_CURRENT_PASSWORD`), bez szczegółów pod brute
+      force. `ChangePasswordResult.java` skasowany.
+      ODRZUCONE po drodze: rekord `Result(errors, policy)` z sukcesem jako pustą listą („to
+      wygląda jeszcze gorzej! Gdzie info, że udało się zmienić hasło?") i wyjątki domenowe.
+      ZMIANA DRUTU: przy słabym haśle `422 {"passwordErrors": [{"KOD": parametr}]}` (kształt
+      `/register`, `SecurityController.passwordErrors`) zamiast `400 {"status":"WEAK_PASSWORD"}`.
+      Wymaganie: `password-policy.feature` („every place a password is established measures
+      against the new floor") — goły kod nie mówił, jaka podłoga obowiązuje. UI pokazuje złamane
+      reguły tą samą listą co rejestracja. Reguła w `change-password.feature`.
+      ZAMKNIĘTE (Robert 2026-11-05: „Niech będzie FAILED_AUTHENTICATION_ATTEMPT"): nazwa
+      odpowiedzi brzegu zostaje `FAILED_AUTHENTICATION_ATTEMPT`, nie
+      `UserNotFoundOrPasswordDoesNotMatch`.
+- [x] `ResetPassword` — zmiana drutu (`422 passwordErrors` na `POST /reset-password`, token nie
+      przepada na odrzuconym haśle, reguła w `reset-password.feature`) i wynik w klasie.
+- [x] `RequestEmailChange` — tylko nazwy i łamanie linii (`admitEmailResult`); `Email` zostaje
+      skonstruowany na brzegu, bo literówka nie może zjeść jednorazowej elewacji (HTTP-10).
+- [x] `RequireRole` — wymuszone kasacją `libs`: `List<RoleError>` zamiast `Outcome<Set<Role>>`.
+- [x] REGUŁA WYNIKU (werdykt Roberta 2026-11-05: „Miejsce zgoda. Rodzaj też zgoda. Działaj"):
+      `Result` zawsze ZAGNIEŻDŻONY w klasie, nigdy osobny plik `XResult`. Rodzaj zależy od roli:
+      sędzia (`AdmitEmail`, `CreatePasswordHash`) oddaje REKORD `Result(wartość, errors, …)`,
+      czytany `if`-em na `errors().isEmpty()`; use case oddaje SEALED `Result` z nazwanymi
+      wariantami, w tym nazwanym sukcesem. Wykonane: dziesięć osobnych plików przeniesionych do
+      klas (`Register`, `ResetPassword`, `RequestEmailChange`, `ConfirmEmailChange`,
+      `Authentication`, `ContinueAuthentication`, `Authorize` (było `AuthorizationResult`),
+      `FederatedSignIn`, `RefreshSession`, `VerifyEmail`); `SetUserRoles` i `SetSetting` z rekordu
+      z enumem `Status` na sealed (`Updated`/`NoSuchUser`/`WouldLeaveNoAdmin`,
+      `Accepted`/`Refused`/`UnknownKey`). `StepUp` i `EnrolFactor` już tak miały. Drut bez zmian.
+- [x] WNĘTRZA ujednolicone względem `Register` i `ChangePassword` (dekret Roberta 2026-11-05:
+      „security ma z 20 usecaseów. Trzeba je ujednolicić względem Register i ChangePassword").
+      Reguły zdjęte z tych dwóch klas: pola → konstruktor (parametr na linię, wcięcie 20 spacji,
+      gdy parametrów jest więcej niż jeden) → `Result` → `execute`; pusta linia po sygnaturze i
+      między krokami; `if (` / warunki po jednym na linię, operator na końcu / `) {`; każda odmowa
+      to wczesny `return new Result.X(...)`; argumenty będące wywołaniami łamane po jednym na
+      linię; `Optional` jako zmienna lokalna z `isEmpty()`/`get()`, bez łańcuchów
+      `map`/`filter`/`orElseGet` i bez lambd sterujących przepływem; komentarz „dlaczego" nad
+      instrukcją, nie na jej końcu. Zachowanie i drut bez zmian, testy nietknięte.
+      Przepisane: `Authentication` (zagnieżdżony `switch` zastąpiony wczesnymi zwrotami),
+      `ContinueAuthentication`, `Authorize`, `VerifyEmail`, `RefreshSession`,
+      `ConfirmEmailChange`, `ResetPassword`, `RequestEmailChange`, `RequestEmailVerification`,
+      `RequestPasswordReset`, `Logout`, `StartAccountDeletion`, `DeleteAccount`, `SetUserRoles`,
+      `SetSetting`, `EnrolFactor`, `StepUp`, `FederatedSignIn`, konstruktor
+      `GenerateRecoveryCodes`. Bez zmian, bo nie ma w nich czego łamać: `ListActiveSessions`,
+      `RevokeAllSessions`, `DisplayNames`.
+      ŚWIADOME ODSTĘPSTWA: (1) `Authentication` czyta dwa sealed zdarzenia domenowe kroków
+      pakietowych przez `instanceof` w `if` (`Blocked blocked`, `!(… instanceof Valid valid)`),
+      bo kroki `_BruteForceGuard` i `_VerifyCredentials` zwracają sealed
+      `BruteForceProtectionEvent`/`AuthenticationEvent`; zdjęcie tego wymaga zmiany typów w
+      `security-domain`. (2) Strumienie zostały tam, gdzie przekształcają dane, a nie sterują
+      przepływem (`GenerateRecoveryCodes`, `DisplayNames`, `EnrolFactor#candidate`, ostatnie
+      wyrażenie `SetUserRoles`). (3) Kroki pakietowe `_*` w `authentication` nietknięte.
+      Regresja z Dockerem: 19 + 42 + 112 + 36 + 341, zero pominiętych.
+
+- [x] USE CASE MÓWI WPROST, BRZEG UKRYWA (werdykt Roberta 2026-11-05, „1 ok"): każda odmowa ma
+      własny wariant, a kontroler zlewa te, których drut nie może rozróżniać, w jedno ramię
+      `switch`. `ResetPassword`: `TokenNotFound`/`TokenExpired`/`UserNotFound` (było 3×
+      `InvalidToken`); `ConfirmEmailChange`: `TokenNotFound`/`TokenExpired`/`AccountClosing`;
+      `VerifyEmail`: `TokenNotFound`/`TokenExpired` (było `Rejected`); `RequestPasswordReset`:
+      `LinkSent`/`UserNotFound` (było `void`); `RequestEmailVerification`:
+      `LinkSent`/`AlreadyVerified` (było `void`). Drut bez zmian. Nowy
+      `TokenRefusalsLookAlikeHttpTest` pilnuje, że przeterminowany link resetu i weryfikacji
+      odpowiada dokładnie jak nieznany.
+- [x] DROBIAZGI („5 poprawić"): `FederatedSignIn.Result.Refused(String)` rozbity na
+      `EmailNotVouched`/`AccountClosing` (fragment URL bez zmian); pola repozytoriów nazwane po
+      typie we wszystkich klasach `security-system` (`userRepository`, `sessionRepository`,
+      `enrolledFactorRepository`, …); jeden zapis „za stary link":
+      `MailedLinkExpiration` w `security-domain` i `pending.expiration(ttl).hasExpired(clock)`
+      w trzech use case'ach.
+- [x] MAŁE USE CASE'Y JAKO SPOSÓB NA WSPÓŁDZIELENIE (werdykt Roberta 2026-11-05: „Wychodzi na
+      to, że plan zaakceptowany. Koduj!"):
+      (2) `VerifyPassword` (`security-system/password`), sędzia z rekordem
+      `Result(User user, List<CredentialsError> errors)`; enum `CredentialsError`
+      (`USER_NOT_FOUND`, `WRONG_PASSWORD`) w `security-domain`. Zawsze liczy jeden hash, także dla
+      nieistniejącego konta. Zastąpił trzy rozjechane miejsca: `_VerifyCredentials` (skasowany z
+      testem), `ChangePassword` (stracił `HashAlgorithmPort`: teraz repozytoria + dwa use case'y,
+      jak `Register`) i `StepUp#passwordMatches`. Jeden bean dla wszystkich trzech.
+      (4) `OpenMfaChain` (`security-system/mfa`), rekord `Result(ticket, nextFactor,
+      challengeData)`; WYMAGA `Source`. Używają go `Authentication` i `FederatedSignIn`, więc
+      `FederatedSignIn.execute` dostał `Source` (z `OauthController`) i złe kody po logowaniu
+      przez dostawcę trafiają do liczników brute force. Dowód: `OpenMfaChainTest`; testu HTTP
+      przez pełny taniec OAuth nie ma.
+      (3) `StepUp` rozbity na `StepUp` (start) + `ContinueStepUp`; `EnrolFactor` na `EnrolFactor`
+      (start) + `ConfirmEnrolment`. Każda klasa ma jedno `execute` i `Result` tylko z wariantami,
+      które mogą z niej przyjść; z kontrolerów zniknęły martwe ramiona.
+      ZMIANY ZACHOWANIA: zmiana hasła i step-up odpowiadają teraz na nieistniejące konto w tym
+      samym czasie co na istniejące; konto w trakcie usuwania jest w `Authentication` osobnym
+      `if` i pytane o STAN PO ZAPISANEJ pisowni adresu (było: po wpisanej).
+      Regresja z Dockerem: 19 + 42 + 116 + 36 + 343, zero pominiętych; e2e 42 scenariusze.
+- [x] DOKOŃCZENIE (Robert 2026-11-05: „Dokończ"):
+      `PresentProof` (`security-system/mfa`) — trzeci mały use case, jeden protokół „dowód przeciw
+      biletowi" dla logowania i step-upu: rekord `Result(chain, List<ProofError> errors,
+      chainCompleted)`; enum `ProofError` (`INVALID_TICKET`, `WRONG_PROOF`, `TOO_MANY_ATTEMPTS`) w
+      `security-domain`. Wąski port `ChainTickets` (łańcuch pod biletem): `PendingAuthenticationStore`
+      go rozszerza, `StepUpStore` oddaje widok `chains()`. `ContinueAuthentication` i
+      `ContinueStepUp` zostały cienkie: mapują błędy na swoje warianty i robią to, co tylko ich
+      (wpis do liczników i sesja; elewacja). Test `PresentProofTest` (6 przypadków).
+      `_BruteForceGuard.execute` zwraca `Optional<AuthenticationBlock>` (blokada w mocy albo
+      nic), więc w `Authentication` nie ma już żadnego `instanceof`.
+      SKASOWANE martwe typy domenowe: `AuthenticationEvent`, `BruteForceProtectionEvent` (cały
+      pakiet `domain.event`) i `Credentials`. W `AuthenticationEvent` był todo „bring permits
+      back whenever you are ready to introduce security notifications" (rozbicie `Invalid` na
+      brak konta i złe hasło): to rozróżnienie żyje teraz w `CredentialsError`, a powiadomienia
+      bezpieczeństwa pozostają pomysłem do zrobienia.
+      NIUANSE ZACHOWANIA: wpis złego kodu do liczników brute force następuje teraz PO zużyciu
+      próby (było przed); podmiana łańcucha step-upu idzie przez atomowe `update`, więc bilet
+      zamknięty w międzyczasie nie jest wskrzeszany.
+      Regresja z Dockerem: security 19 + 42 + 122 + 36 + 343, zero pominiętych; pełny build
+      kernela 823 testy, zero pominiętych; e2e 42 scenariusze.
+- [x] RESZTKI (Robert 2026-11-05: „Zostało coś?"): kroki pakietowe `_*` w `authentication`
+      przeszły przez te same reguły, więc odstępstwo (3) z punktu o wnętrzach już nie obowiązuje:
+      `_BruteForceGuard` (konstruktor, `if (`, stojąca blokada jako lokalny `Optional` zamiast
+      `.filter`), `_AccountStillSignsIn`, `_GenerateSession`, `_UpdateBruteForceRecords`. Bez
+      zmian, bo jednolinijkowe: `_CleanBruteForceRecords`, `_RequireVerifiedEmail`. Zachowanie bez
+      zmian. Martwe `_VerifyCredentials` poprawione w żywych dokumentach: `Readme.md` tutaj,
+      `portal/PODRECZNIK.md` (2 miejsca), `portal/PODRECZNIK-ETAP-2.md`; komentarz w
+      `portal/microservice-memes/memes-ui/src/api.ts` mówi `RefreshSession.Result`. Dokumenty
+      datowane (`BLEDY-*`, `PRZEGLAD-*`, `PLAN-*`, `docs/`) zostają, jak były.
+      Regresja z Dockerem: 19 + 42 + 122 + 36 + 343, zero pominiętych.
+- [x] WERDYKTY KOŃCOWE (Robert 2026-11-05: „Commituj. Nazwy ok. Niech będzie
+      FAILED_AUTHENTICATION_ATTEMPT. Repo do wyjebania. Testy http narazie w dupie."):
+      nazwy nowych typów ZATWIERDZONE (`VerifyPassword`, `CredentialsError`, `OpenMfaChain`,
+      `PresentProof`, `ChainTickets`, `ProofError`, `ContinueStepUp`, `ConfirmEnrolment`,
+      `MailedLinkExpiration`); status na drucie zostaje `FAILED_AUTHENTICATION_ATTEMPT`;
+      całość zacommitowana na `RegisterRebuild`.
+- [ ] ODŁOŻONE („narazie"): test HTTP na liczniki brute force po logowaniu przez dostawcę
+      (dziś dowodzi tego tylko `OpenMfaChainTest`; pełnego tańca OAuth z drugim czynnikiem na
+      drucie nikt nie jedzie).
+- [ ] Repo `jrobertgardzinski/libs` na GitHubie: werdykt to KASACJA. Kolejność: najpierw
+      `RegisterRebuild` musi trafić na `main`, bo `main` tego repo (workflow CI, pomy, lista
+      klonowania w `Readme.md`) wciąż buduje się z `libs`.
+
 ## Otwarte — nazwy pól po wprowadzeniu portu odczytu (2026-09-02, drobne)
 
 **ZAMKNIĘTE 2026-11-04 (werdykt Roberta, gałąź RegisterRebuild):** pola zniknęły z use case'ów.

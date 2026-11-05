@@ -94,6 +94,16 @@ public class HttpResetPasswordSteps {
         assertEquals(HttpStatus.BAD_REQUEST, resetResponse.getStatus());
     }
 
+    @Then("the new password is flagged as invalid")
+    public void theNewPasswordIsFlaggedAsInvalid() {
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, resetResponse.getStatus());
+        // the shape /register answers with: one {CODE: parameter in force} per broken rule
+        java.util.List<?> passwordErrors =
+                (java.util.List<?>) resetResponse.getBody(Map.class).orElseThrow().get("passwordErrors");
+        assertNotNull(passwordErrors, "a refused password must say which rules it broke");
+        assertEquals(Map.of("MIN_LENGTH_NOT_MET", 5), passwordErrors.getFirst());
+    }
+
     private HttpResponse<Map> authenticate(String password) {
         return exchange(HttpRequest.POST("/authenticate", Map.of("email", email, "password", password)));
     }

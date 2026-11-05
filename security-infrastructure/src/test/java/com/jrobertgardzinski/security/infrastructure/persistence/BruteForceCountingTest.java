@@ -15,7 +15,6 @@ import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
 import com.jrobertgardzinski.security.domain.vo.Source;
 import com.jrobertgardzinski.security.system.authentication.Authentication;
 import com.jrobertgardzinski.security.system.authentication.ContinueAuthentication;
-import com.jrobertgardzinski.security.system.authentication.AuthenticationResult;
 import io.micronaut.context.ApplicationContext;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -92,7 +91,7 @@ class BruteForceCountingTest {
 
         // I get my own password right
         assertThat(attempt(source, mine, THEIR_PASSWORD))
-                .isInstanceOf(AuthenticationResult.Authenticated.class);
+                .isInstanceOf(Authentication.Result.Authenticated.class);
 
         // ...which forgives MY misses: two more are needed to reach the limit of three again
         attempt(source, mine, WRONG_PASSWORD);
@@ -100,12 +99,12 @@ class BruteForceCountingTest {
         assertThat(attempt(source, mine, WRONG_PASSWORD))
                 .as("if my earlier miss still counted, the limit would have been reached one"
                         + " attempt sooner")
-                .isNotInstanceOf(AuthenticationResult.Blocked.class);
+                .isNotInstanceOf(Authentication.Result.Blocked.class);
 
         assertThat(attempt(source, mine, WRONG_PASSWORD))
                 .as("and the fourth is where it does hold — a success is an amnesty, not an"
                         + " exemption")
-                .isInstanceOf(AuthenticationResult.Blocked.class);
+                .isInstanceOf(Authentication.Result.Blocked.class);
     }
 
     @Test
@@ -118,13 +117,13 @@ class BruteForceCountingTest {
             Email victim = account("sprayed-" + i + "@example.com");
             assertThat(attempt(source, victim, WRONG_PASSWORD))
                     .as("attempt %d is a single miss on a fresh account — nothing to block yet", i)
-                    .isNotInstanceOf(AuthenticationResult.Blocked.class);
+                    .isNotInstanceOf(Authentication.Result.Blocked.class);
         }
 
         assertThat(attempt(source, account("sprayed-last@example.com"), WRONG_PASSWORD))
                 .as("five misses from one address, and the ceiling is what sees them: the pair"
                         + " counter is still at one for every account involved")
-                .isInstanceOf(AuthenticationResult.Blocked.class);
+                .isInstanceOf(Authentication.Result.Blocked.class);
     }
 
     @Test
@@ -138,7 +137,7 @@ class BruteForceCountingTest {
             attempt(source, account("ceiling-" + i + "@example.com"), WRONG_PASSWORD);
         }
         assertThat(attempt(source, account("ceiling-last@example.com"), WRONG_PASSWORD))
-                .isInstanceOf(AuthenticationResult.Blocked.class);
+                .isInstanceOf(Authentication.Result.Blocked.class);
 
         assertThat(rejections.countFailuresFromSource(source, LocalDateTime.now().minusDays(1)).count())
                 .as("the block stands for every one of those failures. Leaving them behind leaves"
@@ -158,9 +157,9 @@ class BruteForceCountingTest {
                         "e-mail code", 0, victim.value()));
 
         // link #1 passes — the guesser HAS the password; what they are after is the code
-        AuthenticationResult first = attempt(source, victim, THEIR_PASSWORD);
-        assertThat(first).isInstanceOf(AuthenticationResult.MfaRequired.class);
-        String ticket = ((AuthenticationResult.MfaRequired) first).ticket();
+        Authentication.Result first = attempt(source, victim, THEIR_PASSWORD);
+        assertThat(first).isInstanceOf(Authentication.Result.MfaRequired.class);
+        String ticket = ((Authentication.Result.MfaRequired) first).ticket();
 
         ContinueAuthentication chain = context.getBean(ContinueAuthentication.class);
         TransactionBoundary transactions = context.getBean(TransactionBoundary.class);
@@ -175,7 +174,7 @@ class BruteForceCountingTest {
                 .isEqualTo(1);
     }
 
-    private static AuthenticationResult attempt(Source source, Email email, String password) {
+    private static Authentication.Result attempt(Source source, Email email, String password) {
         Authentication authentication = context.getBean(Authentication.class);
         TransactionBoundary transactions = context.getBean(TransactionBoundary.class);
         return transactions.execute(() -> authentication.execute(

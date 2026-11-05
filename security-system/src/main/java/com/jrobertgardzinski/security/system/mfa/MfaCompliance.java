@@ -19,15 +19,15 @@ import java.util.stream.Collectors;
  */
 public class MfaCompliance {
 
-    private final EnrolledFactorRepository factors;
-    private final PasswordlessAccountRepository passwordless;
+    private final EnrolledFactorRepository enrolledFactorRepository;
+    private final PasswordlessAccountRepository passwordlessAccountRepository;
     private final MfaPolicy policy;
     private final Set<String> bootstrapAdmins;
 
-    public MfaCompliance(EnrolledFactorRepository factors, PasswordlessAccountRepository passwordless,
+    public MfaCompliance(EnrolledFactorRepository enrolledFactorRepository, PasswordlessAccountRepository passwordlessAccountRepository,
                          MfaPolicy policy, Set<String> bootstrapAdmins) {
-        this.factors = factors;
-        this.passwordless = passwordless;
+        this.enrolledFactorRepository = enrolledFactorRepository;
+        this.passwordlessAccountRepository = passwordlessAccountRepository;
         this.policy = policy;
         this.bootstrapAdmins = bootstrapAdmins.stream()
                 .map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
@@ -39,12 +39,12 @@ public class MfaCompliance {
 
     /** Factors that count toward the floor: the enrolled ones, plus the password if the account has one. */
     public int effectiveFactorCount(Email email) {
-        int enrolled = factors.findByUser(email).size();
-        return passwordless.isPasswordless(email) ? enrolled : enrolled + 1;
+        int enrolled = enrolledFactorRepository.findByUser(email).size();
+        return passwordlessAccountRepository.isPasswordless(email) ? enrolled : enrolled + 1;
     }
 
     public boolean isCompliant(Email email, Set<Role> roles) {
-        if (bootstrapAdmins.contains(email.value().toLowerCase(Locale.ROOT)) && factors.findByUser(email).isEmpty()) {
+        if (bootstrapAdmins.contains(email.value().toLowerCase(Locale.ROOT)) && enrolledFactorRepository.findByUser(email).isEmpty()) {
             return true;   // grace: the first admin bootstraps before enrolling anything
         }
         return effectiveFactorCount(email) >= requiredFactors(roles);

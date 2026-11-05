@@ -2,10 +2,10 @@ package com.jrobertgardzinski.security.system.roles;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Role;
-import com.jrobertgardzinski.util.constraint.Constraints;
-import com.jrobertgardzinski.util.constraint.Outcome;
+import com.jrobertgardzinski.security.domain.vo.RoleError;
 
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
@@ -19,9 +19,17 @@ public final class RequireRole {
         this.rolesOf = rolesOf;
     }
 
-    public Outcome<Set<Role>> check(Email caller, Role required) {
-        return new Constraints<>(List.of(new _HasRoleConstraint(required)))
-                .validate(() -> rolesInForce(caller));
+    /** Empty when the caller holds the role; otherwise the one refusal that names it. */
+    public List<RoleError> check(Email caller, Role required) {
+        List<RoleError> errors = new LinkedList<>();
+        if (!rolesInForce(caller).contains(required)) {
+            errors.add(switch (required) {
+                case USER -> RoleError.NOT_A_USER;
+                case MODERATOR -> RoleError.NOT_A_MODERATOR;
+                case ADMIN -> RoleError.NOT_AN_ADMIN;
+            });
+        }
+        return errors;
     }
 
     public Set<Role> rolesInForce(Email caller) {

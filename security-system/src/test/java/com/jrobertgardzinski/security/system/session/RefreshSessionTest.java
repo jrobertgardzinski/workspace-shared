@@ -88,9 +88,9 @@ class RefreshSessionTest {
                 .thenReturn(Optional.of(session));
         Mockito.when(sessionRepository.markRotated(GIVEN.refreshToken)).thenReturn(false);
 
-        RefreshSessionResult result = refreshSession.execute(GIVEN.request);
+        RefreshSession.Result result = refreshSession.execute(GIVEN.request);
 
-        assertInstanceOf(RefreshSessionResult.ReuseDetected.class, result);
+        assertInstanceOf(RefreshSession.Result.ReuseDetected.class, result);
         assertAll(
                 () -> Mockito.verify(sessionRepository).revokeFamily(FAMILY),
                 () -> Mockito.verify(sessionRepository, Mockito.never())
@@ -110,9 +110,9 @@ class RefreshSessionTest {
         // this caller wins the rotation — the conditional write changed a row
         Mockito.when(sessionRepository.markRotated(GIVEN.refreshToken)).thenReturn(true);
 
-        RefreshSessionResult result = refreshSession.execute(GIVEN.request);
+        RefreshSession.Result result = refreshSession.execute(GIVEN.request);
 
-        RefreshSessionResult.Refreshed refreshed = assertInstanceOf(RefreshSessionResult.Refreshed.class, result);
+        RefreshSession.Result.Refreshed refreshed = assertInstanceOf(RefreshSession.Result.Refreshed.class, result);
         assertAll(
                 () -> assertEquals(createdTokens, refreshed.sessionTokens()),
                 () -> Mockito.verify(sessionRepository).markRotated(GIVEN.refreshToken),
@@ -128,9 +128,9 @@ class RefreshSessionTest {
         Mockito.when(sessionRepository.findByRefreshToken(GIVEN.refreshToken))
                 .thenReturn(Optional.of(session));
 
-        RefreshSessionResult result = refreshSession.execute(GIVEN.request);
+        RefreshSession.Result result = refreshSession.execute(GIVEN.request);
 
-        RefreshSessionResult.Expired expired = assertInstanceOf(RefreshSessionResult.Expired.class, result);
+        RefreshSession.Result.Expired expired = assertInstanceOf(RefreshSession.Result.Expired.class, result);
         assertAll(
                 () -> assertEquals(GIVEN.email, expired.email()),
                 () -> Mockito.verify(sessionRepository, Mockito.never()).markRotated(Mockito.any()),
@@ -144,9 +144,9 @@ class RefreshSessionTest {
         Mockito.when(sessionRepository.findByRefreshToken(GIVEN.refreshToken))
                 .thenReturn(Optional.empty());
 
-        RefreshSessionResult result = refreshSession.execute(GIVEN.request);
+        RefreshSession.Result result = refreshSession.execute(GIVEN.request);
 
-        assertInstanceOf(RefreshSessionResult.NotFound.class, result);
+        assertInstanceOf(RefreshSession.Result.NotFound.class, result);
         Mockito.verify(sessionRepository, Mockito.never()).create(Mockito.any(), Mockito.any());
     }
 
@@ -157,9 +157,9 @@ class RefreshSessionTest {
         Mockito.when(sessionRepository.findByRefreshToken(GIVEN.refreshToken))
                 .thenReturn(Optional.of(session));
 
-        RefreshSessionResult result = refreshSession.execute(GIVEN.request);
+        RefreshSession.Result result = refreshSession.execute(GIVEN.request);
 
-        assertInstanceOf(RefreshSessionResult.ReuseDetected.class, result);
+        assertInstanceOf(RefreshSession.Result.ReuseDetected.class, result);
         assertAll(
                 () -> Mockito.verify(sessionRepository).revokeFamily(FAMILY),
                 () -> Mockito.verify(sessionRepository, Mockito.never()).create(Mockito.any(), Mockito.any())
@@ -177,9 +177,9 @@ class RefreshSessionTest {
         Mockito.when(sessionRepository.findByRefreshToken(GIVEN.refreshToken))
                 .thenReturn(Optional.of(old));
 
-        RefreshSessionResult result = refreshSession.execute(GIVEN.request);
+        RefreshSession.Result result = refreshSession.execute(GIVEN.request);
 
-        assertInstanceOf(RefreshSessionResult.Expired.class, result);
+        assertInstanceOf(RefreshSession.Result.Expired.class, result);
         assertAll(
                 () -> Mockito.verify(sessionRepository, Mockito.never()).create(Mockito.any(), Mockito.any()),
                 // the rotated rows go too: left behind, presenting this token again would be
@@ -198,7 +198,7 @@ class RefreshSessionTest {
         Mockito.when(sessionRepository.create(Mockito.any(), Mockito.any()))
                 .thenAnswer(call -> call.getArgument(0));
 
-        assertInstanceOf(RefreshSessionResult.Refreshed.class, refreshSession.execute(GIVEN.request));
+        assertInstanceOf(RefreshSession.Result.Refreshed.class, refreshSession.execute(GIVEN.request));
     }
 
     private static StoredSession storedSession(LocalDateTime refreshExpiry, SessionStatus status) {

@@ -1,9 +1,9 @@
 package com.jrobertgardzinski;
 
 import com.jrobertgardzinski.security.config.oauth.OauthProviderSettings;
+import com.jrobertgardzinski.security.domain.vo.Source;
 import com.jrobertgardzinski.security.domain.vo.ProviderIdentity;
 import com.jrobertgardzinski.security.system.federation.FederatedSignIn;
-import com.jrobertgardzinski.security.system.federation.FederatedSignInResult;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -64,10 +64,11 @@ final class OauthController {
     private final TransactionBoundary transactionBoundary;
     private final List<String> allowedReturnPrefixes;
     private final boolean secureCookies;
+    private final ClientIpResolver clientIpResolver;
 
     OauthController(List<OauthProviderSettings> providers, OauthFlowStore flows, OidcClient oidc,
                     FederatedSignIn federatedSignIn, RefreshCookies refreshCookies,
-                    TransactionBoundary transactionBoundary,
+                    TransactionBoundary transactionBoundary, ClientIpResolver clientIpResolver,
                     @Value("${security.oauth.allowed-return-prefixes:http://localhost:8083/}")
                     List<String> allowedReturnPrefixes,
                     @Value("${security.cookie.secure:true}") boolean secureCookies) {
@@ -79,6 +80,7 @@ final class OauthController {
         this.federatedSignIn = federatedSignIn;
         this.refreshCookies = refreshCookies;
         this.transactionBoundary = transactionBoundary;
+        this.clientIpResolver = clientIpResolver;
         // A RAW startsWith on a prefix without a trailing slash is not a host check: the natural
         // thing to configure ("http://app.example.com") also admits http://app.example.com.evil.net/
         // and http://app.example.com@evil.net/ — both of which would then RECEIVE the access token
@@ -164,19 +166,26 @@ final class OauthController {
             LOG.warn("federated sign-in through {} failed: {}", flow.provider(), refused.toString());
             return backTo(flow.returnUrl(), "#oauthError=SIGN_IN_FAILED").cookie(clearedStateCookie());
         }
-        FederatedSignInResult result = transactionBoundary.execute(() -> federatedSignIn.execute(identity));
+        // where the callback came from: if a factor chain opens, its wrong proofs are charged to
+        // this address against this account, exactly as after a password sign-in
+        Source source = new Source(clientIpResolver.resolve(request),
+                request.getHeaders().findFirst("User-Agent").orElse(""));
+        FederatedSignIn.Result result = transactionBoundary.execute(
+                () -> federatedSignIn.execute(identity, source));
         return switch (result) {
-            case FederatedSignInResult.SignedIn signedIn -> backTo(flow.returnUrl(),
+            case FederatedSignIn.Result.SignedIn signedIn -> backTo(flow.returnUrl(),
                     "#accessToken=" + encode(signedIn.session().plainAccessToken()))
                     .cookie(refreshCookies.issue(signedIn.session().plainRefreshToken()))
                     .cookie(clearedStateCookie());
             // the account has enrolled factors: hand the ticket back so the UI can finish the chain
             // through /authenticate/factor, exactly like a password sign-in
-            case FederatedSignInResult.MfaRequired mfa -> backTo(flow.returnUrl(),
+            case FederatedSignIn.Result.MfaRequired mfa -> backTo(flow.returnUrl(),
                     "#mfaTicket=" + encode(mfa.ticket()) + "&nextFactor=" + encode(mfa.nextFactor().value())
                             + (mfa.challengeData() == null ? "" : "&challengeData=" + encode(mfa.challengeData())));
-            case FederatedSignInResult.Refused refused ->
-                    backTo(flow.returnUrl(), "#oauthError=" + encode(refused.reason()));
+            case FederatedSignIn.Result.EmailNotVouched _ ->
+                    backTo(flow.returnUrl(), "#oauthError=EMAIL_NOT_VOUCHED");
+            case FederatedSignIn.Result.AccountClosing _ ->
+                    backTo(flow.returnUrl(), "#oauthError=ACCOUNT_CLOSING");
         };
     }
 

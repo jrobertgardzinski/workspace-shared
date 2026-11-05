@@ -18,17 +18,20 @@ import com.jrobertgardzinski.security.domain.repository.UserRepository;
  */
 class _AccountStillSignsIn {
 
-    private final UserRepository users;
+    private final UserRepository userRepository;
     private final _RequireVerifiedEmail requireVerifiedEmail;
 
-    _AccountStillSignsIn(UserRepository users, _RequireVerifiedEmail requireVerifiedEmail) {
-        this.users = users;
+    _AccountStillSignsIn(
+                    UserRepository userRepository,
+                    _RequireVerifiedEmail requireVerifiedEmail) {
+        this.userRepository = userRepository;
         this.requireVerifiedEmail = requireVerifiedEmail;
     }
 
     boolean isTrueOf(Email email) {
-        return users.findBy(email).isPresent()
-                && !users.isPendingDeletion(email)
-                && requireVerifiedEmail.isVerified(email);
+
+        return userRepository.findBy(email).isPresent() &&
+                !userRepository.isPendingDeletion(email) &&
+                requireVerifiedEmail.isVerified(email);
     }
 }

@@ -37,14 +37,16 @@ public class DeleteAccount {
     private final EmailChangeRepository emailChangeRepository;
     private final PasswordlessAccountRepository passwordlessAccountRepository;
 
-    public DeleteAccount(UserRepository userRepository, SessionRepository sessionRepository,
-                         EnrolledFactorRepository enrolledFactorRepository,
-                         RecoveryCodeRepository recoveryCodeRepository,
-                         FederatedIdentityRepository federatedIdentityRepository,
-                         EmailVerificationRepository emailVerificationRepository,
-                         PasswordResetRepository passwordResetRepository,
-                         EmailChangeRepository emailChangeRepository,
-                         PasswordlessAccountRepository passwordlessAccountRepository) {
+    public DeleteAccount(
+                    UserRepository userRepository,
+                    SessionRepository sessionRepository,
+                    EnrolledFactorRepository enrolledFactorRepository,
+                    RecoveryCodeRepository recoveryCodeRepository,
+                    FederatedIdentityRepository federatedIdentityRepository,
+                    EmailVerificationRepository emailVerificationRepository,
+                    PasswordResetRepository passwordResetRepository,
+                    EmailChangeRepository emailChangeRepository,
+                    PasswordlessAccountRepository passwordlessAccountRepository) {
         this.userRepository = userRepository;
         this.sessionRepository = sessionRepository;
         this.enrolledFactorRepository = enrolledFactorRepository;
@@ -57,6 +59,7 @@ public class DeleteAccount {
     }
 
     public void execute(Email email) {
+
         sessionRepository.revokeAllSessions(email);
         enrolledFactorRepository.removeAll(email);
         recoveryCodeRepository.removeAll(email);

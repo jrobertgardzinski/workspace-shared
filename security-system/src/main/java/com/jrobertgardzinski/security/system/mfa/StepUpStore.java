@@ -33,4 +33,39 @@ public interface StepUpStore {
     }
 
     void close(String ticket);
+
+    /**
+     * This store seen as the chains behind its tickets, for {@link PresentProof}. A change to a
+     * chain goes through {@link #update}, so it stays one step and keeps the session and the action
+     * the ticket was opened for.
+     */
+    default ChainTickets chains() {
+        StepUpStore store = this;
+        return new ChainTickets() {
+
+            @Override
+            public Optional<PendingAuthentication> find(String ticket) {
+                return store.find(ticket).map(StepUpPending::chain);
+            }
+
+            @Override
+            public Optional<PendingAuthentication> update(String ticket, UnaryOperator<PendingAuthentication> change) {
+                return store.update(ticket, current -> new StepUpPending(
+                                current.email(), current.accessToken(), current.action(),
+                                change.apply(current.chain())))
+                        .map(StepUpPending::chain);
+            }
+
+            @Override
+            public void replace(String ticket, PendingAuthentication chain) {
+                store.update(ticket, current -> new StepUpPending(
+                        current.email(), current.accessToken(), current.action(), chain));
+            }
+
+            @Override
+            public void close(String ticket) {
+                store.close(ticket);
+            }
+        };
+    }
 }

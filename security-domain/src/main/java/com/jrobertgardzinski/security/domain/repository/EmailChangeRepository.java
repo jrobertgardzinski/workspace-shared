@@ -3,7 +3,9 @@ package com.jrobertgardzinski.security.domain.repository;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
+import com.jrobertgardzinski.security.domain.vo.token.expiration.MailedLinkExpiration;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -27,7 +29,11 @@ public interface EmailChangeRepository {
     Optional<PendingEmailChange> confirmChange(VerificationToken token);
 
     /** A pending move together with the moment it started. */
-    record PendingEmailChange(EmailChange change, java.time.LocalDateTime startedAt) {}
+    record PendingEmailChange(EmailChange change, java.time.LocalDateTime startedAt) {
+        public MailedLinkExpiration expiration(Duration window) {
+            return new MailedLinkExpiration(startedAt, window);
+        }
+    }
 
     /**
      * Drops every pending change that mentions this address, as EITHER end of a move. Called when the

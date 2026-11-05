@@ -9,7 +9,6 @@ import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
-import com.jrobertgardzinski.security.system.registration.RegisterResult;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import com.jrobertgardzinski.security.system.verification.RequestEmailVerification;
 import jakarta.inject.Named;
@@ -107,21 +106,21 @@ public class SecurityController {
         // outbox), so there is no slow call to keep out of the transaction; the reason for the
         // split was that the response is decided per branch, and that is a formatting concern which
         // belongs after the commit, not a reason to commit twice.
-        RegisterResult result = transactionBoundary.execute(() -> {
-            RegisterResult outcome = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
+        Register.Result result = transactionBoundary.execute(() -> {
+            Register.Result outcome = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
             switch (outcome) {
                 // sign-in requires a verified address, so onboarding starts the verification here
-                case RegisterResult.Registered registered -> requestEmailVerification.execute(Email.of(email));
+                case Register.Result.Registered registered -> requestEmailVerification.execute(Email.of(email));
                 // quiet refusal: the caller sees a fresh-looking registration; the address owner
                 // is told by mail — a lost-mail re-register gets a fresh link, a real account a notice
-                case RegisterResult.EmailAlreadyTaken alreadyTaken -> {
+                case Register.Result.EmailAlreadyTaken alreadyTaken -> {
                     if (emailVerifications.isVerified(alreadyTaken.email())) {
                         registrationNoticeNotifier.sendAlreadyRegistered(alreadyTaken.email());
                     } else {
                         requestEmailVerification.execute(alreadyTaken.email());
                     }
                 }
-                case RegisterResult.Rejected rejected -> {
+                case Register.Result.Rejected rejected -> {
                     // nothing was written, and nothing is mailed: the address may not even be one
                 }
             }
@@ -129,14 +128,14 @@ public class SecurityController {
         });
 
         return switch (result) {
-            case RegisterResult.Registered registered ->
+            case Register.Result.Registered registered ->
                     HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
-            case RegisterResult.Rejected rejected ->
+            case Register.Result.Rejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
                             .body(Map.of(
                                     "emailErrors", emailErrors(rejected.emailErrors(), emailPolicy),
                                     "passwordErrors", passwordErrors(rejected.passwordErrors(), rejected.policy())));
-            case RegisterResult.EmailAlreadyTaken alreadyTaken ->
+            case Register.Result.EmailAlreadyTaken alreadyTaken ->
                     HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
         };
     }

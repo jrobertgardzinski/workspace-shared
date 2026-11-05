@@ -208,6 +208,28 @@ describe('what a tab keeps between sessions', () => {
     expect(document.body.textContent).not.toContain('Wrong current password');
   });
 
+  it('names the rules a refused new password broke, the way registration does', async () => {
+    await signIn('alice@example.com', 'correct horse');
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === `${SECURITY}/account/password`) {
+        return Promise.resolve(json(
+          { passwordErrors: [{ MIN_LENGTH_NOT_MET: 12 }, { DIGIT_REQUIRED: true }] }, 422));
+      }
+      return Promise.resolve(answer(url, init));
+    });
+
+    await typeInto(byTestId('current-password'), 'correct horse');
+    await typeInto(byTestId('new-password'), 'weak');
+    await submitFormOf(byTestId('change-password-submit'));
+    await until('the refusal', () => present('password-errors')
+      && byTestId('password-errors').children.length > 0);
+
+    expect(byTestId('password-errors').children.length).toBe(2);
+    expect(byTestId('password-errors').textContent).toContain('12');
+    expect(document.body.textContent).not.toContain('Wrong current password');
+  });
+
   it('says so when the service cannot be reached, instead of going quiet (UI-7)', async () => {
     await signIn('alice@example.com', 'correct horse');
     vi.stubGlobal('fetch', () => Promise.reject(new TypeError('Failed to fetch')));

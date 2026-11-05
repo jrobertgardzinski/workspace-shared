@@ -7,7 +7,6 @@ import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import com.jrobertgardzinski.security.system.verification.RequestEmailVerification;
 import com.jrobertgardzinski.security.system.verification.VerifyEmail;
-import com.jrobertgardzinski.security.system.verification.VerifyEmailResult;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -69,11 +68,13 @@ final class VerifyEmailController {
             // be the loudest one of all — a 500 quoting the domain back at the caller.
             return HttpResponse.accepted().body(Map.of("status", "VERIFICATION_LINK_SENT"));
         }
-        transactionBoundary.execute(() -> {
-            requestEmailVerification.execute(email);
-            return null;
-        });
-        return HttpResponse.accepted().body(Map.of("status", "VERIFICATION_LINK_SENT"));
+        RequestEmailVerification.Result result = transactionBoundary.execute(
+                () -> requestEmailVerification.execute(email));
+        return switch (result) {
+            // one answer for both: a different one would tell a stranger which addresses are verified
+            case RequestEmailVerification.Result.LinkSent _, RequestEmailVerification.Result.AlreadyVerified _ ->
+                    HttpResponse.accepted().body(Map.of("status", "VERIFICATION_LINK_SENT"));
+        };
     }
 
     @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
@@ -85,10 +86,14 @@ final class VerifyEmailController {
             // a token that cannot even be constructed is simply not a valid token
             return HttpResponse.badRequest().body(Map.of("status", "INVALID_TOKEN"));
         }
-        VerifyEmailResult result = transactionBoundary.execute(() -> verifyEmail.execute(token));
-        if (result instanceof VerifyEmailResult.Verified verified) {
-            return HttpResponse.ok(Map.of("status", "EMAIL_VERIFIED", "email", verified.email().value()));
-        }
-        return HttpResponse.badRequest().body(Map.of("status", "INVALID_TOKEN"));
+        VerifyEmail.Result result = transactionBoundary.execute(() -> verifyEmail.execute(token));
+        return switch (result) {
+            case VerifyEmail.Result.Verified verified ->
+                    HttpResponse.ok(Map.of("status", "EMAIL_VERIFIED", "email", verified.email().value()));
+            // one answer for both: telling them apart would tell a stranger that a verification for
+            // this address was once started
+            case VerifyEmail.Result.TokenNotFound _, VerifyEmail.Result.TokenExpired _ ->
+                    HttpResponse.badRequest().body(Map.of("status", "INVALID_TOKEN"));
+        };
     }
 }

@@ -22,16 +22,19 @@ public class StartAccountDeletion {
     private final SessionRepository sessionRepository;
     private final ContentPurge contentPurge;
 
-    public StartAccountDeletion(UserRepository userRepository,
-                                SessionRepository sessionRepository,
-                                ContentPurge contentPurge) {
+    public StartAccountDeletion(
+                    UserRepository userRepository,
+                    SessionRepository sessionRepository,
+                    ContentPurge contentPurge) {
         this.userRepository = userRepository;
         this.sessionRepository = sessionRepository;
         this.contentPurge = contentPurge;
     }
 
     public void execute(AccountClosure closure) {
+
         Email email = closure.target();
+
         sessionRepository.revokeAllSessions(email);
         userRepository.markPendingDeletion(email);
         contentPurge.begin(closure);

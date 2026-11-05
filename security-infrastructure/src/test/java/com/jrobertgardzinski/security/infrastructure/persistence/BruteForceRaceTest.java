@@ -7,7 +7,6 @@ import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.domain.vo.Source;
 import com.jrobertgardzinski.security.system.authentication.Authentication;
-import com.jrobertgardzinski.security.system.authentication.AuthenticationResult;
 import io.micronaut.context.ApplicationContext;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -86,9 +85,9 @@ class BruteForceRaceTest {
             new Thread(() -> {
                 try {
                     go.await(10, TimeUnit.SECONDS);
-                    AuthenticationResult result = transactions.execute(() -> authentication.execute(
+                    Authentication.Result result = transactions.execute(() -> authentication.execute(
                             new AuthenticationRequest(source, VICTIM, PlaintextPassword.of(WRONG_PASSWORD))));
-                    if (result instanceof AuthenticationResult.Blocked) {
+                    if (result instanceof Authentication.Result.Blocked) {
                         blocked.incrementAndGet();
                     } else {
                         admitted.incrementAndGet();

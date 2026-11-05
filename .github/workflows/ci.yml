@@ -55,10 +55,6 @@ jobs:
           path: shared/test-starter
       - uses: actions/checkout@v7
         with:
-          repository: jrobertgardzinski/libs   # the constraint lib lives in repo "libs"
-          path: shared/constraint
-      - uses: actions/checkout@v7
-        with:
           repository: jrobertgardzinski/config
           path: shared/config
       - uses: actions/checkout@v7
@@ -133,7 +129,7 @@ jobs:
 
       - name: Install the shared libraries (dependency order)
         run: |
-          for lib in test-starter constraint config adjustable-clock email password infrastructure-micronaut-clock offline-jwt user-id unit-of-work account-closure; do
+          for lib in test-starter config adjustable-clock email password infrastructure-micronaut-clock offline-jwt user-id unit-of-work account-closure; do
             mvn -B -q --no-transfer-progress -f "shared/$lib/pom.xml" install -DskipTests
           done
 

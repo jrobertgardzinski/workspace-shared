@@ -1,11 +1,12 @@
 package com.jrobertgardzinski.security.system.authentication;
 
-import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
+import com.jrobertgardzinski.security.domain.entity.SessionTokens;
+import com.jrobertgardzinski.security.domain.vo.FactorType;
+import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
+import com.jrobertgardzinski.security.domain.vo.ProofError;
 import com.jrobertgardzinski.security.system.mfa.PendingAuthentication;
-import com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore;
+import com.jrobertgardzinski.security.system.mfa.PresentProof;
 
-import java.time.Clock;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -18,62 +19,100 @@ import java.util.Optional;
  */
 public class ContinueAuthentication {
 
-    private final PendingAuthenticationStore store;
-    private final com.jrobertgardzinski.security.system.mfa.MfaChain chain;
+    private final PresentProof presentProof;
     private final _GenerateSession generateSession;
     private final _AccountStillSignsIn accountStillSignsIn;
     private final _UpdateBruteForceRecords updateBruteForceRecords;
-    private final Clock clock;
 
-    ContinueAuthentication(PendingAuthenticationStore store, com.jrobertgardzinski.security.system.mfa.MfaChain chain,
-                           _GenerateSession generateSession, _AccountStillSignsIn accountStillSignsIn,
-                           _UpdateBruteForceRecords updateBruteForceRecords, Clock clock) {
-        this.store = store;
-        this.chain = chain;
+    ContinueAuthentication(
+                    PresentProof presentProof,
+                    _GenerateSession generateSession,
+                    _AccountStillSignsIn accountStillSignsIn,
+                    _UpdateBruteForceRecords updateBruteForceRecords) {
+        this.presentProof = presentProof;
         this.generateSession = generateSession;
         this.accountStillSignsIn = accountStillSignsIn;
         this.updateBruteForceRecords = updateBruteForceRecords;
-        this.clock = clock;
     }
 
-    public ContinueAuthenticationResult execute(String ticket, String proof) {
-        Optional<PendingAuthentication> found = store.find(ticket);
-        if (found.isEmpty() || found.get().isExpired(clock)) {
-            store.close(ticket);
-            return new ContinueAuthenticationResult.InvalidTicket();
-        }
-        PendingAuthentication pending = found.get();
+    /**
+     * The outcome of presenting a factor proof against a sign-in in flight: the chain completed (here
+     * is the session), another factor is now due, the proof was wrong (this many tries left), too many
+     * wrong proofs tore the ticket down, or the ticket is unknown/expired.
+     */
+    public sealed interface Result {
 
-        if (!chain.verify(pending, proof)) {
+        record Completed(SessionTokens session) implements Result {}
+
+        record NextFactor(FactorType type, String challengeData) implements Result {}
+
+        record WrongProof(int attemptsLeft) implements Result {}
+
+        record TooManyAttempts() implements Result {}
+
+        record InvalidTicket() implements Result {}
+    }
+
+    public Result execute(String ticket, String proof) {
+
+        PresentProof.Result presentProofResult = presentProof.present(ticket, proof);
+
+        if (
+                presentProofResult.errors().contains(ProofError.INVALID_TICKET)
+        ) {
+            return new Result.InvalidTicket();
+        }
+
+        PendingAuthentication chain = presentProofResult.chain();
+
+        if (
+                !presentProofResult.errors().isEmpty()
+        ) {
             // A wrong proof is a wrong guess at this account from this address, so it is written
             // down like a wrong password. Five-per-ticket was never a limit on the person: link #1
             // is a password they already hold, so a new ticket costs one request and the codes
             // could be walked at whatever rate tickets could be minted.
-            pending.lockoutSubject().ifPresent(updateBruteForceRecords::execute);
-            // spend the attempt as one step and decide on what is NOW stored: reading the count,
-            // subtracting one and writing it back as three calls let concurrent proofs share the
-            // same attempt, so a ticket worth five guesses answered as many as were sent at once
-            Optional<PendingAuthentication> afterWrong = store.update(ticket, PendingAuthentication::afterWrongProof);
-            if (afterWrong.isEmpty() || afterWrong.get().attemptsLeft() <= 0) {
-                store.close(ticket);
-                return new ContinueAuthenticationResult.TooManyAttempts();
+            Optional<LockoutSubject> lockoutSubject = chain.lockoutSubject();
+
+            if (
+                    lockoutSubject.isPresent()
+            ) {
+                updateBruteForceRecords.execute(
+                        lockoutSubject.get());
             }
-            return new ContinueAuthenticationResult.WrongProof(afterWrong.get().attemptsLeft());
         }
 
-        List<EnrolledFactor> tail = pending.tail();
-        if (tail.isEmpty()) {
-            store.close(ticket);
+        if (
+                presentProofResult.errors().contains(ProofError.TOO_MANY_ATTEMPTS)
+        ) {
+            return new Result.TooManyAttempts();
+        }
+
+        if (
+                presentProofResult.errors().contains(ProofError.WRONG_PROOF)
+        ) {
+            return new Result.WrongProof(
+                    chain.attemptsLeft());
+        }
+
+        if (
+                presentProofResult.chainCompleted()
+        ) {
             // the chain proved the PERSON; whether the ACCOUNT still signs in is a separate question,
             // and link #1's answer to it is as old as the chain took to walk. A deletion requested
             // after the password step used to be answered with a brand-new session.
-            if (!accountStillSignsIn.isTrueOf(pending.email())) {
-                return new ContinueAuthenticationResult.InvalidTicket();
+            if (
+                    !accountStillSignsIn.isTrueOf(chain.email())
+            ) {
+                return new Result.InvalidTicket();
             }
-            return new ContinueAuthenticationResult.Completed(generateSession.create(pending.email()));
+
+            return new Result.Completed(
+                    generateSession.create(chain.email()));
         }
-        PendingAuthentication advanced = chain.advanceTo(pending, tail);
-        store.replace(ticket, advanced);
-        return new ContinueAuthenticationResult.NextFactor(tail.get(0).type(), advanced.challengeData());
+
+        return new Result.NextFactor(
+                chain.currentType(),
+                chain.challengeData());
     }
 }

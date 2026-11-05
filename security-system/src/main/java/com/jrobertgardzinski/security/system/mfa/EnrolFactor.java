@@ -1,87 +1,56 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
-import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 
 import java.util.Optional;
 
 /**
- * Enrol a new factor for a signed-in user, in two steps that prove they control what they are
- * adding: {@link #start} begins the factor (a code factor sends a code to the target; a possession
- * factor generates a secret and returns what to show — a TOTP {@code otpauth://} URI), {@link
- * #confirm} accepts one correct proof and persists the factor. A factor cannot be added by merely
- * claiming a target — the same verification that guards sign-in guards enrolment.
+ * Begins the enrolment of a new factor for a signed-in user: a code factor sends a code to the
+ * target; a possession factor generates a secret and returns what to show — a TOTP
+ * {@code otpauth://} URI. Nothing is enrolled yet. A factor cannot be added by merely claiming a
+ * target: {@link ConfirmEnrolment} accepts one correct proof and only then persists it, the same
+ * verification that guards sign-in.
  */
 public class EnrolFactor {
 
-    public sealed interface Result {
-        /** Enrolment begun; {@code display} is shown to the user (a TOTP otpauth URI) or empty (a code was sent). */
-        record Started(String display) implements Result {}
-        record Enrolled(FactorType type) implements Result {}
-        record WrongProof() implements Result {}
-        record NoPendingEnrolment() implements Result {}
-        record UnsupportedFactor() implements Result {}
-    }
-
     private final FactorRegistry registry;
-    private final EnrolledFactorRepository factors;
     private final EnrolmentChallengeStore pending;
 
-    public EnrolFactor(FactorRegistry registry, EnrolledFactorRepository factors, EnrolmentChallengeStore pending) {
+    public EnrolFactor(
+                    FactorRegistry registry,
+                    EnrolmentChallengeStore pending) {
         this.registry = registry;
-        this.factors = factors;
         this.pending = pending;
     }
 
-    public Result start(Email user, FactorType type, String target) {
+    public sealed interface Result {
+
+        /** Enrolment begun; {@code display} is shown to the user (a TOTP otpauth URI) or empty (a code was sent). */
+        record Started(String display) implements Result {}
+
+        record UnsupportedFactor() implements Result {}
+    }
+
+    public Result execute(Email user, FactorType type, String target) {
+
         Optional<AuthenticationFactor> factor = registry.forType(type);
-        if (factor.isEmpty()) {
+
+        if (
+                factor.isEmpty()
+        ) {
             return new Result.UnsupportedFactor();
         }
+
         EnrolmentSetup setup = factor.get().beginEnrolment(target);
-        pending.put(user, type, EnrolmentChallengeStore.PendingEnrolment
-                .beginning(setup.secretMaterial(), setup.challenge()));
-        return new Result.Started(setup.display());
-    }
+        pending.put(
+                user,
+                type,
+                EnrolmentChallengeStore.PendingEnrolment.beginning(
+                        setup.secretMaterial(),
+                        setup.challenge()));
 
-    public Result confirm(Email user, FactorType type, String proof) {
-        Optional<AuthenticationFactor> factor = registry.forType(type);
-        Optional<EnrolmentChallengeStore.PendingEnrolment> enrolment = pending.get(user, type);
-        if (factor.isEmpty() || enrolment.isEmpty()) {
-            return new Result.NoPendingEnrolment();
-        }
-        EnrolledFactor candidate = candidate(user, type, enrolment.get().secretMaterial());
-        if (!factor.get().verify(candidate, Optional.ofNullable(enrolment.get().challenge()), proof)) {
-            // a wrong proof costs an attempt, and running out ends the enrolment — otherwise the
-            // code can be guessed at the speed of the network for as long as the entry lives
-            EnrolmentChallengeStore.PendingEnrolment afterWrong = enrolment.get().afterWrongProof();
-            if (afterWrong.attemptsLeft() <= 0) {
-                pending.remove(user, type);
-            } else {
-                pending.put(user, type, afterWrong);
-            }
-            return new Result.WrongProof();
-        }
-        // most factors store what enrolment produced; a factor whose real secret only arrives with
-        // the confirming proof (WebAuthn's public key) distils it here, after verify has passed
-        String stored = factor.get().enrolledMaterial(enrolment.get().secretMaterial(), proof);
-        factors.enrol(candidate(user, type, stored));
-        pending.remove(user, type);
-        return new Result.Enrolled(type);
-    }
-
-    private EnrolledFactor candidate(Email user, FactorType type, String secretMaterial) {
-        // New factors go to the end of the chain, in enrolment order — PAST the last position
-        // taken, not at the count of what is there. Those are the same number only while nothing
-        // has ever been removed: enrol three (0, 1, 2), drop the middle one, and the count is 2
-        // again, so the next factor arrived at the position the third already held. Two factors
-        // sharing a position leaves the chain's order down to whatever the store returns first.
-        int lastPosition = factors.findByUser(user).stream()
-                .mapToInt(EnrolledFactor::order)
-                .max()
-                .orElse(-1);
-        return new EnrolledFactor(user, type, FactorLabels.of(type), lastPosition + 1, secretMaterial);
+        return new Result.Started(
+                setup.display());
     }
 }

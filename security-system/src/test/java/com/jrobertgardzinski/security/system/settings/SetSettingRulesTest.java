@@ -54,9 +54,8 @@ class SetSettingRulesTest {
         RecordingRepository store = new RecordingRepository();
         SetSetting.Result result = new SetSetting(catalogueOf(aDeploymentWhereTheLengthAndTheDigitRuleAreLive()), store)
                 .execute(MinLength.KEY, " " + requested + " ");
-        assertThat(result.status()).isEqualTo(SetSetting.Status.ACCEPTED);
-        assertThat(result.value()).isEqualTo(requested);
-        assertThat(result.reason()).isEmpty();
+        assertThat(result).isInstanceOfSatisfying(SetSetting.Result.Accepted.class, accepted ->
+                assertThat(accepted.value()).isEqualTo(requested));
         assertThat(store.saved).containsExactly(Map.entry(MinLength.KEY, Integer.toString(requested)));
     }
 
@@ -72,9 +71,8 @@ class SetSettingRulesTest {
         RecordingRepository store = new RecordingRepository();
         SetSetting.Result result = new SetSetting(catalogueOf(aDeploymentWhereTheLengthAndTheDigitRuleAreLive()), store)
                 .execute(MinLength.KEY, Integer.toString(requested));
-        assertThat(result.status()).isEqualTo(SetSetting.Status.REFUSED);
-        assertThat(result.value()).isNull();
-        assertThat(result.reason()).isEqualTo("minLength must be at least " + MinLength.BOUNDARY);
+        assertThat(result).isInstanceOfSatisfying(SetSetting.Result.Refused.class, refused ->
+                assertThat(refused.reason()).isEqualTo("minLength must be at least " + MinLength.BOUNDARY));
         assertThat(store.saved).isEmpty();
     }
 
@@ -89,8 +87,8 @@ class SetSettingRulesTest {
         RecordingRepository store = new RecordingRepository();
         SetSetting.Result result = new SetSetting(catalogueOf(aDeploymentWhereTheLengthAndTheDigitRuleAreLive()), store)
                 .execute(MinLength.KEY, "ten");
-        assertThat(result.status()).isEqualTo(SetSetting.Status.REFUSED);
-        assertThat(result.reason()).startsWith("'ten' is not the type this key takes");
+        assertThat(result).isInstanceOfSatisfying(SetSetting.Result.Refused.class, refused ->
+                assertThat(refused.reason()).startsWith("'ten' is not the type this key takes"));
         assertThat(store.saved).isEmpty();
     }
 
@@ -100,8 +98,8 @@ class SetSettingRulesTest {
         RecordingRepository store = new RecordingRepository();
         SetSetting.Result result = new SetSetting(catalogueOf(aDeploymentWhereTheLengthAndTheDigitRuleAreLive()), store)
                 .execute(RequiresDigit.KEY, "FALSE");
-        assertThat(result.status()).isEqualTo(SetSetting.Status.ACCEPTED);
-        assertThat(result.value()).isEqualTo(false);
+        assertThat(result).isInstanceOfSatisfying(SetSetting.Result.Accepted.class, accepted ->
+                assertThat(accepted.value()).isEqualTo(false));
         assertThat(store.saved).containsExactly(Map.entry(RequiresDigit.KEY, "false"));
     }
 
@@ -111,8 +109,8 @@ class SetSettingRulesTest {
         RecordingRepository store = new RecordingRepository();
         SetSetting.Result result = new SetSetting(catalogueOf(aDeploymentWhereTheLengthAndTheDigitRuleAreLive()), store)
                 .execute("security.password.policy.min.lenght", "10");
-        assertThat(result.status()).isEqualTo(SetSetting.Status.UNKNOWN_KEY);
-        assertThat(result.reason()).contains("security.password.policy.min.lenght");
+        assertThat(result).isInstanceOfSatisfying(SetSetting.Result.UnknownKey.class, unknown ->
+                assertThat(unknown.reason()).contains("security.password.policy.min.lenght"));
         assertThat(store.saved).isEmpty();
     }
 }

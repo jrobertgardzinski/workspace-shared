@@ -43,9 +43,9 @@ class AuthorizeTest {
     void authorized_when_token_valid() {
         grantExpiringAt(LocalDateTime.now(CLOCK).plusHours(1));
 
-        AuthorizationResult result = authorize.execute(TOKEN);
+        Authorize.Result result = authorize.execute(TOKEN);
 
-        AuthorizationResult.Authorized authorized = assertInstanceOf(AuthorizationResult.Authorized.class, result);
+        Authorize.Result.Authorized authorized = assertInstanceOf(Authorize.Result.Authorized.class, result);
         assertEquals(EMAIL, authorized.email());
     }
 
@@ -54,9 +54,9 @@ class AuthorizeTest {
     void unauthorized_when_token_expired() {
         grantExpiringAt(LocalDateTime.now(CLOCK).minusSeconds(1));
 
-        AuthorizationResult result = authorize.execute(TOKEN);
+        Authorize.Result result = authorize.execute(TOKEN);
 
-        assertInstanceOf(AuthorizationResult.Unauthorized.class, result);
+        assertInstanceOf(Authorize.Result.Unauthorized.class, result);
     }
 
     @Example
@@ -64,9 +64,9 @@ class AuthorizeTest {
     void unauthorized_when_token_unknown() {
         Mockito.when(sessionRepository.findByAccessToken(TOKEN)).thenReturn(Optional.empty());
 
-        AuthorizationResult result = authorize.execute(TOKEN);
+        Authorize.Result result = authorize.execute(TOKEN);
 
-        assertInstanceOf(AuthorizationResult.Unauthorized.class, result);
+        assertInstanceOf(Authorize.Result.Unauthorized.class, result);
     }
 
     private void grantExpiringAt(LocalDateTime expiry) {

@@ -5,7 +5,6 @@ import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
 import com.jrobertgardzinski.security.domain.vo.Source;
 import com.jrobertgardzinski.security.system.authentication.Authentication;
-import com.jrobertgardzinski.security.system.authentication.AuthenticationResult;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import jakarta.inject.Named;
 import io.micronaut.http.HttpRequest;
@@ -95,25 +94,25 @@ public class AuthenticationController {
             // therefore no brute-force count: there is no account here to guess at.
             return HttpResponse.status(HttpStatus.UNAUTHORIZED);
         }
-        AuthenticationResult result = transactionBoundary.execute(() -> authentication.execute(authenticationRequest));
+        Authentication.Result result = transactionBoundary.execute(() -> authentication.execute(authenticationRequest));
 
         return switch (result) {
-            case AuthenticationResult.Authenticated authenticated ->
+            case Authentication.Result.Authenticated authenticated ->
                     HttpResponse.ok(Map.<String, Object>of("accessToken", authenticated.session().plainAccessToken()))
                             .cookie(refreshCookies.issue(authenticated.session().plainRefreshToken()));
-            case AuthenticationResult.Rejected rejected ->
+            case Authentication.Result.Rejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Refusal.of("WRONG_CREDENTIALS"));
-            case AuthenticationResult.EmailNotVerified notVerified ->
+            case Authentication.Result.EmailNotVerified notVerified ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.FORBIDDEN)
                             .body(Refusal.alsoAsError("EMAIL_NOT_VERIFIED"));
-            case AuthenticationResult.Blocked blocked ->
+            case Authentication.Result.Blocked blocked ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
                             .header("Retry-After", Long.toString(secondsUntil(blocked.authenticationBlock().expiryDate())))
                             .body(Refusal.alsoAsError("TOO_MANY_ATTEMPTS"));
             // password was right, but the user has factors — no session yet; the first challenge is out.
             // The refresh token is withheld until the chain completes (see AuthFactorController).
-            case AuthenticationResult.MfaRequired mfa ->
+            case Authentication.Result.MfaRequired mfa ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.ACCEPTED)
                             .body(MfaBody.of(mfa.ticket(), mfa.nextFactor().value(), mfa.challengeData()));
         };

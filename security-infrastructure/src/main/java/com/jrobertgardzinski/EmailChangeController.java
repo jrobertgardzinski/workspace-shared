@@ -6,7 +6,6 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.system.account.RequestEmailChange;
-import com.jrobertgardzinski.security.system.account.RequestEmailChangeResult;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
@@ -68,18 +67,18 @@ final class EmailChangeController {
         if (stepUp.isPresent()) {
             return stepUp.get();
         }
-        RequestEmailChangeResult result = transactionBoundary.execute(
+        RequestEmailChange.Result result = transactionBoundary.execute(
                 () -> requestEmailChange.execute(currentEmail, newEmail));
         return switch (result) {
-            case RequestEmailChangeResult.Requested ignored ->
+            case RequestEmailChange.Result.Requested ignored ->
                     HttpResponse.accepted().body(Map.of("status", "EMAIL_CHANGE_LINK_SENT"));
             // the policy's refusal is NOT quiet: it is about the address the caller typed, not
             // about who else holds it, so it says which rule was broken — exactly as /register does
-            case RequestEmailChangeResult.Rejected rejected ->
+            case RequestEmailChange.Result.Rejected rejected ->
                     HttpResponse.unprocessableEntity().body(Map.of(
                             "emailErrors",
                             SecurityController.emailErrors(rejected.emailErrors(), emailPolicy)));
-            case RequestEmailChangeResult.EmailTaken ignored -> {
+            case RequestEmailChange.Result.EmailTaken ignored -> {
                 // quiet refusal: the wire looks like a fresh request; the address owner is told by mail
                 transactionBoundary.execute(() -> {
                     noticeNotifier.sendAlreadyRegistered(newEmail);

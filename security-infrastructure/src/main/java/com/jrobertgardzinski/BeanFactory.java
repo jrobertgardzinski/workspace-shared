@@ -494,9 +494,17 @@ public class BeanFactory {
     @Singleton
     com.jrobertgardzinski.security.system.mfa.EnrolFactor enrolFactor(
             com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
-            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
             com.jrobertgardzinski.security.system.mfa.EnrolmentChallengeStore enrolmentChallengeStore) {
         return new com.jrobertgardzinski.security.system.mfa.EnrolFactor(
+                factorRegistry, enrolmentChallengeStore);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment confirmEnrolment(
+            com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
+            com.jrobertgardzinski.security.system.mfa.EnrolmentChallengeStore enrolmentChallengeStore) {
+        return new com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment(
                 factorRegistry, enrolledFactorRepository, enrolmentChallengeStore);
     }
 
@@ -538,7 +546,7 @@ public class BeanFactory {
             RejectedAuthenticationRepository rejectedAuthenticationRepository,
             AuthenticationBlockRepository authenticationBlockRepository,
             SessionRepository sessionRepository,
-            HashAlgorithmPort hashAlgorithm,
+            com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
             BruteForceConfig bruteForceConfig,
             SessionTokensConfig sessionTokensConfig,
             Clock clock,
@@ -546,12 +554,13 @@ public class BeanFactory {
             AccessTokenMint accessTokenMint,
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
             com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
-            com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingAuthenticationStore) {
+            com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingAuthenticationStore,
+            com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain) {
         return AuthenticationFactory.assemble(
                 userRepository, emailVerificationRepository, rejectedAuthenticationRepository,
-                authenticationBlockRepository, sessionRepository, hashAlgorithm,
+                authenticationBlockRepository, sessionRepository, verifyPassword,
                 bruteForceConfig, sessionTokensConfig, clock, blockDurationPolicy, accessTokenMint,
-                enrolledFactorRepository, mfaChain, pendingAuthenticationStore);
+                enrolledFactorRepository, mfaChain, pendingAuthenticationStore, openMfaChain);
     }
 
     @Singleton
@@ -676,17 +685,26 @@ public class BeanFactory {
     @Singleton
     com.jrobertgardzinski.security.system.mfa.StepUp stepUp(
             com.jrobertgardzinski.security.config.mfa.StepUpPolicy stepUpPolicy,
-            UserRepository userRepository,
-            HashAlgorithmPort hashAlgorithm,
+            com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
             com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
             com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
             com.jrobertgardzinski.security.system.mfa.StepUpStore stepUpStore,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation) {
+        return new com.jrobertgardzinski.security.system.mfa.StepUp(
+                stepUpPolicy, verifyPassword, passwordless, enrolledFactors,
+                mfaChain, stepUpStore, sessionElevation);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.ContinueStepUp continueStepUp(
+            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
+            com.jrobertgardzinski.security.system.mfa.StepUpStore stepUpStore,
             com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
             Clock clock) {
-        return new com.jrobertgardzinski.security.system.mfa.StepUp(
-                stepUpPolicy, userRepository, hashAlgorithm, passwordless, enrolledFactors,
-                mfaChain, stepUpStore, sessionElevation, clock);
+        return new com.jrobertgardzinski.security.system.mfa.ContinueStepUp(
+                new com.jrobertgardzinski.security.system.mfa.PresentProof(mfaChain, stepUpStore.chains(), clock),
+                stepUpStore, sessionElevation);
     }
 
     @Singleton
@@ -699,10 +717,32 @@ public class BeanFactory {
                 enrolledFactors, passwordless, mfaPolicy, java.util.Set.copyOf(bootstrapAdmins));
     }
 
+    /**
+     * The one judge of "is this the account's own password", shared by sign-in, change-password and
+     * step-up, so all three answer an unknown address in the same time as a known one.
+     */
     @Singleton
-    ChangePassword changePassword(UserRepository userRepository, HashAlgorithmPort hashAlgorithm,
+    com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword(
+            UserRepository userRepository, HashAlgorithmPort hashAlgorithm) {
+        return new com.jrobertgardzinski.security.system.password.VerifyPassword(userRepository, hashAlgorithm);
+    }
+
+    /**
+     * The one way a factor chain is opened, shared by password and federated sign-in: it demands
+     * the source, so a wrong proof is always charged to the pair it came from.
+     */
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain(
+            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
+            com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingAuthenticationStore) {
+        return new com.jrobertgardzinski.security.system.mfa.OpenMfaChain(mfaChain, pendingAuthenticationStore);
+    }
+
+    @Singleton
+    ChangePassword changePassword(UserRepository userRepository,
+                                  com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
                                   SessionRepository sessions, CreatePasswordHash createPasswordHash) {
-        return new ChangePassword(userRepository, hashAlgorithm, createPasswordHash, sessions);
+        return new ChangePassword(userRepository, verifyPassword, createPasswordHash, sessions);
     }
 
     @Singleton
@@ -764,12 +804,11 @@ public class BeanFactory {
             AccessTokenMint accessTokenMint,
             com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
-            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
-            com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingStore) {
+            com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain) {
         return new com.jrobertgardzinski.security.system.federation.FederatedSignIn(
                 federatedIdentities, userRepository, emailVerificationRepository,
                 sessionRepository, hashAlgorithm, sessionTokensConfig, clock, accessTokenMint,
-                passwordless, enrolledFactors, mfaChain, pendingStore);
+                passwordless, enrolledFactors, openMfaChain);
     }
 
     @Singleton

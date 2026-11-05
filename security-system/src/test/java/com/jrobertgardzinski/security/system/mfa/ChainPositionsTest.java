@@ -26,7 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * the count is 1 again — so the next enrolment lands on the position the survivor already holds,
  * and which of the two comes first in the chain is then whatever the store happens to return first.
  *
- * <p>Driven through {@link EnrolFactor} itself, because the arithmetic being pinned lives there;
+ * <p>Driven through {@link ConfirmEnrolment} itself, because the arithmetic being pinned lives there;
  * re-deriving it in the test would prove only that the test can add.
  */
 @Epic("Multi-factor sign-in")
@@ -44,14 +44,16 @@ class ChainPositionsTest {
                 new CodeFactor(email, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC()),
                 new CodeFactor(sms, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC())));
         FactorStore factors = new FactorStore();
-        EnrolFactor enrol = new EnrolFactor(registry, factors, new FakeEnrolmentChallengeStore());
+        FakeEnrolmentChallengeStore pending = new FakeEnrolmentChallengeStore();
+        EnrolFactor enrolFactor = new EnrolFactor(registry, pending);
+        ConfirmEnrolment confirmEnrolment = new ConfirmEnrolment(registry, factors, pending);
 
-        enrolFully(enrol, FactorType.EMAIL_CODE, "chain@example.com", email);
-        enrolFully(enrol, FactorType.SMS_CODE, "+48111222333", sms);
+        enrolFully(enrolFactor, confirmEnrolment, FactorType.EMAIL_CODE, "chain@example.com", email);
+        enrolFully(enrolFactor, confirmEnrolment, FactorType.SMS_CODE, "+48111222333", sms);
 
         // the person drops the first factor and later adds it back — the shape that used to collide
         factors.remove(USER, FactorType.EMAIL_CODE);
-        enrolFully(enrol, FactorType.EMAIL_CODE, "chain@example.com", email);
+        enrolFully(enrolFactor, confirmEnrolment, FactorType.EMAIL_CODE, "chain@example.com", email);
 
         assertThat(factors.findByUser(USER).stream().map(EnrolledFactor::order).toList())
                 .as("two factors on one position leave the chain's order to the store's whim")
@@ -61,10 +63,11 @@ class ChainPositionsTest {
                 .containsExactly(FactorType.SMS_CODE, FactorType.EMAIL_CODE);
     }
 
-    private static void enrolFully(EnrolFactor enrol, FactorType type, String target, RememberedCodes channel) {
-        enrol.start(USER, type, target);
-        EnrolFactor.Result confirmed = enrol.confirm(USER, type, channel.lastCode);
-        assertThat(confirmed).isInstanceOf(EnrolFactor.Result.Enrolled.class);
+    private static void enrolFully(EnrolFactor enrolFactor, ConfirmEnrolment confirmEnrolment,
+                                   FactorType type, String target, RememberedCodes channel) {
+        enrolFactor.execute(USER, type, target);
+        ConfirmEnrolment.Result confirmed = confirmEnrolment.execute(USER, type, channel.lastCode);
+        assertThat(confirmed).isInstanceOf(ConfirmEnrolment.Result.Enrolled.class);
     }
 
     /** A channel that keeps the code instead of sending it, so the test can answer the challenge. */

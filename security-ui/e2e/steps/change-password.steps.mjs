@@ -21,3 +21,9 @@ When('the USER CHANGES the password from {string} to {string}', async function (
 Then('the password CHANGE is rejected', async function () {
   await expect(this.page.getByTestId('notice')).toContainText('Wrong current password');
 });
+
+// shared by change-password and reset-password
+Then('the new password is flagged as invalid', async function () {
+  // the same list registration fills: one line per broken rule
+  await expect(this.page.getByTestId('password-errors').locator('li').first()).toBeVisible();
+});

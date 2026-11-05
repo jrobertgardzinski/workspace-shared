@@ -7,7 +7,6 @@ import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.system.passwordreset.RequestPasswordReset;
 import com.jrobertgardzinski.security.system.passwordreset.ResetPassword;
-import com.jrobertgardzinski.security.system.passwordreset.ResetPasswordResult;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -70,11 +69,13 @@ final class PasswordResetController {
             // be the loudest one of all — a 500 quoting the domain back at the caller.
             return HttpResponse.accepted().body(Map.of("status", "RESET_LINK_SENT"));
         }
-        transactionBoundary.execute(() -> {
-            requestPasswordReset.execute(email);
-            return null;
-        });
-        return HttpResponse.accepted().body(Map.of("status", "RESET_LINK_SENT"));
+        RequestPasswordReset.Result result = transactionBoundary.execute(
+                () -> requestPasswordReset.execute(email));
+        return switch (result) {
+            // one answer for both: a different one would tell a stranger which addresses are registered
+            case RequestPasswordReset.Result.LinkSent _, RequestPasswordReset.Result.UserNotFound _ ->
+                    HttpResponse.accepted().body(Map.of("status", "RESET_LINK_SENT"));
+        };
     }
 
     @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
@@ -87,14 +88,21 @@ final class PasswordResetController {
             return HttpResponse.badRequest().body(Map.of("status", "INVALID_TOKEN"));
         }
         String password = JsonBody.text(body, "password");
-        ResetPasswordResult result = transactionBoundary.execute(
+        ResetPassword.Result result = transactionBoundary.execute(
                 () -> resetPassword.execute(token, () -> PlaintextPassword.of(password)));
         return switch (result) {
-            case ResetPasswordResult.PasswordReset reset ->
+            case ResetPassword.Result.PasswordReset reset ->
                     HttpResponse.ok(Map.of("status", "PASSWORD_RESET", "email", reset.email().value()));
-            case ResetPasswordResult.WeakPassword ignored ->
-                    HttpResponse.badRequest().body(Map.of("status", "WEAK_PASSWORD"));
-            case ResetPasswordResult.InvalidToken ignored ->
+            // the password half of what /register answers: one code per broken rule, valued by the
+            // parameter in force for this very attempt
+            case ResetPassword.Result.Rejected rejected ->
+                    HttpResponse.unprocessableEntity().body(Map.of(
+                            "passwordErrors",
+                            SecurityController.passwordErrors(rejected.passwordErrors(), rejected.policy())));
+            // one answer for all three: telling them apart would confirm to a stranger that the
+            // address has, or had, an account
+            case ResetPassword.Result.TokenNotFound _, ResetPassword.Result.TokenExpired _,
+                 ResetPassword.Result.UserNotFound _ ->
                     HttpResponse.badRequest().body(Map.of("status", "INVALID_TOKEN"));
         };
     }

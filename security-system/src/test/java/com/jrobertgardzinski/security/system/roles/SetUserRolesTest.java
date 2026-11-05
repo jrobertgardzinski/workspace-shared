@@ -39,10 +39,10 @@ class SetUserRolesTest {
         SetUserRoles.Result result =
                 new SetUserRoles(users, BootstrapAdmins.none()).execute(THE_ADMIN, Set.of(Role.USER));
 
-        assertThat(result.status()).isEqualTo(SetUserRoles.Status.WOULD_LEAVE_NO_ADMIN);
-        assertThat(result.roles())
-                .as("and the answer carries what they still hold, so a client can show the truth")
-                .contains(Role.ADMIN);
+        assertThat(result).isInstanceOfSatisfying(SetUserRoles.Result.WouldLeaveNoAdmin.class, refused ->
+                assertThat(refused.roles())
+                        .as("and the answer carries what they still hold, so a client can show the truth")
+                        .contains(Role.ADMIN));
         Mockito.verify(users, Mockito.never()).setRoles(Mockito.any(), Mockito.any());
     }
 
@@ -55,10 +55,10 @@ class SetUserRolesTest {
         SetUserRoles.Result result =
                 new SetUserRoles(users, declared).execute(THE_ADMIN, Set.of(Role.USER));
 
-        assertThat(result.status())
+        assertThat(result)
                 .as("an admin by configuration is an admin — refusing here would be refusing a"
                         + " change that leaves the system perfectly administrable")
-                .isEqualTo(SetUserRoles.Status.UPDATED);
+                .isInstanceOf(SetUserRoles.Result.Updated.class);
         Mockito.verify(users).setRoles(THE_ADMIN, Set.of(Role.USER));
     }
 
@@ -70,7 +70,7 @@ class SetUserRolesTest {
         SetUserRoles.Result result =
                 new SetUserRoles(users, BootstrapAdmins.none()).execute(THE_ADMIN, Set.of(Role.USER));
 
-        assertThat(result.status()).isEqualTo(SetUserRoles.Status.UPDATED);
+        assertThat(result).isInstanceOf(SetUserRoles.Result.Updated.class);
     }
 
     @Test
@@ -81,9 +81,9 @@ class SetUserRolesTest {
         SetUserRoles.Result result = new SetUserRoles(users, BootstrapAdmins.none())
                 .execute(THE_ADMIN, Set.of(Role.USER, Role.ADMIN, Role.MODERATOR));
 
-        assertThat(result.status())
+        assertThat(result)
                 .as("the sole admin adding MODERATOR to themselves is not a lockout")
-                .isEqualTo(SetUserRoles.Status.UPDATED);
+                .isInstanceOf(SetUserRoles.Result.Updated.class);
         Mockito.verify(users, Mockito.never()).countAdmins();
     }
 

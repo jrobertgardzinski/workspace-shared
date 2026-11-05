@@ -2,7 +2,9 @@ package com.jrobertgardzinski.security.domain.repository;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
+import com.jrobertgardzinski.security.domain.vo.token.expiration.MailedLinkExpiration;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -19,7 +21,11 @@ public interface PasswordResetRepository {
      * the account it was issued for, and would set the password of whoever registers that address
      * next.
      */
-    record PendingReset(Email email, LocalDateTime requestedAt) {}
+    record PendingReset(Email email, LocalDateTime requestedAt) {
+        public MailedLinkExpiration expiration(Duration window) {
+            return new MailedLinkExpiration(requestedAt, window);
+        }
+    }
 
     /** Remember (or reset) the pending token e-mailed to this address. */
     void startReset(Email email, PasswordResetToken token);

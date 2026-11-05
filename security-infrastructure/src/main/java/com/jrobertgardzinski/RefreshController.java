@@ -3,7 +3,6 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.security.domain.vo.SessionRefreshRequest;
 import com.jrobertgardzinski.security.domain.vo.token.RefreshToken;
 import com.jrobertgardzinski.security.system.session.RefreshSession;
-import com.jrobertgardzinski.security.system.session.RefreshSessionResult;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -54,17 +53,17 @@ public class RefreshController {
         }
 
         SessionRefreshRequest refreshRequest = new SessionRefreshRequest(new RefreshToken(presentedToken.get()));
-        RefreshSessionResult result = transactionBoundary.execute(() -> refreshSession.execute(refreshRequest));
+        RefreshSession.Result result = transactionBoundary.execute(() -> refreshSession.execute(refreshRequest));
 
         return switch (result) {
-            case RefreshSessionResult.Refreshed refreshed ->
+            case RefreshSession.Result.Refreshed refreshed ->
                     HttpResponse.ok(Map.<String, Object>of("accessToken", refreshed.sessionTokens().plainAccessToken()))
                             .cookie(refreshCookies.issue(refreshed.sessionTokens().plainRefreshToken()));
-            case RefreshSessionResult.Expired expired ->
+            case RefreshSession.Result.Expired expired ->
                     HttpResponse.status(HttpStatus.UNAUTHORIZED);
-            case RefreshSessionResult.NotFound notFound ->
+            case RefreshSession.Result.NotFound notFound ->
                     HttpResponse.status(HttpStatus.UNAUTHORIZED);
-            case RefreshSessionResult.ReuseDetected reuseDetected ->
+            case RefreshSession.Result.ReuseDetected reuseDetected ->
                     HttpResponse.status(HttpStatus.UNAUTHORIZED);
         };
     }

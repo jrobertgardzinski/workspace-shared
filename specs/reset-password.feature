@@ -3,7 +3,8 @@ Feature: Resetting a forgotten password
 
   A USER who forgot their password requests a reset link, then sets a new password with the
   RESET TOKEN from the link. Afterwards they AUTHENTICATE with the new password; the old one no
-  longer works. An unknown token is rejected.
+  longer works. An unknown token is rejected. A new password that breaks the PASSWORD POLICY is
+  rejected too, saying which rules it broke, and the link survives it.
 
   Background:
     # a dedicated account: the UI harness persists accounts across scenarios, and this feature
@@ -23,3 +24,17 @@ Feature: Resetting a forgotten password
     Example:
       When the USER RESETS the password to "NewPassword1!" with a garbage RESET TOKEN
       Then the password RESET is rejected
+
+  Rule: A new password that breaks the PASSWORD POLICY is rejected, saying which rules it broke
+
+    Example:
+      Given the USER requested a password RESET
+      When the USER RESETS the password to "weak" with the RESET TOKEN from the link
+      Then the new password is flagged as invalid
+
+    # the RESET TOKEN is not spent on a refused password: the same link sets the next one
+    Example:
+      Given the USER requested a password RESET
+      And the USER RESETS the password to "weak" with the RESET TOKEN from the link
+      When the USER RESETS the password to "NewPassword1!" with the RESET TOKEN from the link
+      Then the USER can AUTHENTICATE with "NewPassword1!"

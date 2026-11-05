@@ -2,7 +2,7 @@ package com.jrobertgardzinski.security.system.roles;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Role;
-import com.jrobertgardzinski.util.constraint.Outcome;
+import com.jrobertgardzinski.security.domain.vo.RoleError;
 import io.qameta.allure.Allure;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -38,16 +38,15 @@ class RequireRoleRulesTest {
     @Label("a role the store granted satisfies the requirement")
     void grantedRoleSatisfies() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of(ADMIN, Set.of(Role.USER, Role.ADMIN))));
-        Outcome<Set<Role>> outcome = require.check(ADMIN, Role.ADMIN);
-        assertThat(outcome).isInstanceOf(Outcome.Allowed.class);
-        assertThat(outcome.findValue()).contains(Set.of(Role.USER, Role.ADMIN));
+        assertThat(require.check(ADMIN, Role.ADMIN)).isEmpty();
+        assertThat(require.rolesInForce(ADMIN)).containsExactlyInAnyOrder(Role.USER, Role.ADMIN);
     }
 
     @Example
     @Label("a bootstrap admin is ADMIN before any grant exists")
     void bootstrapAdminIsAdmin() {
         RequireRole require = new RequireRole(BootstrapAdmins.of(List.of(" Admin@Example.com ")), store(Map.of()));
-        assertThat(require.check(ADMIN, Role.ADMIN)).isInstanceOf(Outcome.Allowed.class);
+        assertThat(require.check(ADMIN, Role.ADMIN)).isEmpty();
         assertThat(require.rolesInForce(ADMIN)).contains(Role.ADMIN);
     }
 
@@ -55,9 +54,7 @@ class RequireRoleRulesTest {
     @Label("a USER without the role is refused with NOT_AN_ADMIN")
     void memberIsRefused() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of(MEMBER, Set.of(Role.USER))));
-        Outcome<Set<Role>> outcome = require.check(MEMBER, Role.ADMIN);
-        assertThat(outcome).isInstanceOf(Outcome.Rejected.class);
-        assertThat(outcome.errorCodes()).containsExactly("NOT_AN_ADMIN");
+        assertThat(require.check(MEMBER, Role.ADMIN)).containsExactly(RoleError.NOT_AN_ADMIN);
     }
 
     @Example
@@ -65,7 +62,7 @@ class RequireRoleRulesTest {
     void strangerHasNoRoles() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of()));
         assertThat(require.rolesInForce(STRANGER)).isEmpty();
-        assertThat(require.check(STRANGER, Role.USER).errorCodes()).containsExactly("NOT_A_USER");
+        assertThat(require.check(STRANGER, Role.USER)).containsExactly(RoleError.NOT_A_USER);
     }
 
     @Property
@@ -73,9 +70,9 @@ class RequireRoleRulesTest {
     void everyRoleHasItsOwnCode(@ForAll("roles") Role required) {
         Allure.parameter("required", required);
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of()));
-        List<String> codes = require.check(STRANGER, required).errorCodes();
-        assertThat(codes).hasSize(1);
-        assertThat(codes.getFirst()).startsWith("NOT_A").endsWith(required.name());
+        List<RoleError> errors = require.check(STRANGER, required);
+        assertThat(errors).hasSize(1);
+        assertThat(errors.getFirst().name()).startsWith("NOT_A").endsWith(required.name());
     }
 
     @Provide

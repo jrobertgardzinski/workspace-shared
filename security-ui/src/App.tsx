@@ -631,10 +631,15 @@ export function App() {
       switchTo('signin');
       setNotice('Password reset — sign in with your new password.');
     } else {
-      const body: { status?: string } = await r.json().catch(() => ({}));
-      setNotice(body.status === 'WEAK_PASSWORD'
-        ? 'That password is too weak — pick a stronger one.'
-        : 'This reset link was already used or has expired.');
+      const body: { status?: string; passwordErrors?: Record<string, unknown>[] } =
+        await r.json().catch(() => ({}));
+      if (r.status === 422) {
+        // the password half of what /register answers: the broken rules, each with its parameter
+        setPasswordErrors(body.passwordErrors ?? []);
+        setNotice('That password is too weak — pick a stronger one.');
+        return;
+      }
+      setNotice('This reset link was already used or has expired.');
     }
   };
 
@@ -652,12 +657,16 @@ export function App() {
       return;
     }
     if (sessionHasExpired(r)) return;
-    const body = await bodyOf<{ status?: string }>(r);
-    setNotice(body.status === 'WEAK_PASSWORD'
-      ? 'That password is too weak — pick a stronger one.'
-      : body.status === 'TOO_MANY_ATTEMPTS'
-        ? 'Too many attempts — try again in a while.'
-        : 'Wrong current password.');
+    const body = await bodyOf<{ status?: string; passwordErrors?: Record<string, unknown>[] }>(r);
+    if (r.status === 422) {
+      // the password half of what /register answers: the broken rules, each with its parameter
+      setPasswordErrors(body.passwordErrors ?? []);
+      setNotice('That password is too weak — pick a stronger one.');
+      return;
+    }
+    setNotice(body.status === 'TOO_MANY_ATTEMPTS'
+      ? 'Too many attempts — try again in a while.'
+      : 'Wrong current password.');
   };
 
   const requestEmailChange = async () => {

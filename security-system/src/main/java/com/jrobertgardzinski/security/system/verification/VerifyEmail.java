@@ -1,11 +1,12 @@
 package com.jrobertgardzinski.security.system.verification;
 
+import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * Completes e-mail verification: a matching, unused token that is still fresh marks the address
@@ -18,20 +19,47 @@ import java.time.LocalDateTime;
  */
 public class VerifyEmail {
 
-    private final EmailVerificationRepository repository;
+    private final EmailVerificationRepository emailVerificationRepository;
     private final Duration tokenTtl;
     private final Clock clock;
 
-    public VerifyEmail(EmailVerificationRepository repository, Duration tokenTtl, Clock clock) {
-        this.repository = repository;
+    public VerifyEmail(
+                    EmailVerificationRepository emailVerificationRepository,
+                    Duration tokenTtl,
+                    Clock clock) {
+        this.emailVerificationRepository = emailVerificationRepository;
         this.tokenTtl = tokenTtl;
         this.clock = clock;
     }
 
-    public VerifyEmailResult execute(VerificationToken token) {
-        return repository.completeVerification(token)
-                .filter(pending -> !pending.requestedAt().plus(tokenTtl).isBefore(LocalDateTime.now(clock)))
-                .<VerifyEmailResult>map(pending -> new VerifyEmailResult.Verified(pending.email()))
-                .orElseGet(VerifyEmailResult.Rejected::new);
+    public sealed interface Result {
+
+        record Verified(Email email) implements Result {}
+
+        record TokenNotFound() implements Result {}
+
+        record TokenExpired() implements Result {}
+    }
+
+    public Result execute(VerificationToken token) {
+
+        Optional<EmailVerificationRepository.PendingVerification> pendingVerification =
+                emailVerificationRepository.completeVerification(token);
+
+        if (
+                pendingVerification.isEmpty()
+        ) {
+            return new Result.TokenNotFound();
+        }
+
+        if (
+                pendingVerification.get().expiration(tokenTtl).hasExpired(clock)
+        ) {
+            // too old; consumed, so it is spent for good
+            return new Result.TokenExpired();
+        }
+
+        return new Result.Verified(
+                pendingVerification.get().email());
     }
 }

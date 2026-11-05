@@ -15,9 +15,11 @@ import io.micronaut.http.client.HttpClient;
 import io.micronaut.http.client.exceptions.HttpClientResponseException;
 import io.micronaut.runtime.server.EmbeddedServer;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -81,6 +83,18 @@ public class HttpChangePasswordSteps {
     @Then("the password CHANGE is rejected")
     public void thePasswordChangeIsRejected() {
         assertEquals(HttpStatus.BAD_REQUEST, changeResponse.getStatus());
+        // one answer whether the account is gone or the password is wrong: the wire never says which
+        assertEquals("FAILED_AUTHENTICATION_ATTEMPT", changeResponse.getBody(Map.class).orElseThrow().get("status"));
+    }
+
+    @Then("the new password is flagged as invalid")
+    public void theNewPasswordIsFlaggedAsInvalid() {
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, changeResponse.getStatus());
+        // the shape /register answers with: one {CODE: parameter in force} per broken rule
+        List<?> passwordErrors = (List<?>) changeResponse.getBody(Map.class).orElseThrow().get("passwordErrors");
+        assertNotNull(passwordErrors, "a refused password must say which rules it broke");
+        assertFalse(passwordErrors.isEmpty(), "a refused password must say which rules it broke");
+        assertEquals(Map.of("MIN_LENGTH_NOT_MET", 5), passwordErrors.getFirst());
     }
 
     private String accessTokenFor(String password) {

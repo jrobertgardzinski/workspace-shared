@@ -77,11 +77,15 @@ final class AdminPasswordPolicyController {
         } catch (NumberFormatException notANumber) {
             return HttpResponse.badRequest(Map.of("status", "NOT_A_NUMBER"));
         }
-        SetSetting.Result result = setSetting.execute(MinLength.KEY, Integer.toString(requested));
-        if (result.status() != SetSetting.Status.ACCEPTED) {
-            return HttpResponse.badRequest(Map.of("status", "REFUSED", "reason", result.reason()));
-        }
-        return HttpResponse.ok(Map.of("status", "ACCEPTED", "value", result.value()));
+        return switch (setSetting.execute(MinLength.KEY, Integer.toString(requested))) {
+            case SetSetting.Result.Accepted accepted ->
+                    HttpResponse.ok(Map.of("status", "ACCEPTED", "value", accepted.value()));
+            case SetSetting.Result.Refused refused ->
+                    HttpResponse.badRequest(Map.of("status", "REFUSED", "reason", refused.reason()));
+            // this endpoint names its key itself, so an unknown one is still the caller's refusal
+            case SetSetting.Result.UnknownKey unknown ->
+                    HttpResponse.badRequest(Map.of("status", "REFUSED", "reason", unknown.reason()));
+        };
     }
 
     private static Map<String, Object> report(Resolution<? extends ConfigValue<?>> resolution) {

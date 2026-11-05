@@ -22,26 +22,32 @@ public class GenerateRecoveryCodes {
     private static final char[] ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789".toCharArray();
     private static final int GROUP = 5;
 
-    private final RecoveryCodeRepository repository;
+    private final RecoveryCodeRepository recoveryCodeRepository;
     private final RecoveryCodeHasher hasher;
     private final RecoveryCodeConfig config;
     private final SecureRandom random = new SecureRandom();
 
-    public GenerateRecoveryCodes(RecoveryCodeRepository repository, RecoveryCodeHasher hasher,
-                                 RecoveryCodeConfig config) {
-        this.repository = repository;
+    public GenerateRecoveryCodes(
+                    RecoveryCodeRepository recoveryCodeRepository,
+                    RecoveryCodeHasher hasher,
+                    RecoveryCodeConfig config) {
+        this.recoveryCodeRepository = recoveryCodeRepository;
         this.hasher = hasher;
         this.config = config;
     }
 
     /** The plain codes, shown once; the repository keeps only their normalised hashes. */
     public List<String> execute(Email userEmail) {
+
         List<String> plain = new ArrayList<>(config.count().value());
         for (int i = 0; i < config.count().value(); i++) {
             plain.add(mint());
         }
-        repository.replaceAll(userEmail,
+
+        recoveryCodeRepository.replaceAll(
+                userEmail,
                 plain.stream().map(code -> hasher.hash(normalise(code))).toList());
+
         return List.copyOf(plain);
     }
 

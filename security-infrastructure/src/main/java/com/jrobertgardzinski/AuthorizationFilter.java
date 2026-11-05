@@ -3,7 +3,6 @@ package com.jrobertgardzinski;
 
 import com.jrobertgardzinski.security.domain.vo.token.AccessToken;
 import com.jrobertgardzinski.security.system.authorization.Authorize;
-import com.jrobertgardzinski.security.system.authorization.AuthorizationResult;
 import io.micronaut.core.annotation.Nullable;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -45,7 +44,7 @@ final class AuthorizationFilter {
         if (token == null) {
             return HttpResponse.unauthorized().body(Refusal.of("NOT_AUTHENTICATED"));
         }
-        if (!(authorize.execute(new AccessToken(token)) instanceof AuthorizationResult.Authorized authorized)) {
+        if (!(authorize.execute(new AccessToken(token)) instanceof Authorize.Result.Authorized authorized)) {
             return HttpResponse.unauthorized().body(Refusal.of("NOT_AUTHENTICATED"));
         }
         request.setAttribute(Caller.ATTRIBUTE, authorized.email().value());
