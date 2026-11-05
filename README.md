@@ -80,7 +80,6 @@ dependency order is:
 | Module | Description |
 |--------|-------------|
 | `test-starter` | Shared JUnit5 / BDD / system test starters |
-| `libs` | Constraint / validation primitives (artifact `constraint`) |
 | `config` | The configuration ladder: `ConfigValue`, `Configuration.liveOver/boundOver`, the settings snapshot |
 | `email` | Email value objects (`email-domain`, `-config`, `-usecase`) |
 | `password` | Password value objects and policy (`password-domain`, `-config`, `-usecase`), hash algorithms (Argon2) |

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# estate.sh — the whole estate (three workspaces, 33 repositories) from one command.
+# estate.sh — the whole estate (three workspaces, 32 repositories) from one command.
 #
 #   ./estate.sh clone  [--root DIR] [--dry-run]   clone every workspace and sub-repository that is missing
 #   ./estate.sh pull   [--root DIR]               fast-forward every clean repository (dirty ones are skipped and listed)

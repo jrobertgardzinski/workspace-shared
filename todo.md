@@ -2,6 +2,31 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## WYKONANE (2026-11-05) — `libs` (artefakt `constraint`) skasowane z posiadłości
+
+Właściciel skasował repo `libs`; `Outcome`/`Constraints` nie mają już ani jednego użytkownika.
+Co je zastąpiło (idiom z `Register`: rekord + lista kodów + `if`, bez wspólnej abstrakcji):
+- `envelope`: własny rekord `Envelope.Result<T>(value, errors, warnings)`; odmowa to kod w
+  `errors()`, za duża polityka to kod w `warnings()`. Jedyny konsument: `EventsRouter` w
+  `portal/microservice-offboarding`, przepisany na akcesory.
+- `microservice-security`: `RequireRole.check` zwraca `List<RoleError>` (enum w `security-domain`),
+  `_HasRoleConstraint` skasowany, `RoleGuard` czyta listę. Drut bez zmian (`403 NOT_AN_ADMIN`).
+- zależność `constraint` wycięta z pomów `envelope`, `email`, `password`, `microservice-security`
+  (root + system + infrastructure + application); `libs` wycięte z agregatora, `.gitignore`,
+  `estate/shared.repos`, README, CLAUDE.md i z CI: workspace'ów shared/portal/formula oraz repo
+  `password`, `microservice-security`, `microservice-offboarding`.
+- NIE ruszane: dokumenty datowane (`docs/`, PRZEGLAD-*, `microservice-security/Documentation.md`).
+- Słoik `constraint` wyjęty z `~/.m2`, żeby nic nie oparło się na nim po cichu; pełny build kernela
+  i `offboarding` przeszły bez niego.
+- Repo `jrobertgardzinski/libs` na GitHubie: werdykt właściciela to KASACJA („Repo do
+  wyjebania", 2026-11-05). Kolejność ma znaczenie: workflowy przestały je checkoutować dopiero
+  na gałęziach z tą zmianą (`RegisterRebuild` w kernelu i portalu, `dev-env-ide` w formule), a
+  `origin/main` w `shared`, `password`, `email`, `microservice-security`, `portal`,
+  `microservice-offboarding` i `formula` nadal buduje się z `libs`. Kasować po zmergowaniu.
+- Przy okazji skasowane z dysku dwa osierocone klony w `shared/`: `author-directory/` i
+  `purge-rule/` (od 2026-09-28 żyją w `portal/portal-libs`; oba były czyste, bez niewypchniętych
+  commitów, a ich historia jest w całości w `portal-libs`).
+
 ## ~~TODO NR 1~~ WYKONANE (2026-07-15 wieczór) — REPO_PAT, zieleń CI i push zaległości
 
 Domknięte za jednym zamachem, gdy właściciel znalazł chwilę:

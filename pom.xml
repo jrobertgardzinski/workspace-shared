@@ -45,7 +45,6 @@
         <module>account-closure</module>
         <module>user-id</module>
         <module>test-starter</module>
-        <module>libs</module>
         <module>config</module>
         <module>email</module>
         <module>password</module>

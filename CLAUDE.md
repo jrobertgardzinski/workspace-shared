@@ -30,7 +30,7 @@ in `docs/` still name their old paths; they are dated records and say what was t
 it is the contract BETWEEN identity and the portal, and identity is shared with the game.
 
 This workspace aggregates the independent git repositories of the kernel: the
-shared libraries (`test-starter`, `libs` (artifact `constraint`), `config`,
+shared libraries (`test-starter`, `config`,
 `email`, `password`, `adjustable-clock`, `infrastructure-micronaut-clock`,
 `infrastructure-spring-outbox`, `transactional-outbox`, `unit-of-work`,
 `envelope`, `observation`, `user-id`, `voting`, `offline-jwt`), the hexagonal
@@ -41,7 +41,7 @@ and the Python channel/identity stubs (`microservice-idp`, `microservice-sms`,
 remote** and is gitignored here. This repo versions only the aggregating
 `pom.xml` (a pure aggregator, **not** a parent pom), the identity/observability
 compose files, the cross-estate tooling (`estate.sh` + its map in `estate/*.repos` — clone/pull/status/check
-for all 33 repositories; `infra-smoke.sh`, `aggregate_allure.py`,
+for all 32 repositories; `infra-smoke.sh`, `aggregate_allure.py`,
 `build_features.py`, `build_javadocs.sh`, `build_c4.py`, `allure-serve.sh`) and shared docs
 (`docs/`, `todo.md` — the cross-project backlog lives here).
 
