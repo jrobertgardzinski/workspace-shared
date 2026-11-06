@@ -7,6 +7,7 @@ import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.email.domain.EmailStatus;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.Story;
@@ -57,6 +58,7 @@ class AdmitEmailRulesTest {
         Email email = Email.of("user@acme.example");
 
         assertThat(admitEmail.evaluate(email)).isEqualTo(new AdmitEmail.Result(email, List.of()));
+        assertThat(admitEmail.evaluate(email).status()).isEqualTo(EmailStatus.PASSED);
     }
 
     @Example
@@ -73,6 +75,7 @@ class AdmitEmailRulesTest {
         AdmitEmail.Result result = admitEmail.evaluate(() -> Email.of("invalid"));
 
         assertThat(result).isEqualTo(new AdmitEmail.Result(null, List.of(EmailError.EMAIL_FORMAT_INVALID)));
+        assertThat(result.status()).isEqualTo(EmailStatus.REJECTED);
     }
 
     @Example

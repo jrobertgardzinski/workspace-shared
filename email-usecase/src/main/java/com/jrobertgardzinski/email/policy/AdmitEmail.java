@@ -4,6 +4,7 @@ import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.email.domain.EmailStatus;
 import com.jrobertgardzinski.email.domain.InvalidEmailException;
 
 import java.util.LinkedList;
@@ -41,6 +42,14 @@ public class AdmitEmail {
     public record Result(Email email, List<EmailError> errors) {
         public Result {
             errors = List.copyOf(errors);
+        }
+
+        /** Read off the errors, so the two cannot disagree. */
+        public EmailStatus status() {
+            if (errors.isEmpty()) {
+                return EmailStatus.PASSED;
+            }
+            return EmailStatus.REJECTED;
         }
     }
 
