@@ -1,94 +1,49 @@
 package com.jrobertgardzinski.security.system.registration;
 
+import com.jrobertgardzinski.email.config.CanRegisterConfig;
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.email.domain.EmailError;
-import com.jrobertgardzinski.email.domain.NormalizedEmail;
-import com.jrobertgardzinski.email.policy.AdmitEmail;
-import com.jrobertgardzinski.password.domain.PasswordError;
+import com.jrobertgardzinski.email.policy.CanRegister;
+import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
-import com.jrobertgardzinski.password.policy.CreatePasswordHash;
-import com.jrobertgardzinski.password.policy.PasswordPolicy;
-import com.jrobertgardzinski.security.domain.entity.User;
-import com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
-
-import java.util.List;
+import com.jrobertgardzinski.password.policy.PasswordPolicyInForce;
+import com.jrobertgardzinski.security.domain.vo.RegisterRequest;
 import java.util.function.Supplier;
 
 public class Register {
 
     private final UserRepository userRepository;
-    private final AdmitEmail admitEmail;
-    private final CreatePasswordHash createPasswordHash;
+    private final CanRegisterConfig canRegisterConfig;
+    private final HashAlgorithmPort hashAlgorithm;
+    private final PasswordPolicyInForce passwordPolicyInForce;
 
-    public Register(
-                    UserRepository userRepository,
-                    AdmitEmail admitEmail,
-                    CreatePasswordHash createPasswordHash) {
+    public Register(UserRepository userRepository, CanRegisterConfig canRegisterConfig,
+                    HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicyInForce) {
         this.userRepository = userRepository;
-        this.admitEmail = admitEmail;
-        this.createPasswordHash = createPasswordHash;
+        this.canRegisterConfig = canRegisterConfig;
+        this.hashAlgorithm = hashAlgorithm;
+        this.passwordPolicyInForce = passwordPolicyInForce;
     }
 
-    public sealed interface Result {
+    public RegisterResult execute(Supplier<Email> email, Supplier<PlaintextPassword> password) {
 
-        record Registered(User user) implements Result {}
 
-        /**
-         * Both channels at once: the rules the address broke and the rules the password broke, at least
-         * one list non-empty, and the policy the password was judged against, because that policy can
-         * change between attempts; the address policy is a boot value the edge already holds.
-         */
-        record Rejected(List<EmailError> emailErrors, List<PasswordError> passwordErrors,
-                        PasswordPolicy policy) implements Result {
-            public Rejected {
-                emailErrors = List.copyOf(emailErrors);
-                passwordErrors = List.copyOf(passwordErrors);
-            }
-        }
-
-        record EmailAlreadyTaken(Email email) implements Result {}
+        return new RegistrationAttempt(
+                _EmailVerdict.judge(canRegisterConfig, email),
+                _PasswordVerdict.judge(hashAlgorithm, passwordPolicyInForce.current(), password),
+                userRepository
+        ).resolve();
     }
 
-    public Result execute(Supplier<Email> emailCandidate, Supplier<PlaintextPassword> passwordCandidate) {
+    public RegisterResult execute2(RegisterRequest registerRequest) {
+        Email email = registerRequest.getEmail();
+        PlaintextPassword plaintextPassword = registerRequest.getPlaintextPassword();
 
-        AdmitEmail.Result admitEmailResult = admitEmail.evaluate(emailCandidate);
-
-        // judged even when the address already failed: the form shows both channels in one round.
-        // A passing password is hashed here, BEFORE existsBy below: a taken address answers the same
-        // 201 as a fresh one, and it must take the same time, or the clock tells the caller what
-        // the body hides
-        CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(passwordCandidate);
-
-        if (
-                !admitEmailResult.errors().isEmpty() ||
-                !createPasswordHashResult.errors().isEmpty()
-        ) {
-            return new Result.Rejected(
-                    admitEmailResult.errors(),
-                    createPasswordHashResult.errors(),
-                    createPasswordHashResult.policy());
-        }
-
-        if (
-                userRepository.existsBy(
-                        NormalizedEmail.of(
-                                admitEmailResult.email()))
-        ) {
-            return new Result.EmailAlreadyTaken(
-                    admitEmailResult.email());
-        }
-
-        try {
-            return new Result.Registered(
-                    userRepository.save(
-                            new User(
-                                    admitEmailResult.email(),
-                                    createPasswordHashResult.hashedPassword())));
-        } catch (EmailAlreadyTakenException e) {
-            // the storage uniqueness check lost the race after our existsBy check passed
-            return new Result.EmailAlreadyTaken(
-                    admitEmailResult.email());
-        }
+        CanRegister canRegister = CanRegister.builder()
+                .blockingDomains(canRegisterConfig.blockedDomains())
+                .blockingDisposable(canRegisterConfig.disposableDomains())
+                .requiringCompanyEmployee(canRegisterConfig.companyDomains())
+                .build();
+        // dobra chuj, dalej nie dam rady. Chciałem po prostu w tym miejscu w prosty sposób zwalidować email podany do rejestracji i wyjebać error, potem jeszcze password do walidacji i też wyjebać error albo dać sukces. Dasz rade to ogarnąć?
     }
 }
