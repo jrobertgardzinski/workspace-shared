@@ -1,0 +1,36 @@
+name: CI
+
+# The ladder's laws live here (config-ladder.feature, caching-live-config.feature) and a proof
+# that runs nowhere goes stale in silence, so this library builds on every push. It depends only on
+# the shared test starter, checked out next to it in the workspace layout the other repos use.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: shared/config
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/test-starter
+          path: shared/test-starter
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Install the shared test starter
+        run: mvn -B -q --no-transfer-progress -f shared/test-starter/pom.xml install -DskipTests
+
+      - name: Build and test
+        run: mvn -B --no-transfer-progress -f shared/config/pom.xml clean verify
