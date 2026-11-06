@@ -1,7 +1,9 @@
 package com.jrobertgardzinski.security.domain.vo;
 
-/** Why a factor proof presented against a ticket did not move its chain forward. */
-public enum ProofError {
+/** What presenting a factor proof against a ticket found. */
+public enum ProofStatus {
+    /** The proof is right: the chain moved forward, or completed. */
+    PASSED,
     /** No live chain stands behind the ticket: it is unknown, or it has aged past its window. */
     INVALID_TICKET,
     /** The proof is wrong and the ticket still has tries left. */

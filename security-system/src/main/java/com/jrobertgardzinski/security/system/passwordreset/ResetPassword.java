@@ -13,7 +13,6 @@ import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -93,12 +92,13 @@ public class ResetPassword {
 
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
 
-        if (
-                !createPasswordHashResult.errors().isEmpty()
-        ) {
-            return new Result.Rejected(
-                    createPasswordHashResult.errors(),
-                    createPasswordHashResult.policy());
+        switch (createPasswordHashResult.status()) {
+            case REJECTED -> {
+                return new Result.Rejected(
+                        createPasswordHashResult.errors(),
+                        createPasswordHashResult.policy());
+            }
+            case PASSED -> {}
         }
 
         Optional<PasswordResetRepository.PendingReset> pendingReset = passwordResetRepository.consumeReset(token);

@@ -9,7 +9,7 @@ import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AccessTokenValidityInHours;
 import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
-import com.jrobertgardzinski.security.domain.vo.CredentialsError;
+import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.domain.vo.AttemptedAccount;
 import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
@@ -29,7 +29,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -148,7 +147,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, List.of()));
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, CredentialsStatus.PASSED));
         Mockito.when(generateSession.create(GIVEN.email)).thenReturn(sessionTokens);
 
         Authentication.Result result = authentication.execute(GIVEN.request);
@@ -175,7 +174,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(null, List.of(CredentialsError.WRONG_PASSWORD)));
+                .thenReturn(new VerifyPassword.Result(null, CredentialsStatus.WRONG_PASSWORD));
 
         Authentication.Result result = authentication.execute(GIVEN.request);
 
@@ -195,7 +194,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, List.of()));
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, CredentialsStatus.PASSED));
         Mockito.when(requireVerifiedEmail.isVerified(GIVEN.email)).thenReturn(false);
 
         Authentication.Result result = authentication.execute(GIVEN.request);
@@ -214,7 +213,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, List.of()));
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, CredentialsStatus.PASSED));
         Mockito.when(userRepository.isPendingDeletion(GIVEN.email)).thenReturn(true);
 
         Authentication.Result result = authentication.execute(GIVEN.request);

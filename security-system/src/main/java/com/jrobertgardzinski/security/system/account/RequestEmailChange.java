@@ -67,11 +67,12 @@ public class RequestEmailChange {
         // to move to: a closed shop that only checks at registration is not closed
         AdmitEmail.Result admitEmailResult = admitEmail.evaluate(newEmail);
 
-        if (
-                !admitEmailResult.errors().isEmpty()
-        ) {
-            return new Result.Rejected(
-                    admitEmailResult.errors());
+        switch (admitEmailResult.status()) {
+            case REJECTED -> {
+                return new Result.Rejected(
+                        admitEmailResult.errors());
+            }
+            case PASSED -> {}
         }
 
         if (

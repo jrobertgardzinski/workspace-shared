@@ -6,7 +6,7 @@ import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
-import com.jrobertgardzinski.security.domain.vo.CredentialsError;
+import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import net.jqwik.api.Example;
@@ -14,7 +14,6 @@ import net.jqwik.api.Label;
 import net.jqwik.api.lifecycle.BeforeTry;
 import org.mockito.Mockito;
 
-import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -45,7 +44,7 @@ class VerifyPasswordTest {
     }
 
     @Example
-    @Label("The account comes back, with no error, when the password is its own")
+    @Label("The account comes back, PASSED, when the password is its own")
     void the_account_when_the_password_matches() {
         Mockito.when(userRepository.findBy(EMAIL)).thenReturn(Optional.of(USER));
         Mockito.when(hashAlgorithm.verify(HASH, PASSWORD)).thenReturn(true);
@@ -54,7 +53,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertEquals(USER, result.user()),
-                () -> assertEquals(List.of(), result.errors())
+                () -> assertEquals(CredentialsStatus.PASSED, result.status())
         );
     }
 
@@ -68,7 +67,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertNull(result.user()),
-                () -> assertEquals(List.of(CredentialsError.WRONG_PASSWORD), result.errors())
+                () -> assertEquals(CredentialsStatus.WRONG_PASSWORD, result.status())
         );
     }
 
@@ -81,7 +80,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertNull(result.user()),
-                () -> assertEquals(List.of(CredentialsError.USER_NOT_FOUND), result.errors()),
+                () -> assertEquals(CredentialsStatus.USER_NOT_FOUND, result.status()),
                 // skipping the hash for an unknown address answers in a millisecond where a known
                 // one costs the full Argon2, and that difference enumerates accounts on endpoints
                 // that refuse to enumerate them in words
@@ -97,7 +96,7 @@ class VerifyPasswordTest {
 
         VerifyPassword.Result result = verifyPassword.verify(EMAIL, PASSWORD);
 
-        assertEquals(List.of(CredentialsError.USER_NOT_FOUND), result.errors());
+        assertEquals(CredentialsStatus.USER_NOT_FOUND, result.status());
     }
 
     @Example
@@ -107,7 +106,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertNull(result.user()),
-                () -> assertEquals(List.of(CredentialsError.WRONG_PASSWORD), result.errors())
+                () -> assertEquals(CredentialsStatus.WRONG_PASSWORD, result.status())
         );
     }
 }

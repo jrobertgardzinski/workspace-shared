@@ -6,9 +6,8 @@ import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
-import com.jrobertgardzinski.security.domain.vo.CredentialsError;
+import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -39,14 +38,10 @@ public class VerifyPassword {
     }
 
     /**
-     * The account, present only when the password is its own ({@code null} otherwise), and the one
-     * reason it is not.
+     * The account, present only when the password {@code PASSED} ({@code null} otherwise), and
+     * which of the three it was.
      */
-    public record Result(User user, List<CredentialsError> errors) {
-        public Result {
-            errors = List.copyOf(errors);
-        }
-    }
+    public record Result(User user, CredentialsStatus status) {}
 
     /** A candidate that does not construct (blank) is no password at all, so it is a wrong one. */
     public Result verify(Email email, Supplier<PlaintextPassword> passwordCandidate) {
@@ -55,7 +50,7 @@ public class VerifyPassword {
         try {
             plaintextPassword = passwordCandidate.get();
         } catch (IllegalArgumentException blank) {
-            return new Result(null, List.of(CredentialsError.WRONG_PASSWORD));
+            return new Result(null, CredentialsStatus.WRONG_PASSWORD);
         }
 
         return verify(email, plaintextPassword);
@@ -78,15 +73,15 @@ public class VerifyPassword {
         if (
                 user.isEmpty()
         ) {
-            return new Result(null, List.of(CredentialsError.USER_NOT_FOUND));
+            return new Result(null, CredentialsStatus.USER_NOT_FOUND);
         }
 
         if (
                 !passwordMatches
         ) {
-            return new Result(null, List.of(CredentialsError.WRONG_PASSWORD));
+            return new Result(null, CredentialsStatus.WRONG_PASSWORD);
         }
 
-        return new Result(user.get(), List.of());
+        return new Result(user.get(), CredentialsStatus.PASSED);
     }
 }

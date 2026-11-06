@@ -6,7 +6,7 @@ import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
 import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
-import com.jrobertgardzinski.security.domain.vo.ProofError;
+import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
@@ -58,7 +58,7 @@ class PresentProofTest {
     void an_unknown_ticket_is_invalid() {
         PresentProof.Result result = presentProof.present("a-ticket-nobody-opened", "000000");
 
-        assertThat(result.errors()).containsExactly(ProofError.INVALID_TICKET);
+        assertThat(result.status()).isEqualTo(ProofStatus.INVALID_TICKET);
         assertThat(result.chain()).isNull();
     }
 
@@ -70,7 +70,7 @@ class PresentProofTest {
 
         PresentProof.Result result = new PresentProof(mfaChain, store, later).present(ticket, mailbox.lastCode);
 
-        assertThat(result.errors()).containsExactly(ProofError.INVALID_TICKET);
+        assertThat(result.status()).isEqualTo(ProofStatus.INVALID_TICKET);
         assertThat(store.find(ticket)).isEmpty();
     }
 
@@ -81,7 +81,7 @@ class PresentProofTest {
 
         PresentProof.Result result = presentProof.present(ticket, "000000");
 
-        assertThat(result.errors()).containsExactly(ProofError.WRONG_PROOF);
+        assertThat(result.status()).isEqualTo(ProofStatus.WRONG_PROOF);
         assertThat(result.chain().attemptsLeft()).isEqualTo(CONFIG.maxAttempts().value() - 1);
         assertThat(store.find(ticket)).isPresent();
     }
@@ -96,13 +96,13 @@ class PresentProofTest {
             result = presentProof.present(ticket, "000000");
         }
 
-        assertThat(result.errors()).containsExactly(ProofError.TOO_MANY_ATTEMPTS);
+        assertThat(result.status()).isEqualTo(ProofStatus.TOO_MANY_ATTEMPTS);
         assertThat(result.chain())
                 .as("the chain still comes back, so a sign-in knows whom to charge the miss to")
                 .isNotNull();
         assertThat(store.find(ticket)).isEmpty();
-        assertThat(presentProof.present(ticket, mailbox.lastCode).errors())
-                .containsExactly(ProofError.INVALID_TICKET);
+        assertThat(presentProof.present(ticket, mailbox.lastCode).status())
+                .isEqualTo(ProofStatus.INVALID_TICKET);
     }
 
     @Test
@@ -112,7 +112,7 @@ class PresentProofTest {
 
         PresentProof.Result result = presentProof.present(ticket, mailbox.lastCode);
 
-        assertThat(result.errors()).isEmpty();
+        assertThat(result.status()).isEqualTo(ProofStatus.PASSED);
         assertThat(result.chainCompleted()).isTrue();
         assertThat(store.find(ticket)).isEmpty();
     }
@@ -124,7 +124,7 @@ class PresentProofTest {
 
         PresentProof.Result result = presentProof.present(ticket, mailbox.lastCode);
 
-        assertThat(result.errors()).isEmpty();
+        assertThat(result.status()).isEqualTo(ProofStatus.PASSED);
         assertThat(result.chainCompleted()).isFalse();
         assertThat(result.chain().currentType()).isEqualTo(FactorType.SMS_CODE);
         assertThat(result.chain().attemptsLeft())

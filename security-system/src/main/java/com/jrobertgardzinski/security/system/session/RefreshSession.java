@@ -5,7 +5,6 @@ import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.vo.SessionRefreshRequest;
-import com.jrobertgardzinski.security.domain.vo.SessionStatus;
 import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
 import com.jrobertgardzinski.security.domain.vo.StoredSession;
 import com.jrobertgardzinski.security.domain.vo.token.RefreshToken;
@@ -65,12 +64,13 @@ public class RefreshSession {
 
         StoredSession session = storedSession.get();
 
-        if (
-                session.status() == SessionStatus.ROTATED
-        ) {
-            // this refresh token was already rotated away — a replay signals theft
-            sessionRepository.revokeFamily(session.family());
-            return new Result.ReuseDetected();
+        switch (session.status()) {
+            case ROTATED -> {
+                // this refresh token was already rotated away — a replay signals theft
+                sessionRepository.revokeFamily(session.family());
+                return new Result.ReuseDetected();
+            }
+            case ACTIVE -> {}
         }
 
         if (

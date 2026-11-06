@@ -7,7 +7,6 @@ import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
-import com.jrobertgardzinski.security.domain.vo.CredentialsError;
 import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
@@ -71,26 +70,21 @@ public class ChangePassword {
 
         VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, currentPasswordCandidate);
 
-        if (
-                verifyPasswordResult.errors().contains(CredentialsError.USER_NOT_FOUND)
-        ) {
-            return new Result.UserNotFound();
-        }
-
-        if (
-                verifyPasswordResult.errors().contains(CredentialsError.WRONG_PASSWORD)
-        ) {
-            return new Result.WrongPassword();
+        switch (verifyPasswordResult.status()) {
+            case USER_NOT_FOUND -> { return new Result.UserNotFound(); }
+            case WRONG_PASSWORD -> { return new Result.WrongPassword(); }
+            case PASSED -> {}
         }
 
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
 
-        if (
-                !createPasswordHashResult.errors().isEmpty()
-        ) {
-            return new Result.Rejected(
-                    createPasswordHashResult.errors(),
-                    createPasswordHashResult.policy());
+        switch (createPasswordHashResult.status()) {
+            case REJECTED -> {
+                return new Result.Rejected(
+                        createPasswordHashResult.errors(),
+                        createPasswordHashResult.policy());
+            }
+            case PASSED -> {}
         }
 
         userRepository.updatePassword(

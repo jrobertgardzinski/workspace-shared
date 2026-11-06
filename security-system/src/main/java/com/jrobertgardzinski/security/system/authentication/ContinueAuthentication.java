@@ -3,7 +3,6 @@ package com.jrobertgardzinski.security.system.authentication;
 import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
-import com.jrobertgardzinski.security.domain.vo.ProofError;
 import com.jrobertgardzinski.security.system.mfa.PendingAuthentication;
 import com.jrobertgardzinski.security.system.mfa.PresentProof;
 
@@ -57,42 +56,20 @@ public class ContinueAuthentication {
 
         PresentProof.Result presentProofResult = presentProof.present(ticket, proof);
 
-        if (
-                presentProofResult.errors().contains(ProofError.INVALID_TICKET)
-        ) {
-            return new Result.InvalidTicket();
-        }
-
         PendingAuthentication chain = presentProofResult.chain();
 
-        if (
-                !presentProofResult.errors().isEmpty()
-        ) {
-            // A wrong proof is a wrong guess at this account from this address, so it is written
-            // down like a wrong password. Five-per-ticket was never a limit on the person: link #1
-            // is a password they already hold, so a new ticket costs one request and the codes
-            // could be walked at whatever rate tickets could be minted.
-            Optional<LockoutSubject> lockoutSubject = chain.lockoutSubject();
-
-            if (
-                    lockoutSubject.isPresent()
-            ) {
-                updateBruteForceRecords.execute(
-                        lockoutSubject.get());
+        switch (presentProofResult.status()) {
+            case INVALID_TICKET -> { return new Result.InvalidTicket(); }
+            case TOO_MANY_ATTEMPTS -> {
+                writeDownWrongProof(chain);
+                return new Result.TooManyAttempts();
             }
-        }
-
-        if (
-                presentProofResult.errors().contains(ProofError.TOO_MANY_ATTEMPTS)
-        ) {
-            return new Result.TooManyAttempts();
-        }
-
-        if (
-                presentProofResult.errors().contains(ProofError.WRONG_PROOF)
-        ) {
-            return new Result.WrongProof(
-                    chain.attemptsLeft());
+            case WRONG_PROOF -> {
+                writeDownWrongProof(chain);
+                return new Result.WrongProof(
+                        chain.attemptsLeft());
+            }
+            case PASSED -> {}
         }
 
         if (
@@ -114,5 +91,23 @@ public class ContinueAuthentication {
         return new Result.NextFactor(
                 chain.currentType(),
                 chain.challengeData());
+    }
+
+    /**
+     * A wrong proof is a wrong guess at this account from this address, so it is written down like
+     * a wrong password. Five-per-ticket was never a limit on the person: link #1 is a password they
+     * already hold, so a new ticket costs one request and the codes could be walked at whatever
+     * rate tickets could be minted.
+     */
+    private void writeDownWrongProof(PendingAuthentication chain) {
+
+        Optional<LockoutSubject> lockoutSubject = chain.lockoutSubject();
+
+        if (
+                lockoutSubject.isPresent()
+        ) {
+            updateBruteForceRecords.execute(
+                    lockoutSubject.get());
+        }
     }
 }

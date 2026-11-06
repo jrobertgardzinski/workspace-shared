@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
-import com.jrobertgardzinski.security.domain.vo.ProofError;
+import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 
 import java.time.Clock;
 import java.util.List;
@@ -23,14 +23,11 @@ public class PresentProof {
     }
 
     /**
-     * The chain as it stands after the proof ({@code null} when no live ticket was found), what was
-     * wrong with the proof, and whether the chain has no factor left to ask for.
+     * The chain as it stands after the proof ({@code null} when no live ticket was found), whether
+     * the proof passed or what was wrong with it, and whether the chain has no factor left to ask
+     * for.
      */
-    public record Result(PendingAuthentication chain, List<ProofError> errors, boolean chainCompleted) {
-        public Result {
-            errors = List.copyOf(errors);
-        }
-    }
+    public record Result(PendingAuthentication chain, ProofStatus status, boolean chainCompleted) {}
 
     public Result present(String ticket, String proof) {
 
@@ -44,7 +41,7 @@ public class PresentProof {
                 pendingAuthentication.get().isExpired(clock)
         ) {
             chainTickets.close(ticket);
-            return new Result(null, List.of(ProofError.INVALID_TICKET), false);
+            return new Result(null, ProofStatus.INVALID_TICKET, false);
         }
 
         PendingAuthentication chain = pendingAuthentication.get();
@@ -64,10 +61,10 @@ public class PresentProof {
                     afterWrongProof.get().attemptsLeft() <= 0
             ) {
                 chainTickets.close(ticket);
-                return new Result(chain, List.of(ProofError.TOO_MANY_ATTEMPTS), false);
+                return new Result(chain, ProofStatus.TOO_MANY_ATTEMPTS, false);
             }
 
-            return new Result(afterWrongProof.get(), List.of(ProofError.WRONG_PROOF), false);
+            return new Result(afterWrongProof.get(), ProofStatus.WRONG_PROOF, false);
         }
 
         List<EnrolledFactor> tail = chain.tail();
@@ -76,12 +73,12 @@ public class PresentProof {
                 tail.isEmpty()
         ) {
             chainTickets.close(ticket);
-            return new Result(chain, List.of(), true);
+            return new Result(chain, ProofStatus.PASSED, true);
         }
 
         PendingAuthentication advanced = mfaChain.advanceTo(chain, tail);
         chainTickets.replace(ticket, advanced);
 
-        return new Result(advanced, List.of(), false);
+        return new Result(advanced, ProofStatus.PASSED, false);
     }
 }

@@ -106,10 +106,24 @@ public class StepUp {
 
         if (
                 mustProvePassword &&
-                !passwordlessAccountRepository.isPasswordless(email) &&
-                !passwordMatches(email, passwordAttempt)
+                !passwordlessAccountRepository.isPasswordless(email)
         ) {
-            return new Result.WrongPassword();
+            // Null is "no password offered" — the caller sent none, or sent a blank the boundary
+            // reads as none — and it answers like a wrong one. The attempt arrives as a
+            // PlaintextPassword because building the domain type out of what came over the wire is
+            // the adapter's job, not this use case's.
+            if (
+                    passwordAttempt == null
+            ) {
+                return new Result.WrongPassword();
+            }
+
+            VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordAttempt);
+
+            switch (verifyPasswordResult.status()) {
+                case USER_NOT_FOUND, WRONG_PASSWORD -> { return new Result.WrongPassword(); }
+                case PASSED -> {}
+            }
         }
 
         if (
@@ -128,24 +142,5 @@ public class StepUp {
                 ticket,
                 enrolled.get(0).type(),
                 pending.challengeData());
-    }
-
-    /**
-     * Null is "no password offered" — the caller sent none, or sent a blank the boundary reads as
-     * none — and it answers like a wrong one. The attempt arrives as a {@link PlaintextPassword}
-     * because building the domain type out of what came over the wire is the adapter's job, not
-     * this use case's.
-     */
-    private boolean passwordMatches(Email email, PlaintextPassword passwordAttempt) {
-
-        if (
-                passwordAttempt == null
-        ) {
-            return false;
-        }
-
-        VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordAttempt);
-
-        return verifyPasswordResult.errors().isEmpty();
     }
 }

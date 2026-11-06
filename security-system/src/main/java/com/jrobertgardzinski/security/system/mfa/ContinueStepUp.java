@@ -1,7 +1,6 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.security.domain.vo.FactorType;
-import com.jrobertgardzinski.security.domain.vo.ProofError;
 
 import java.util.Optional;
 
@@ -47,23 +46,19 @@ public class ContinueStepUp {
         PresentProof.Result presentProofResult = presentProof.present(ticket, proof);
 
         if (
-                stepUpPending.isEmpty() ||
-                presentProofResult.errors().contains(ProofError.INVALID_TICKET)
+                stepUpPending.isEmpty()
         ) {
             return new Result.InvalidTicket();
         }
 
-        if (
-                presentProofResult.errors().contains(ProofError.TOO_MANY_ATTEMPTS)
-        ) {
-            return new Result.TooManyAttempts();
-        }
-
-        if (
-                presentProofResult.errors().contains(ProofError.WRONG_PROOF)
-        ) {
-            return new Result.WrongProof(
-                    presentProofResult.chain().attemptsLeft());
+        switch (presentProofResult.status()) {
+            case INVALID_TICKET -> { return new Result.InvalidTicket(); }
+            case TOO_MANY_ATTEMPTS -> { return new Result.TooManyAttempts(); }
+            case WRONG_PROOF -> {
+                return new Result.WrongProof(
+                        presentProofResult.chain().attemptsLeft());
+            }
+            case PASSED -> {}
         }
 
         if (

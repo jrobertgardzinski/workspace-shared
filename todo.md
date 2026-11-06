@@ -919,8 +919,11 @@ jak w `273f693`.
 - [x] MAŁE USE CASE'Y JAKO SPOSÓB NA WSPÓŁDZIELENIE (werdykt Roberta 2026-11-05: „Wychodzi na
       to, że plan zaakceptowany. Koduj!"):
       (2) `VerifyPassword` (`security-system/password`), sędzia z rekordem
-      `Result(User user, List<CredentialsError> errors)`; enum `CredentialsError`
-      (`USER_NOT_FOUND`, `WRONG_PASSWORD`) w `security-domain`. Zawsze liczy jeden hash, także dla
+      `Result(User user, CredentialsStatus status)`; enum `CredentialsStatus` (`PASSED`,
+      `USER_NOT_FOUND`, `WRONG_PASSWORD`) w `security-domain`. Do 2026-11-06 była to lista
+      `errors` i enum `CredentialsError` bez `PASSED` (pod tą nazwą występuje w starszych
+      wpisach); werdykty Roberta z tego dnia: „lista jest zbędna" oraz „Daj 3 stany zamiast
+      error: passed i dwa errory", żeby `switch` w `ChangePassword` nie potrzebował `null`. Zawsze liczy jeden hash, także dla
       nieistniejącego konta. Zastąpił trzy rozjechane miejsca: `_VerifyCredentials` (skasowany z
       testem), `ChangePassword` (stracił `HashAlgorithmPort`: teraz repozytoria + dwa use case'y,
       jak `Register`) i `StepUp#passwordMatches`. Jeden bean dla wszystkich trzech.
@@ -972,6 +975,212 @@ jak w `273f693`.
       `PresentProof`, `ChainTickets`, `ProofError`, `ContinueStepUp`, `ConfirmEnrolment`,
       `MailedLinkExpiration`); status na drucie zostaje `FAILED_AUTHENTICATION_ATTEMPT`;
       całość zacommitowana na `RegisterRebuild`.
+- [x] STAN ZAMIAST LISTY, `switch` ZAMIAST `if` (werdykty Roberta 2026-11-06: „Daj 3 stany
+      zamiast error: passed i dwa errory", „czytelniej będzie kiedy case success zwróci {}
+      zamiast metody prywatnej", „Zatwierdzam. To samo z resztą use case zrób"): sędzia oddaje
+      enum STANU z nazwanym sukcesem `PASSED`, a use case czyta go INSTRUKCJĄ `switch`: odmowa to
+      `case X -> { return new Result.X(); }`, sukces to `case PASSED -> {}`, dalej kod leci w tej
+      samej metodzie. Żadnego `null` jako „brak błędu" i żadnych metod prywatnych na ciąg dalszy.
+      Enumy: `CredentialsStatus` (był `CredentialsError`), `ProofStatus` (był `ProofError`),
+      `RoleStatus` (był `RoleError`) w `security-domain`; `PasswordStatus` w `password-domain` i
+      `EmailStatus` w `email-domain` (`PASSED`/`REJECTED`, wyliczane akcesorem `Result.status()` z
+      listy `errors`, która zostaje, bo reguł może paść kilka naraz).
+      Przepisane: `ChangePassword`, `ResetPassword`, `RequestEmailChange`, `Authentication`,
+      `StepUp` (prywatne `passwordMatches` wciągnięte do `execute`), `ContinueAuthentication`,
+      `ContinueStepUp`, `RefreshSession` (po `SessionStatus`), `RequireRole.check` z `RoleGuard`.
+      `PresentProof.Result(chain, ProofStatus status, chainCompleted)` zamiast listy `errors`.
+      ŚWIADOME ODSTĘPSTWA: trzy (`Register`, `ContinueAuthentication#writeDownWrongProof`,
+      `Optional`/`boolean`), opisane szczegółowo w następnym punkcie.
+      KOSZT: instrukcja `switch` po enumie nie jest sprawdzana przez kompilator na komplet ramion;
+      nowy stan w enumie przeszedłby po cichu do ścieżki sukcesu i złapie go dopiero test.
+      Drut bez zmian. Regresja z Dockerem: email 22, password 28, security 19 + 42 + 122 + 36 +
+      343, pominięty 1 (niżej). E2E UI nie puszczane.
+- [ ] TRZY ODSTĘPSTWA OD WZORCA „stan + `switch`" (opisane 2026-11-06 na prośbę Roberta; każde
+      czeka na jego werdykt). Wzorzec: sędzia oddaje enum stanu, use case czyta go instrukcją
+      `switch`, sukces to `case PASSED -> {}`. Niżej trzy miejsca, w których tak NIE jest: jak
+      jest, dlaczego, czym można to zdjąć i co rekomenduję.
+
+      **(1) `Register#execute` czyta dwóch sędziów jednym `if`-em.**
+
+      Jak jest:
+
+      ```java
+      if (
+              !admitEmailResult.errors().isEmpty() ||
+              !createPasswordHashResult.errors().isEmpty()
+      ) {
+          return new Result.Rejected(
+                  admitEmailResult.errors(),
+                  createPasswordHashResult.errors(),
+                  createPasswordHashResult.policy());
+      }
+      ```
+
+      Dlaczego: obaj sędziowie są pytani ZAWSZE. Formularz pokazuje błędy adresu i hasła w jednej
+      rundzie, a hasło jest haszowane przed `existsBy`, żeby zajęty adres odpowiadał w tym samym
+      czasie co wolny. Odmowa to JEDEN wariant `Rejected(emailErrors, passwordErrors, policy)` z
+      obiema listami, z których co najmniej jedna jest niepusta. `switch` skacze po jednym
+      stanie, a tu decyduje alternatywa dwóch.
+
+      Czym można to zdjąć:
+
+      (a) Dwa płaskie `switch`-e pod rząd, oba z tym samym zwrotem. Zachowanie identyczne, bo
+          każdy bierze obie listy. Cena: ten sam `return new Result.Rejected(…)` napisany dwa
+          razy, czyli sześć linii duplikatu.
+
+          ```java
+          switch (admitEmailResult.status()) {
+              case REJECTED -> {
+                  return new Result.Rejected(
+                          admitEmailResult.errors(),
+                          createPasswordHashResult.errors(),
+                          createPasswordHashResult.policy());
+              }
+              case PASSED -> {}
+          }
+
+          switch (createPasswordHashResult.status()) {
+              case REJECTED -> {
+                  return new Result.Rejected(
+                          admitEmailResult.errors(),
+                          createPasswordHashResult.errors(),
+                          createPasswordHashResult.policy());
+              }
+              case PASSED -> {}
+          }
+          ```
+
+      (b) `switch` zagnieżdżony w `switch`-u: cztery kombinacje, z których trzy to ta sama
+          odmowa. Ten kształt Robert odrzucił 2026-11-04 („jeszcze gorzej").
+
+      (c) Zostawić `if`, ale pytać o stan zamiast o listę, żeby słownictwo było to samo co w
+          reszcie use case'ów:
+
+          ```java
+          if (
+                  admitEmailResult.status() == EmailStatus.REJECTED ||
+                  createPasswordHashResult.status() == PasswordStatus.REJECTED
+          ) {
+          ```
+
+      Rekomendacja: zostawić jak jest albo (c). `Register` to klasa-wzorzec napisana przez
+      Roberta, a (a) dokłada jej duplikat.
+
+      **(2) `ContinueAuthentication` ma metodę prywatną `writeDownWrongProof(chain)`.**
+
+      Jak jest:
+
+      ```java
+      switch (presentProofResult.status()) {
+          case INVALID_TICKET -> { return new Result.InvalidTicket(); }
+          case TOO_MANY_ATTEMPTS -> {
+              writeDownWrongProof(chain);
+              return new Result.TooManyAttempts();
+          }
+          case WRONG_PROOF -> {
+              writeDownWrongProof(chain);
+              return new Result.WrongProof(
+                      chain.attemptsLeft());
+          }
+          case PASSED -> {}
+      }
+      ```
+
+      Dlaczego: zły dowód ma trafić do liczników brute force tak samo jak złe hasło (para adres +
+      konto, od której łańcuch wystartował), i dotyczy to DWÓCH stanów: `WRONG_PROOF` i
+      `TOO_MANY_ATTEMPTS`. `INVALID_TICKET` zapisu nie robi, bo nie ma łańcucha, więc nie ma kogo
+      obciążyć; `PASSED` też nie. Sam zapis to sześć linii, bo `chain.lockoutSubject()` jest
+      `Optional`-em (ten sam typ łańcucha obsługuje step-up, który nie jest próbą na koncie),
+      plus czterolinijkowy komentarz „dlaczego". Przed zmianą był to jeden
+      `if (!presentProofResult.errors().isEmpty())` przed zwrotami, czyli dokładnie ten `if` na
+      wyniku sędziego, który wzorzec usuwa.
+
+      To NIE jest drabina cofnięta w `ChangePassword` (metoda prywatna jako ciąg dalszy
+      `execute`): tu `execute` dalej czyta się od góry do dołu, a metoda robi jeden efekt uboczny
+      i nic nie zwraca.
+
+      Czym można to zdjąć:
+
+      (a) Wkleić sześć linii zapisu do obu ramion: duplikat razem z komentarzem.
+
+      (b) Jedno ramię `case TOO_MANY_ATTEMPTS, WRONG_PROOF -> { zapis; … }`, a w środku drugi
+          `if` po tym samym stanie, żeby wybrać wariant. Czyli skok po stanie wewnątrz skoku po
+          stanie.
+
+      (c) Przenieść obsługę `Optional`-a do kroku pakietowego: przeciążenie
+          `_UpdateBruteForceRecords.execute(PendingAuthentication chain)`, które samo pyta o
+          `lockoutSubject()`. Oba ramiona mają wtedy jedną linię i use case nie ma żadnej metody
+          prywatnej:
+
+          ```java
+          case TOO_MANY_ATTEMPTS -> {
+              updateBruteForceRecords.execute(chain);
+              return new Result.TooManyAttempts();
+          }
+          ```
+
+      Rekomendacja: (c), jeśli metoda prywatna razi, bo kroki `_*` są od takich rzeczy. Inaczej
+      zostawić.
+
+      **(3) `Optional` i `boolean` dalej czyta `if`.**
+
+      Dlaczego: `switch` potrzebuje enuma albo typu sealed. Po `boolean` Java 25 nie skacze bez
+      `--enable-preview` (sprawdzone na JDK 25.0.2: „primitive patterns are a preview feature
+      and are disabled by default"), a `Optional` nie ma stanu, po którym dałoby się skakać.
+      Żeby to zmienić, każde takie miejsce musiałoby dostać własny dwustanowy enum powtarzający
+      `isEmpty()` albo `true`/`false`, czyli typ-nosiciel, jakich w use case'ach nie dokładamy.
+
+      Co zostało na `if` (stan na 2026-11-06):
+
+      - `Optional` z repozytorium albo magazynu („jest albo nie ma"): `ResetPassword`
+        (`pendingReset`, `userRepository.findBy`), `VerifyEmail` (`pendingVerification`),
+        `ConfirmEmailChange` (`pendingEmailChange`), `RefreshSession` (`storedSession` oraz
+        `sessionTokens` z warunkowej rotacji), `Logout` (`session`), `Authorize` (`accessGrant`),
+        `SetUserRoles` (`user`), `SetSetting` (`liveKey`), `EnrolFactor` i `ConfirmEnrolment`
+        (`factor`, `enrolment`), `ContinueStepUp` (`stepUpPending`), `FederatedSignIn`
+        (`existing`), `Authentication` (`authenticationBlock` z `_BruteForceGuard`).
+      - `boolean` z repozytorium albo kroku pakietowego: `existsBy` (`Register`,
+        `RequestEmailChange`, `ConfirmEmailChange`, `RequestPasswordReset`), `isPendingDeletion`
+        (`Authentication`, `FederatedSignIn`, `ConfirmEmailChange`), `isVerified`
+        (`Authentication` przez `_RequireVerifiedEmail`, `RequestEmailVerification`),
+        `_AccountStillSignsIn.isTrueOf` (`ContinueAuthentication`), `identity.emailVerified()` i
+        `linked` (`FederatedSignIn`), `wouldLeaveNoAdmin` (`SetUserRoles`).
+      - Upływ czasu: `expiration(ttl).hasExpired(clock)` w `ResetPassword`, `VerifyEmail` i
+        `ConfirmEmailChange`; `refreshTokenExpiration().hasExpired(clock)` i `isPastItsWholeLife`
+        w `RefreshSession`.
+      - Pusta lista czynników: `factors.isEmpty()` w `Authentication` i `FederatedSignIn`,
+        `enrolled.isEmpty()` w `StepUp`.
+      - Potwierdzanie enrolmentu: `factor.get().verify(…)` i `attemptsLeft() <= 0` w
+        `ConfirmEnrolment`.
+
+      Cztery miejsca z tej listy nie są zwykłym „jest albo nie ma" i są kandydatami, gdyby iść
+      dalej:
+
+      (a) `PresentProof.Result.chainCompleted`: `boolean` obok stanu, czytany `if`-em po
+          `switch`-u w `ContinueAuthentication` i `ContinueStepUp`. Dałoby się go wciągnąć do
+          `ProofStatus` jako dwa sukcesy (`CHAIN_COMPLETED`, `FACTOR_DUE`), ale wtedy KAŻDE ramię
+          zwraca wynik, nie ma `case PASSED -> {}`, a instrukcja `switch` wymaga martwego
+          `return`/`throw` za sobą albo formy `return switch`, którą Robert cofnął.
+
+      (b) `_BruteForceGuard.execute` oddaje `Optional<AuthenticationBlock>` („blokada w mocy albo
+          nic"). To sędzia, tylko że jego odmowa niesie dane; stan obok bloku oznaczałby
+          rekord-nosiciel wokół `Optional`-a.
+
+      (c) `StepUp` czyta enum `StepUpRequirement` (`NONE`, `SECOND_FACTORS`, `FULL_CHAIN`) przez
+          `==` w trzech warunkach, z czego dwa są złożone (np. `requirement == FULL_CHAIN &&
+          enrolled.isEmpty() && isPasswordless`). `switch` po samym wymaganiu rozbiłby je na
+          zagnieżdżone `if`-y w ramionach.
+
+      (d) `StepUp`: `passwordAttempt == null` znaczy „hasła nie podano" i jest ostatnim `null`-em
+          w roli stanu. Zdjęcie: `StepUp#execute` bierze `Supplier<PlaintextPassword>` jak
+          `ChangePassword`, a `VerifyPassword.verify(email, supplier)` już dziś nazywa hasło,
+          które się nie konstruuje, `WRONG_PASSWORD`. Zmiana sięga kontrolera step-upu.
+
+      Rekomendacja: (d) warto zrobić, bo usuwa `null`; (a)–(c) zostawić.
+- [ ] `DisplayNamesPactProviderTest` jest pomijany po cichu: szuka paktów w
+      `../../author-directory/pacts`, a od przenosin 2026-09-28 leżą w
+      `portal/portal-libs/author-directory/pacts`. Poprawić ścieżkę w `@PactFolder` i w
+      `consumerPactsCheckedOut` (zauważone 2026-11-06, czeka na werdykt).
 - [ ] ODŁOŻONE („narazie"): test HTTP na liczniki brute force po logowaniu przez dostawcę
       (dziś dowodzi tego tylko `OpenMfaChainTest`; pełnego tańca OAuth z drugim czynnikiem na
       drucie nikt nie jedzie).

@@ -93,12 +93,13 @@ public class Authentication {
                 request.email(),
                 request.plaintextPassword());
 
-        if (
-                !verifyPasswordResult.errors().isEmpty()
-        ) {
-            // a miss is written down, whichever half was wrong
-            updateBruteForceRecords.execute(subject);
-            return new Result.Rejected();
+        switch (verifyPasswordResult.status()) {
+            case USER_NOT_FOUND, WRONG_PASSWORD -> {
+                // a miss is written down, whichever half was wrong
+                updateBruteForceRecords.execute(subject);
+                return new Result.Rejected();
+            }
+            case PASSED -> {}
         }
 
         // the STORED spelling from here on, not the one that was typed: everything after this — the

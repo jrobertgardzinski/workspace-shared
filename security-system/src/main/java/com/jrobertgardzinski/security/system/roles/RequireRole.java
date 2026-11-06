@@ -2,11 +2,9 @@ package com.jrobertgardzinski.security.system.roles;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Role;
-import com.jrobertgardzinski.security.domain.vo.RoleError;
+import com.jrobertgardzinski.security.domain.vo.RoleStatus;
 
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Set;
 
 public final class RequireRole {
@@ -19,17 +17,16 @@ public final class RequireRole {
         this.rolesOf = rolesOf;
     }
 
-    /** Empty when the caller holds the role; otherwise the one refusal that names it. */
-    public List<RoleError> check(Email caller, Role required) {
-        List<RoleError> errors = new LinkedList<>();
-        if (!rolesInForce(caller).contains(required)) {
-            errors.add(switch (required) {
-                case USER -> RoleError.NOT_A_USER;
-                case MODERATOR -> RoleError.NOT_A_MODERATOR;
-                case ADMIN -> RoleError.NOT_AN_ADMIN;
-            });
+    /** {@code PASSED} when the caller holds the role; otherwise the one refusal that names it. */
+    public RoleStatus check(Email caller, Role required) {
+        if (rolesInForce(caller).contains(required)) {
+            return RoleStatus.PASSED;
         }
-        return errors;
+        return switch (required) {
+            case USER -> RoleStatus.NOT_A_USER;
+            case MODERATOR -> RoleStatus.NOT_A_MODERATOR;
+            case ADMIN -> RoleStatus.NOT_AN_ADMIN;
+        };
     }
 
     public Set<Role> rolesInForce(Email caller) {
