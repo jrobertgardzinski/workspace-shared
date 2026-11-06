@@ -1,5 +1,5 @@
 # Sub-repositories of workspace-formula: <directory> <git url>.
-# Private repositories: sign in with `gh auth login` first.
-formula-simulator               https://github.com/jrobertgardzinski/formula-simulator.git
-formula-sdk                     https://github.com/jrobertgardzinski/formula-sdk.git
-microservice-paddock            https://github.com/jrobertgardzinski/microservice-paddock.git
+#
+# None since 2026-11-06 (the owner's verdict: one repository per workspace). What used to be
+# listed here is a directory of the workspace's own repository now, folded in with its
+# history; the old repositories are archived on GitHub.

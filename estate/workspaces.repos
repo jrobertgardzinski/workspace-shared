@@ -1,6 +1,6 @@
 # The three sibling workspaces of the estate: <directory under the estate root> <git url>.
-# Each is an aggregating repo that gitignores its sub-repositories; those are listed in
-# <directory>.repos next to this file.
+# Each holds its sub-projects as directories. <directory>.repos next to this file is where a
+# workspace would list sub-repositories of its own; all three lists are empty since 2026-11-06.
 shared   https://github.com/jrobertgardzinski/workspace-shared.git
 portal   https://github.com/jrobertgardzinski/workspace-portal.git
 formula  https://github.com/jrobertgardzinski/workspace-formula.git

@@ -1,7 +1,7 @@
 # The estate — a microservice portfolio, one clone away
 
 > 👋 **Start here.** This is the map of my portfolio: a shared **identity kernel** and the social
-> **meme portal** built on it — twenty-one independent repositories, six JVM flavours, every use case
+> **meme portal** built on it — three repositories, six JVM flavours, every use case
 > an **executable specification**. Two minutes well spent: the
 > [security brochure](https://github.com/jrobertgardzinski/microservice-security) (with a video
 > walkthrough), the [meme gallery](https://github.com/jrobertgardzinski/microservice-memes), and
@@ -27,16 +27,15 @@
 
 ## The workspace
 
-Each sub-directory is an **independent git repository** with its own history and remote; this
-repo only ties them together for convenience:
+Each sub-directory is a project of its own — its own build, its own parent pom — and until
+2026-11-06 was an independent git repository too. They live in this one repository now, each with
+its history, next to what ties them together:
 
 - an **aggregating `pom.xml`** so the whole thing builds as one Maven reactor and
   imports as a single project in the IDE, and
 - **shared scripts and tooling** used across the projects (Allure aggregation,
   documentation generation, cheatsheets).
 
-The sub-repositories are gitignored here — this workspace does **not** version
-their contents.
 
 **A kernel and a product:** the **shared kernel** (identity, mail chain, stub IdP, notification
 channels, every shared library) lives here; the social **PORTAL** (memes gallery, comments,
@@ -47,16 +46,16 @@ kernel through `~/.m2` and the identity compose file. The generated
 
 ## Getting started on a fresh machine
 
-The estate is sibling workspaces holding independent git repositories between them. One script
-clones and keeps all of them; its map is data in [`estate/`](estate/) (one `<directory> <url>`
-line per repository). Everything the portfolio shows is public; a few repositories in the map are
-private and are simply reported as failed unless the GitHub CLI is signed in.
+The estate is three sibling workspaces, one repository each. One script clones and keeps all of
+them; its map is data in [`estate/`](estate/) (one `<directory> <url>` line per repository).
+The kernel and the portal are public; the game is private and is simply reported as failed
+unless the GitHub CLI is signed in.
 
 ```bash
 # prerequisites: git, JDK 25, Docker with compose, Node 20+ (the React UIs), Python 3 (the stubs)
 mkdir -p ~/Documents/git && cd ~/Documents/git
 git clone https://github.com/jrobertgardzinski/workspace-shared.git shared
-./shared/estate.sh clone          # clones every workspace and sub-repository that is missing
+./shared/estate.sh clone          # clones every workspace that is missing
 cd shared && ./mvnw install       # the kernel first; the products consume it from ~/.m2
 ```
 
@@ -68,9 +67,8 @@ Day to day:
 ./estate.sh check                 # the map must match the territory: manifests vs disk vs .gitignore
 ```
 
-Adding a repository: create it on GitHub, clone it into the right workspace, add its line to the
-workspace's `.gitignore` and to `estate/<workspace>.repos`; `./estate.sh check` tells you if you
-forgot one of the two.
+Adding a project: create its directory in the right workspace and list it in the aggregator
+`pom.xml`. It does not get a repository of its own.
 
 ## Projects
 

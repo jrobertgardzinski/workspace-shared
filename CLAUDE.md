@@ -29,7 +29,7 @@ in `docs/` still name their old paths; they are dated records and say what was t
 `account-closure` deliberately stayed: `microservice-security` imports its `ClosureMessages`, so
 it is the contract BETWEEN identity and the portal, and identity is shared with the game.
 
-This workspace aggregates the independent git repositories of the kernel: the
+This repository holds the kernel as directories: the
 shared libraries (`test-starter`, `config`,
 `email`, `password`, `adjustable-clock`, `infrastructure-micronaut-clock`,
 `infrastructure-spring-outbox`, `transactional-outbox`, `unit-of-work`,
@@ -37,11 +37,13 @@ shared libraries (`test-starter`, `config`,
 Micronaut auth service
 (`microservice-security`), the mail service (`microservice-email`, BCE Quarkus)
 and the Python channel/identity stubs (`microservice-idp`, `microservice-sms`,
-`microservice-push`). Each sub-directory has its **own `.git`, history and
-remote** and is gitignored here. This repo versions only the aggregating
+`microservice-push`). Until 2026-11-06 each sub-directory was an
+independent git repository, gitignored here. The owner's verdict that day: **ONE REPOSITORY PER
+WORKSPACE** — so each was folded in with its history (`git subtree add`), at the path it always
+had, and the old repositories were archived on GitHub. Next to them the repo versions the aggregating
 `pom.xml` (a pure aggregator, **not** a parent pom), the identity/observability
 compose files, the cross-estate tooling (`estate.sh` + its map in `estate/*.repos` — clone/pull/status/check
-for all 32 repositories; `infra-smoke.sh`, `aggregate_allure.py`,
+for the three repositories; `infra-smoke.sh`, `aggregate_allure.py`,
 `build_features.py`, `build_javadocs.sh`, `build_c4.py`, `allure-serve.sh`) and shared docs
 (`docs/`, `todo.md` — the cross-project backlog lives here).
 
@@ -64,13 +66,19 @@ players and its `infra` pulls live game state from the instances.
   build the kernel themselves; `./infra-smoke.sh` HERE proves the whole estate
   end to end (both products must be up).
 
-## Working across repos — important
+## Working in the estate — important
 
-- A new sub-repo goes into BOTH the workspace `.gitignore` and `estate/<workspace>.repos`;
-  `./estate.sh check` catches a miss. On a fresh machine: clone `workspace-shared`, then
-  `./estate.sh clone`.
-- Commits made here **do not** touch the sub-repos. To change project code,
-  `cd` into the relevant sub-repo and commit there against **its** history.
+- The estate is THREE repositories, one per workspace (`shared`, `portal`, `formula`). On a
+  fresh machine: clone `workspace-shared`, then `./estate.sh clone` fetches the other two.
+- A new sub-project is a new DIRECTORY here, added to the aggregator `pom.xml`. It does not get
+  a repository of its own.
+- One commit can span sub-projects. A sub-project's history from before 2026-11-06 hangs off its
+  `Fold <directory> in, with its history` merge commit. `git blame` crosses it on its own;
+  `git log` does not, so ask for the older commits by the path the file had in its own repository
+  and with `--full-history` (`git log --full-history -- security-system/…`, without the
+  `microservice-security/` prefix).
+- The pre-consolidation `.git` directories (all branches, reflogs) are kept in
+  `../.estate-backup-2026-11-06/`.
 - All modules share `com.jrobertgardzinski:*:1.0.0-SNAPSHOT`.
 - Every sub-project stays buildable standalone (own parent preserved). Do not
   convert the aggregator into their parent.

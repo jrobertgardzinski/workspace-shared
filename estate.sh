@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# estate.sh — the whole estate (three workspaces, 32 repositories) from one command.
+# estate.sh — the whole estate (three workspaces, one repository each) from one command.
 #
 #   ./estate.sh clone  [--root DIR] [--dry-run]   clone every workspace and sub-repository that is missing
 #   ./estate.sh pull   [--root DIR]               fast-forward every clean repository (dirty ones are skipped and listed)
@@ -7,7 +7,8 @@
 #   ./estate.sh check  [--root DIR]               manifests vs disk vs .gitignore — the map must match the territory
 #
 # The map lives in estate/*.repos (data, not code): workspaces.repos names the three sibling
-# workspaces, <workspace>.repos names each one's sub-repositories as "<directory> <git url>".
+# workspaces, <workspace>.repos names each one's sub-repositories as "<directory> <git url>" —
+# none since 2026-11-06, when every sub-project became a directory of its workspace.
 # The estate root defaults to the parent of the directory holding this script (this workspace
 # is cloned as <root>/shared). Every command is idempotent: run it again, nothing breaks.
 #
