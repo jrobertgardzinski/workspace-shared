@@ -6,29 +6,6 @@ target/
 # Generated UL glossary site (the versioned source is docs/glossary/glossary.md)
 docs/glossary/site/
 
-# Independent sub-repositories — each keeps its own git history.
-# The workspace versions shared scripts/tooling only, not their contents.
-/config/
-/email/
-/microservice-security/
-/microservice-email/
-/voting/
-/observation/
-/account-closure/
-/unit-of-work/
-/user-id/
-/envelope/
-/offline-jwt/
-/password/
-/test-starter/
-/adjustable-clock/
-/infrastructure-micronaut-clock/
-/transactional-outbox/
-/infrastructure-spring-outbox/
-/microservice-idp/
-/microservice-sms/
-/microservice-push/
-
 # Compiled class file
 *.class
 
