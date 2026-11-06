@@ -1,0 +1,174 @@
+package com.jrobertgardzinski;
+
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.password.domain.PlaintextPassword;
+import com.jrobertgardzinski.security.domain.vo.IpAddress;
+import com.jrobertgardzinski.security.system.registration.Register;
+import com.jrobertgardzinski.email.config.EmailPolicy;
+import com.jrobertgardzinski.email.domain.DomainPart;
+import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.password.domain.PasswordError;
+import com.jrobertgardzinski.password.policy.PasswordPolicy;
+import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
+import com.jrobertgardzinski.security.system.verification.RequestEmailVerification;
+import jakarta.inject.Named;
+import com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier;
+import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import io.micronaut.http.HttpRequest;
+import io.micronaut.http.HttpResponse;
+import io.micronaut.http.HttpStatus;
+import io.micronaut.http.MediaType;
+import io.micronaut.http.annotation.Body;
+import io.micronaut.http.annotation.Controller;
+import io.micronaut.scheduling.TaskExecutors;
+import io.micronaut.scheduling.annotation.ExecuteOn;
+import io.micronaut.http.annotation.Post;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * HTTP entry point for registration. This adapter drives the exact same {@link Register}
+ * use case that the application-level Cucumber glue drives directly — "same behaviour,
+ * different entry point". The HTTP contract:
+ * <ul>
+ *   <li>{@code Registered}        &rarr; 201 Created, {@code {"status": "CHECK_YOUR_MAILBOX"}};
+ *       a verification link is e-mailed — sign-in stays blocked until the address is verified</li>
+ *   <li>{@code Rejected}          &rarr; 422 Unprocessable Entity,
+ *       {@code {"emailErrors": [{"CODE": parameter}], "passwordErrors": [{"CODE": parameter}]}} —
+ *       both channels speak ONE shape: one code per broken rule, valued by the parameter in force
+ *       for this very attempt ({@code {"MIN_LENGTH_NOT_MET": 12}},
+ *       {@code {"NOT_A_COMPANY_DOMAIN": ["acme.com"]}}) or {@code true} where the rule has none.
+ *       Both policies are configuration, so a bare code would leave the caller guessing what the
+ *       minimum was, or which domains an employee may register from</li>
+ *   <li>{@code EmailAlreadyTaken} &rarr; the same 201 and the same body as {@code Registered}
+ *       (anti-enumeration: the wire never confirms an account exists). What differs is the mail,
+ *       readable only by the address owner: a still-unverified account gets a fresh verification
+ *       link (they probably lost the first one), a verified one gets a "you already have an
+ *       account" notice.</li>
+ * </ul>
+ * 422 (not 400): the JSON is well-formed; the failure is semantic validation of the values.
+ * Validation errors may reveal that an address is malformed, but never whether it is taken.
+ */
+// controllers do blocking work (JDBC, the mail service's HTTP client) — keep it off the event loop
+@ExecuteOn(TaskExecutors.BLOCKING)
+@Controller("/register")
+public class SecurityController {
+
+    /** The one body every non-rejected registration answers with — fresh or taken alike. */
+    static final Map<String, Object> CHECK_YOUR_MAILBOX = Map.of("status", "CHECK_YOUR_MAILBOX");
+
+    private final Register register;
+    private final RequestEmailVerification requestEmailVerification;
+    private final TransactionBoundary transactionBoundary;
+    private final SourceThrottle registrationThrottle;
+    private final ClientIpResolver clientIpResolver;
+    private final EmailVerificationRepository emailVerifications;
+    private final RegistrationNoticeNotifier registrationNoticeNotifier;
+    private final EmailPolicy emailPolicy;
+
+    public SecurityController(Register register, RequestEmailVerification requestEmailVerification,
+                              TransactionBoundary transactionBoundary,
+                              @Named("registration") SourceThrottle registrationThrottle,
+                              ClientIpResolver clientIpResolver,
+                              EmailVerificationRepository emailVerifications,
+                              RegistrationNoticeNotifier registrationNoticeNotifier,
+                              EmailPolicy emailPolicy) {
+        this.register = register;
+        this.requestEmailVerification = requestEmailVerification;
+        this.transactionBoundary = transactionBoundary;
+        this.registrationThrottle = registrationThrottle;
+        this.clientIpResolver = clientIpResolver;
+        this.emailVerifications = emailVerifications;
+        this.registrationNoticeNotifier = registrationNoticeNotifier;
+        this.emailPolicy = emailPolicy;
+    }
+
+    @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
+    public HttpResponse<Map<String, Object>> register(HttpRequest<?> request, @Body Map<String, String> body) {
+        // guard before the expensive work: registration hashes a password and creates an account
+        IpAddress source = clientIpResolver.resolve(request);
+        SourceThrottle.Decision decision = registrationThrottle.check(source);
+        if (!decision.allowed()) {
+            return HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
+                    .header("Retry-After", String.valueOf(decision.retryAfterSeconds()))
+                    .body(Refusal.alsoAsError("TOO_MANY_REGISTRATIONS"));
+        }
+
+        String email = body.get("email");
+        String password = body.get("password");
+
+        // The account and the mail that makes it usable are written in ONE transaction. They used to
+        // be two: the account committed first, and anything that went wrong afterwards — the JVM
+        // being stopped between them, a failure appending to the outbox — left an account whose
+        // owner was never sent a link, while every sign-in demands a verified address. Nothing here
+        // talks to the mail service synchronously (the notifier appends to the transactional
+        // outbox), so there is no slow call to keep out of the transaction; the reason for the
+        // split was that the response is decided per branch, and that is a formatting concern which
+        // belongs after the commit, not a reason to commit twice.
+        Register.Result result = transactionBoundary.execute(() -> {
+            Register.Result outcome = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
+            switch (outcome) {
+                // sign-in requires a verified address, so onboarding starts the verification here
+                case Register.Result.Registered registered -> requestEmailVerification.execute(Email.of(email));
+                // quiet refusal: the caller sees a fresh-looking registration; the address owner
+                // is told by mail — a lost-mail re-register gets a fresh link, a real account a notice
+                case Register.Result.EmailAlreadyTaken alreadyTaken -> {
+                    if (emailVerifications.isVerified(alreadyTaken.email())) {
+                        registrationNoticeNotifier.sendAlreadyRegistered(alreadyTaken.email());
+                    } else {
+                        requestEmailVerification.execute(alreadyTaken.email());
+                    }
+                }
+                case Register.Result.Rejected rejected -> {
+                    // nothing was written, and nothing is mailed: the address may not even be one
+                }
+            }
+            return outcome;
+        });
+
+        return switch (result) {
+            case Register.Result.Registered registered ->
+                    HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
+            case Register.Result.Rejected rejected ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
+                            .body(Map.of(
+                                    "emailErrors", emailErrors(rejected.emailErrors(), emailPolicy),
+                                    "passwordErrors", passwordErrors(rejected.passwordErrors(), rejected.policy())));
+            case Register.Result.EmailAlreadyTaken alreadyTaken ->
+                    HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
+        };
+    }
+
+    /**
+     * One entry per failed email rule, keyed by its code and valued by the email policy in force
+     * for this attempt — the same shape as the password channel, so a client renders both with one
+     * piece of code. Only the company rule carries a parameter: the domains an employee MAY
+     * register from are the hint the caller needs. The blocked and disposable rules stay
+     * {@code true}: those lists are denylists, and enumerating them would only tell an abuser
+     * which domains to try next; the caller already knows which domain they typed.
+     */
+    static List<Map<String, Object>> emailErrors(List<EmailError> errors, EmailPolicy policy) {
+        // exhaustive on purpose: a new rule does not compile until it says what parameter it carries
+        return errors.stream().map(error -> Map.<String, Object>of(error.name(), switch (error) {
+            case NOT_A_COMPANY_DOMAIN -> policy.companyDomains().values().stream()
+                    .map(DomainPart::value).sorted().toList();
+            case EMAIL_BLANK, EMAIL_FORMAT_INVALID, LOCAL_PART_EMPTY, LOCAL_PART_DOT_AT_EDGE,
+                 LOCAL_PART_CONSECUTIVE_DOTS, DOMAIN_EMPTY, DOMAIN_MISSING_DOT,
+                 RFC_FORMAT_INVALID, DOMAIN_BLOCKED, DISPOSABLE_DOMAIN -> Boolean.TRUE;
+        })).toList();
+    }
+
+    /**
+     * One entry per failed password rule, keyed by its code, valued by the rule's parameter in
+     * force for this attempt — or {@code true} where the rule has none (digit, uppercase,
+     * lowercase say everything in their code already).
+     */
+    static List<Map<String, Object>> passwordErrors(List<PasswordError> errors, PasswordPolicy policy) {
+        return errors.stream().map(error -> Map.<String, Object>of(error.name(), switch (error) {
+            case MIN_LENGTH_NOT_MET -> policy.minLength().value();
+            case SPECIAL_CHAR_REQUIRED -> policy.specialChars().value();
+            case PASSWORD_BLANK, LOWERCASE_REQUIRED, UPPERCASE_REQUIRED, DIGIT_REQUIRED -> Boolean.TRUE;
+        })).toList();
+    }
+}

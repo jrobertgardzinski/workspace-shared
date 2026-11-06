@@ -1,0 +1,164 @@
+package com.jrobertgardzinski.security.system.authentication;
+
+import com.jrobertgardzinski.security.config.bruteforce.BruteForceConfig;
+import com.jrobertgardzinski.security.domain.entity.AuthenticationBlock;
+import com.jrobertgardzinski.security.domain.repository.AuthenticationBlockRepository;
+import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
+import com.jrobertgardzinski.security.domain.vo.FailuresCount;
+import com.jrobertgardzinski.security.domain.vo.AttemptedAccount;
+import com.jrobertgardzinski.security.domain.vo.IpAddress;
+import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
+import com.jrobertgardzinski.security.domain.vo.Source;
+import com.jrobertgardzinski.email.domain.Email;
+import io.qameta.allure.Epic;
+import io.qameta.allure.Feature;
+import io.qameta.allure.Story;
+import net.jqwik.api.Example;
+import net.jqwik.api.Label;
+import net.jqwik.api.lifecycle.BeforeTry;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mockito;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+@Epic("Use case")
+@Feature("Authentication")
+@Story("Brute-force guard")
+class _BruteForceGuardTest {
+
+    record Given(Source ip) {}
+
+    private static final Given GIVEN = new Given(Source.of(new IpAddress("192.168.0.1")));
+
+    private static final BruteForceConfig CONFIG = BruteForceConfig.builder()
+            .failureWindowMinutes(15)
+            .maxFailures(3)
+            .minBlockMinutes(3)
+            .maxBlockMinutes(10)
+            .build();
+    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+    private static final int BLOCK_MINUTES = 5;
+    private static final BlockDurationPolicy BLOCK_DURATION = () -> BLOCK_MINUTES;
+
+    private RejectedAuthenticationRepository rejectedAuthenticationRepository;
+    private AuthenticationBlockRepository authenticationBlockRepository;
+    private _BruteForceGuard bruteForceGuard;
+
+    @BeforeTry
+    void init() {
+        rejectedAuthenticationRepository = Mockito.mock(RejectedAuthenticationRepository.class);
+        authenticationBlockRepository = Mockito.mock(AuthenticationBlockRepository.class);
+        bruteForceGuard = new _BruteForceGuard(
+                rejectedAuthenticationRepository, authenticationBlockRepository, CLOCK, CONFIG, BLOCK_DURATION);
+    }
+
+    private static LockoutSubject subject(Source source) {
+        return new LockoutSubject(source, AttemptedAccount.of(Email.of("victim@example.com")));
+    }
+
+    @Example
+    @Label("Blocked when an active block already exists for the IP")
+    void blocked_when_active_block_exists() {
+        AuthenticationBlock active = new AuthenticationBlock(GIVEN.ip, LocalDateTime.now(CLOCK).plusMinutes(5));
+        Mockito.when(authenticationBlockRepository.findBy(GIVEN.ip)).thenReturn(Optional.of(active));
+
+        Optional<AuthenticationBlock> authenticationBlock = bruteForceGuard.execute(subject(GIVEN.ip));
+
+        AuthenticationBlock blocked = authenticationBlock.orElseThrow();
+        assertAll(
+                () -> assertEquals(active, blocked),
+                () -> Mockito.verify(rejectedAuthenticationRepository, Mockito.never())
+                        .countFailuresOnAccount(Mockito.any(), Mockito.any()),
+                () -> Mockito.verify(authenticationBlockRepository, Mockito.never()).create(Mockito.any())
+        );
+    }
+
+    @Example
+    @Label("A rotated user-agent does not dodge the block: identity is the IP, observed context is not")
+    void rotated_user_agent_hits_the_same_block() {
+        AuthenticationBlock active = new AuthenticationBlock(GIVEN.ip, LocalDateTime.now(CLOCK).plusMinutes(5));
+        Mockito.when(authenticationBlockRepository.findBy(GIVEN.ip)).thenReturn(Optional.of(active));
+
+        Source sameIpOtherBrowser = new Source(GIVEN.ip.ipAddress(), "Fancy-New-Agent/99.0");
+        Optional<AuthenticationBlock> authenticationBlock = bruteForceGuard.execute(subject(sameIpOtherBrowser));
+
+        assertTrue(authenticationBlock.isPresent());
+        assertAll(
+                () -> assertEquals(GIVEN.ip, sameIpOtherBrowser,
+                        "sources with one IP are ONE subject regardless of what was observed"),
+                () -> assertEquals(GIVEN.ip.hashCode(), sameIpOtherBrowser.hashCode())
+        );
+    }
+
+    @Example
+    @Label("Blocked and a new block created when the failure limit is reached")
+    void blocked_and_new_block_created_when_failure_limit_reached() {
+        AuthenticationBlock created = new AuthenticationBlock(GIVEN.ip, LocalDateTime.now(CLOCK).plusMinutes(5));
+        Mockito.when(authenticationBlockRepository.findBy(GIVEN.ip)).thenReturn(Optional.empty());
+        Mockito.when(rejectedAuthenticationRepository.countFailuresOnAccount(Mockito.any(), Mockito.any()))
+                .thenReturn(new FailuresCount(CONFIG.maxFailures().value()));
+        Mockito.when(authenticationBlockRepository.create(Mockito.any())).thenReturn(created);
+
+        Optional<AuthenticationBlock> authenticationBlock = bruteForceGuard.execute(subject(GIVEN.ip));
+
+        AuthenticationBlock blocked = authenticationBlock.orElseThrow();
+        ArgumentCaptor<AuthenticationBlock> captor = ArgumentCaptor.forClass(AuthenticationBlock.class);
+        Mockito.verify(authenticationBlockRepository).create(captor.capture());
+        LocalDateTime until = captor.getValue().expiryDate();
+        LocalDateTime base = LocalDateTime.now(CLOCK);
+        // block length now comes from the injected BlockDurationPolicy — deterministic
+        assertAll(
+                () -> assertEquals(created, blocked),
+                () -> Mockito.verify(rejectedAuthenticationRepository).removeAllFor(subject(GIVEN.ip)),
+                () -> assertEquals(base.plusMinutes(BLOCK_MINUTES), until)
+        );
+    }
+
+    @Example
+    @Label("Spraying is caught by the source ceiling, though no single account ever reached its limit")
+    void source_ceiling_catches_what_the_per_account_count_cannot() {
+        // the shape of a sprayer: two or three guesses each, spread over many accounts, so the
+        // per-account count stays comfortably below its limit for every one of them
+        Mockito.when(authenticationBlockRepository.findBy(GIVEN.ip)).thenReturn(Optional.empty());
+        Mockito.when(rejectedAuthenticationRepository.countFailuresOnAccount(Mockito.any(), Mockito.any()))
+                .thenReturn(new FailuresCount(1));
+        Mockito.when(rejectedAuthenticationRepository.countFailuresFromSource(Mockito.any(), Mockito.any()))
+                .thenReturn(new FailuresCount(CONFIG.maxFailuresPerSource().value()));
+        Mockito.when(authenticationBlockRepository.create(Mockito.any()))
+                .thenReturn(new AuthenticationBlock(GIVEN.ip, LocalDateTime.now(CLOCK).plusMinutes(5)));
+
+        Optional<AuthenticationBlock> authenticationBlock = bruteForceGuard.execute(subject(GIVEN.ip));
+
+        assertTrue(authenticationBlock.isPresent());
+    }
+
+    @Example
+    @Label("Allowed when there is no active block and failures are below the limit")
+    void allowed_when_no_active_block_and_below_limit() {
+        Mockito.when(authenticationBlockRepository.findBy(GIVEN.ip)).thenReturn(Optional.empty());
+        Mockito.when(rejectedAuthenticationRepository.countFailuresOnAccount(Mockito.any(), Mockito.any()))
+                .thenReturn(new FailuresCount(CONFIG.maxFailures().value() - 1));
+        Mockito.when(rejectedAuthenticationRepository.countFailuresFromSource(Mockito.any(), Mockito.any()))
+                .thenReturn(new FailuresCount(CONFIG.maxFailuresPerSource().value() - 1));
+
+        Optional<AuthenticationBlock> authenticationBlock = bruteForceGuard.execute(subject(GIVEN.ip));
+
+        assertTrue(authenticationBlock.isEmpty());
+        assertAll(
+                () -> Mockito.verify(authenticationBlockRepository, Mockito.never()).create(Mockito.any()),
+                // both overloads: nothing about this attempt is forgiven, at either scale
+                () -> Mockito.verify(rejectedAuthenticationRepository, Mockito.never())
+                        .removeAllFor(Mockito.any(LockoutSubject.class)),
+                () -> Mockito.verify(rejectedAuthenticationRepository, Mockito.never())
+                        .removeAllFor(Mockito.any(com.jrobertgardzinski.security.domain.vo.Source.class))
+        );
+    }
+}

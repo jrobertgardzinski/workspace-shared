@@ -1,0 +1,205 @@
+micronaut:
+  application:
+    name: security-service
+  metrics:
+    enabled: true
+    export:
+      prometheus:
+        enabled: true
+        descriptions: true
+        step: PT10S
+  server:
+    cors:
+      enabled: true
+      configurations:
+        # the meme gallery UI (served by microservice-memes) signs users in against this service;
+        # 4200 is security's own UI on its dev server (the specs' third entry point); 8093 is the
+        # collections UI (react-native-web — its separate origin is what exercises CORS) and 5173
+        # its Vite dev server
+        ui:
+          # EXPLICIT since Micronaut 5, which flipped the default from true to false. Every one of
+          # these origins sends its sign-in with credentials: 'include' (the refresh cookie), and a
+          # browser refuses such a response unless it carries
+          # Access-Control-Allow-Credentials: true - so with the default flipped, the preflight
+          # still answered 200 with a correct Allow-Origin and the request was blocked anyway.
+          # Nothing server-side logs a thing: the service never sees the POST.
+          #
+          # This is why it is written down rather than left to a default: the value the browser
+          # needs is not the framework's idea of a safe default, and the two disagreeing is
+          # invisible to every test that does not use a real browser.
+          allow-credentials: true
+          # A LIST FROM ONE PROPERTY, so a deployment can replace it whole. The defaults are the
+          # compose origins and stay the defaults; anything else - a k3s ingress, a hosted domain -
+          # sets SECURITY_CORS_ORIGINS to its own comma-separated list. Hard-coding the list made
+          # the service un-deployable anywhere but this laptop, and the failure it produces is the
+          # silent client-side one this file's comment above describes.
+          allowed-origins: ${SECURITY_CORS_ORIGINS:`http://localhost:8083,http://localhost:8084,http://localhost:4200,http://localhost:8093,http://localhost:5173`}
+security:
+  # The configuration ladder (shared/config): a security_settings database row (runtime — live,
+  # written through the admin API) beats a property set here (deployment — needs a restart) beats
+  # the hardcoded default (compile time). NOT every key has all three: the five password rules are
+  # `liveOver` (three levels, settable at runtime), while brute-force, MFA, session validity and the
+  # step-up requirements are `boundOver` — deployment over default, two levels, and a row written for
+  # them takes effect at the next start. The live level is one snapshot of the whole table, read when
+  # the service starts and again after each admin's write, never on a question — and an illegal row
+  # is refused and fallen through, never obeyed.
+  # The table is this service's and the API is the only way in: every key declared live is set by
+  # name through PUT /admin/settings/{key} (the catalogue: GET /admin/settings), through the same
+  # parser and gate the ladder reads it with; a row written at the console is not in force until
+  # the next start or the next admin's write.
+  # The keys are deliberately ABSENT below: an absent property is a VACANT level, not zero — the
+  # hardcoded default (MinLength.DEFAULT = 5) answers until a deployment or an administrator says
+  # otherwise. Setting a value here (or the env var) claims the deployment level.
+  #
+  # password.policy.min.length: 12          # every rule of the policy has a key of its own,
+  # password.policy.special.chars: "#?!"     # translated in password-application; only the
+  # password.policy.requires.uppercase: true # the record's KEY in shared/password. A property
+  # password.policy.requires.lowercase: true # that is not its type or is below the rule's
+  # password.policy.requires.digit: true     # floor fails the boot, by name.
+  #
+  # The email policy for registration lives on the deployment level only (BeanFactory#emailPolicy):
+  # comma-separated domain lists, each ABSENT by default, so no email rule is in force until a
+  # deployment says so. A rejection carries the policy back, so a client can name the company
+  # domains an employee may register from.
+  #
+  # email.blocked.domains: example.org,spam.example
+  # email.disposable.domains: mailinator.com
+  # email.company.domains: acme.com        # a closed shop: only these domains may register
+  #
+  # The brute-force limits, restart over rebuild, each declared from its value object
+  # (security-config/bruteforce/vo); a value outside a limit's range fails the boot, by name:
+  # brute.force.failure.window.minutes: 15  # 3-120
+  # brute.force.max.failures: 3             # 1-20, per account
+  # brute.force.max.failures.per.source: 30 # 5-500, per address, never below max.failures
+  # brute.force.min.block.minutes: 3        # 1-60
+  # brute.force.max.block.minutes: 10       # 1-1440, never below min.block.minutes
+  #
+  # The MFA rules and the token validities, the same way (security-config/mfa/vo, security-domain):
+  # mfa.code.ttl.minutes: 5                 # > 0
+  # mfa.code.max.attempts: 5                # > 0
+  # mfa.code.length: 6                      # 4-10
+  # mfa.recovery.count: 10                  # 1-50
+  # mfa.recovery.length: 10                 # 8-40
+  # mfa.min.factors.user: 1                 # >= 1; also the floor for a role nobody configured
+  # mfa.min.factors.moderator: 2            # >= 1
+  # mfa.min.factors.admin: 3                # >= 1
+  # session.access.token.validity.hours: 1  # >= 1
+  # session.refresh.token.validity.hours: 24 # >= 1
+  # session.max.lifetime.hours: 720          # 1-8760: the whole sign-in, however often refreshed.
+  #   The two above say how long a session may sit IDLE; this one is the ceiling on its total age,
+  #   counted from when the lineage started. Without it, a session touched once a day lived for
+  #   ever. Deployment-level only: a live setting would let whoever holds an admin session at the
+  #   time sign everybody else out.
+  #
+  # The step-up requirement per sensitive action (the catalogue is StepUpAction in security-domain;
+  # each constant ships its default): NONE, SECOND_FACTORS or FULL_CHAIN, anything else fails the boot.
+  # step.up.delete.account: FULL_CHAIN
+  # step.up.admin.reset: FULL_CHAIN
+  # step.up.enrol.factor: SECOND_FACTORS
+  # step.up.remove.factor: SECOND_FACTORS
+  # step.up.generate.recovery.codes: SECOND_FACTORS
+  # step.up.change.email: FULL_CHAIN
+  # step.up.admin.roles: FULL_CHAIN
+  # step.up.admin.settings: FULL_CHAIN
+  # How long an account whose address was NEVER verified is kept, in days (3-365, default 30).
+  # Two levels only — a release or a deployment — because shortening a retention period DELETES
+  # accounts, and a live setting would be a deletion button on a web form. The law gives the
+  # principle ("no longer than the purpose needs", GDPR art. 5(1)(e)) and leaves the number to
+  # whoever can say what the purpose is; 30 matches the verification ROW's own retention, so one
+  # number tells one story.
+  # retention.unverified.account.days: 30
+  #
+  # The per-source windows, one instance per expensive endpoint so a burst against one cannot
+  # starve another (BeanFactory, @Named). These are deployment-level only — a property or the
+  # environment, never the live table — and 0 disables an instance (which is what the test profile
+  # does for registration, authentication and change-password). Seconds until the window frees up
+  # travel back in Retry-After.
+  #
+  # registration.max-per-window: 5      / registration.window-minutes: 15
+  # password-reset.max-per-window: 5    / password-reset.window-minutes: 15
+  # verification.max-per-window: 5      / verification.window-minutes: 15
+  # step-up.max-per-window: 10          / step-up.window-minutes: 15
+  # authentication.max-per-window: 30   / authentication.window-minutes: 15   # /authenticate AND
+  #                                       /authenticate/factor share this one window
+  # change-password.max-per-window: 10  / change-password.window-minutes: 15
+  # display-names.max-per-window: 120   / display-names.window-minutes: 1     # GET /users?ids=
+  #
+  # oauth.allowed-return-prefixes: http://localhost:8083/   # where a federated sign-in may send the
+  #   browser back to. The ACCESS TOKEN travels in that URL's fragment, so this list is what keeps
+  #   it from travelling somewhere else: every entry is compared as a path prefix and normalised to
+  #   end with "/", because "http://app.example" as a raw string prefix also matches
+  #   http://app.example.evil.net/ and http://app.example@evil.net/.
+  #
+  # mfa.recovery.pepper: <a long random string>   # the key the RECOVERY CODE hashes are taken
+  #   under (HMAC-SHA256). Keyed rather than salted because a code is spent by looking its hash up,
+  #   so the digest must be stable and the secret must live OUTSIDE the database. REQUIRED under a
+  #   declared prod profile — the boot refuses without it, like the datasource password. Changing it
+  #   retires every recovery code already issued.
+  #
+  # mfa.secret-key: <base64 of 16, 24 or 32 bytes>   # AES-GCM over the TOTP SEEDS at rest. A seed
+  #   is not a credential somebody presents once: it MINTS the codes, for ever and silently, so a
+  #   copy of enrolled_factors without this is a copy of every authenticator app in it. REQUIRED
+  #   under a declared prod profile. Seeds written before the key existed are read as they are and
+  #   become ciphertext the next time their row is written — no migration. LOSING the key costs
+  #   every enrolled TOTP factor: those users re-enrol.
+  #
+  # metrics.token: <a long random string>   # what a scraper must present on /prometheus. There is
+  #   no separate management port — Micronaut serves the metrics on the API's own connector — so
+  #   without this the endpoint answers whoever can reach the service: per-route timings, pool
+  #   saturation, JVM vitals, and a live view of whether an attack is working. REQUIRED under a
+  #   declared prod profile; unset elsewhere, which is what lets the compose stack's Prometheus
+  #   scrape over its private network with nothing configured. Give the same value to the scraper
+  #   (Prometheus: `authorization: {type: Bearer, credentials: ...}`). /health is NEVER guarded: it
+  #   answers {"status":"UP"} and a probe that needs credentials fails during the incidents it
+  #   exists for.
+  #
+  # trusted-proxies: 10.42.0.7,10.42.0.8   # EXACT addresses (no CIDR): X-Forwarded-For is honoured
+  #                                          only when the peer is one of these, and the source is
+  #                                          then the rightmost element that is not one of them
+  saga:
+    # The saga-listener lamp's stall tolerance, wired to an environment variable ON PURPOSE rather
+    # than left to the @Value default. OffboardingListenerHealth refuses to start on a value below
+    # its floor and tells the operator to "raise it or leave it unset" — naming
+    # SECURITY_LISTENER_STALL_SEC. Until this line existed that variable was read by NOTHING: the
+    # value came from the property below, so an operator who followed the message set a variable
+    # that changed nothing and saw the very same refusal. The twins already do it this way
+    # (memes MEMES_LISTENER_STALL_SEC, comments COMMENTS_LISTENER_STALL_SEC); the default here
+    # matches the one in the @Value annotation, so behaviour is unchanged when the variable is unset.
+    listener-stall-seconds: ${SECURITY_LISTENER_STALL_SEC:120}
+endpoints:
+  health:
+    enabled: true
+    sensitive: false
+  # scraped by the workspace's Prometheus (observability/prometheus.yml); metrics carry no
+  # secrets — request timings, JVM vitals, connection pools
+  prometheus:
+    enabled: true
+    sensitive: false
+# Links carried by the verification / password-reset mails; the mails themselves travel as events
+# (transactional outbox -> Kafka `mail-requests` -> microservice-email).
+email-service:
+  verify-link-base: ${VERIFY_LINK_BASE:`http://localhost:8080/verify-email?token=`}
+  reset-link-base: ${RESET_LINK_BASE:`http://localhost:8080/reset-password?token=`}
+kafka:
+  bootstrap:
+    servers: ${KAFKA_BOOTSTRAP_SERVERS:`localhost:9092`}
+  health:
+    # OFF, and this is a decision about what readiness MEANS for identity, not a convenience.
+    #
+    # micronaut-kafka contributes a cluster probe, and Micronaut puts every indicator without
+    # @Liveness into the READINESS group. Since the k8s manifest and the compose healthcheck ask
+    # /health/readiness, that made a broker blip answer "do not send me traffic" — pulling sign-in,
+    # refresh and token introspection out of the Service FOR BOTH PRODUCTS, over a fault that has
+    # nothing to do with signing in. A broker slow to start would fail the startupProbe outright and
+    # crash-loop the identity service. Measured, not argued: booted against a dead broker,
+    # /health/readiness answers 503 with `kafka DOWN` while OffboardingListenerHealth says UP.
+    #
+    # It is also the exact outcome OffboardingListenerHealth's own javadoc declares excluded ("this
+    # is deliberately NOT a broker probe... red-lighting identity because Kafka blinked would take
+    # sign-in away from both products"). That sentence is about the lamp; this line is what makes it
+    # true of the whole group.
+    #
+    # What still watches Kafka: the lamp, which reports THIS service's listener rather than the
+    # cluster, and the participants whose loops genuinely depend on the broker
+    # (comments/memes/user-collections/offboarding) — each red-lighting only itself.
+    enabled: false

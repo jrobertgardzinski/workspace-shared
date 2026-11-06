@@ -1,0 +1,90 @@
+package com.jrobertgardzinski.security.application.feature.registration;
+
+import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.email.config.EmailPolicy;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
+import com.jrobertgardzinski.hash.algorithm.argon2.Argon2HashAlgorithm;
+import com.jrobertgardzinski.password.domain.PlaintextPassword;
+import com.jrobertgardzinski.password.policy.CreatePasswordHash;
+import com.jrobertgardzinski.password.policy.PasswordPolicy;
+import com.jrobertgardzinski.password.domain.HashedPassword;
+import com.jrobertgardzinski.security.domain.entity.User;
+import com.jrobertgardzinski.security.system.registration.Register;
+import io.cucumber.java.en.Given;
+import io.cucumber.java.en.Then;
+import io.cucumber.java.en.When;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class RegisterSteps {
+
+    private final FakeUserRepository users = new FakeUserRepository();
+    private final Register register = new Register(
+            users,
+            new AdmitEmail(new EmailPolicy()),
+            // The REBUILD defaults, and not a policy invented here. The spec's literals are samples
+            // of what this service ships with (specs/README.md), so judging them against a
+            // min-length of 12 and a special-character set of "#?!" made the .feature describe a
+            // deployment nobody has: "StrongPassword1!" was accepted and "weak" refused for reasons
+            // the shipped policy does not hold.
+            new CreatePasswordHash(new Argon2HashAlgorithm(), PasswordPolicy::withDefaults));
+
+    private Register.Result result;
+
+    @Given("the EMAIL {string} is already REGISTERED")
+    public void theEmailIsAlreadyRegistered(String email) {
+        users.save(new User(Email.of(email), new HashedPassword("seed-hash")));
+    }
+
+    @When("the USER REGISTERS with EMAIL {string} and password {string}")
+    public void theUserRegisters(String email, String password) {
+        result = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
+    }
+
+    @Then("the USER is REGISTERED")
+    public void theUserIsRegistered() {
+        assertInstanceOf(Register.Result.Registered.class, result);
+    }
+
+    @Then("REGISTRATION is rejected")
+    public void registrationIsRejected() {
+        assertInstanceOf(Register.Result.Rejected.class, result);
+    }
+
+    /**
+     * At the use-case level the two outcomes ARE distinct — the boundary needs the difference to
+     * notify the address owner. Indistinguishability is an HTTP-contract property, asserted by the
+     * HTTP glue for this very sentence.
+     */
+    @Then("REGISTRATION is quietly refused, indistinguishable from a fresh one")
+    public void registrationIsQuietlyRefused() {
+        assertInstanceOf(Register.Result.EmailAlreadyTaken.class, result);
+    }
+
+    @Then("the EMAIL is flagged as {word}")
+    public void theEmailIsFlaggedAs(String flag) {
+        assertFlag(flag, rejected().emailErrors());
+    }
+
+    @Then("the password is flagged as {word}")
+    public void thePasswordIsFlaggedAs(String flag) {
+        assertFlag(flag, rejected().passwordErrors());
+    }
+
+    private Register.Result.Rejected rejected() {
+        return assertInstanceOf(Register.Result.Rejected.class, result);
+    }
+
+    private void assertFlag(String flag, List<?> errors) {
+        switch (flag) {
+            case "invalid" -> assertFalse(errors.isEmpty(), "expected validation errors, but there were none");
+            case "accepted" -> assertTrue(errors.isEmpty(), "expected no validation errors, but got: " + errors);
+            default -> throw new IllegalArgumentException("Unknown flag: " + flag);
+        }
+    }
+}

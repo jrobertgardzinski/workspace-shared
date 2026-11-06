@@ -1,0 +1,820 @@
+package com.jrobertgardzinski;
+
+import com.jrobertgardzinski.security.domain.vo.StepUpAction;
+import com.jrobertgardzinski.config.ladder.ConfigLadder;
+import com.jrobertgardzinski.config.source.live.LiveConfigPort;
+import com.jrobertgardzinski.config.source.live.SnapshotLiveConfigPort;
+import com.jrobertgardzinski.config.source.restart.RestartConfigPort;
+import com.jrobertgardzinski.persistence.SecuritySettingsTable;
+import com.jrobertgardzinski.security.system.settings.SetSetting;
+import com.jrobertgardzinski.security.system.settings.SettingCatalog;
+import com.jrobertgardzinski.security.system.settings.SettingsRepository;
+import com.jrobertgardzinski.email.config.BlockedDomains;
+import com.jrobertgardzinski.email.config.EmailPolicy;
+import com.jrobertgardzinski.email.policy.AdmitEmail;
+import com.jrobertgardzinski.email.config.CompanyDomains;
+import com.jrobertgardzinski.email.config.DisposableDomains;
+import com.jrobertgardzinski.email.domain.DomainPart;
+import com.jrobertgardzinski.hash.algorithm.argon2.Argon2HashAlgorithm;
+import com.jrobertgardzinski.password.policy.CreatePasswordHash;
+import com.jrobertgardzinski.password.policy.PasswordPolicyInForce;
+import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
+import com.jrobertgardzinski.config.Configuration;
+import com.jrobertgardzinski.security.config.bruteforce.BruteForceConfig;
+import com.jrobertgardzinski.security.config.bruteforce.vo.FailureWindowMinutes;
+import com.jrobertgardzinski.security.config.bruteforce.vo.MaxBlockMinutes;
+import com.jrobertgardzinski.security.config.bruteforce.vo.MaxFailures;
+import com.jrobertgardzinski.security.config.bruteforce.vo.MaxFailuresPerSource;
+import com.jrobertgardzinski.security.config.bruteforce.vo.MinBlockMinutes;
+import com.jrobertgardzinski.security.config.mfa.vo.AdminMinFactors;
+import com.jrobertgardzinski.security.config.mfa.vo.CodeLength;
+import com.jrobertgardzinski.security.config.mfa.vo.CodeMaxAttempts;
+import com.jrobertgardzinski.security.config.mfa.vo.CodeTtlMinutes;
+import com.jrobertgardzinski.security.config.mfa.vo.ModeratorMinFactors;
+import com.jrobertgardzinski.security.config.mfa.vo.RecoveryCodeCount;
+import com.jrobertgardzinski.security.config.mfa.vo.RecoveryCodeLength;
+import com.jrobertgardzinski.security.config.mfa.vo.UserMinFactors;
+import com.jrobertgardzinski.security.domain.entity.User;
+import com.jrobertgardzinski.security.system.roles.BootstrapAdmins;
+import com.jrobertgardzinski.security.system.roles.RequireRole;
+import com.jrobertgardzinski.security.system.roles.RolesOf;
+import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
+import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
+import com.jrobertgardzinski.security.domain.port.PasswordResetNotifier;
+import com.jrobertgardzinski.security.domain.repository.AuthenticationBlockRepository;
+import com.jrobertgardzinski.security.domain.repository.SessionRepository;
+import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
+import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
+import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
+import com.jrobertgardzinski.security.domain.vo.AccessTokenValidityInHours;
+import com.jrobertgardzinski.security.domain.vo.RefreshTokenValidityInHours;
+import com.jrobertgardzinski.security.domain.vo.SessionTokensConfig;
+import com.jrobertgardzinski.security.system.authentication.Authentication;
+import com.jrobertgardzinski.security.system.authentication.AuthenticationFactory;
+import com.jrobertgardzinski.security.system.authentication.BlockDurationPolicy;
+import com.jrobertgardzinski.security.system.authentication.RandomBlockDurationPolicy;
+import com.jrobertgardzinski.security.system.authorization.Authorize;
+import com.jrobertgardzinski.security.system.registration.Register;
+import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
+import com.jrobertgardzinski.security.system.session.ListActiveSessions;
+import com.jrobertgardzinski.security.system.session.Logout;
+import com.jrobertgardzinski.security.system.session.RefreshSession;
+import com.jrobertgardzinski.security.system.session.RevokeAllSessions;
+import com.jrobertgardzinski.security.system.account.ChangePassword;
+import com.jrobertgardzinski.security.system.account.ConfirmEmailChange;
+import com.jrobertgardzinski.security.domain.port.ContentPurge;
+import com.jrobertgardzinski.security.system.account.DeleteAccount;
+import com.jrobertgardzinski.security.system.account.StartAccountDeletion;
+import com.jrobertgardzinski.security.system.account.RequestEmailChange;
+import com.jrobertgardzinski.security.system.passwordreset.RequestPasswordReset;
+import com.jrobertgardzinski.security.system.passwordreset.ResetPassword;
+import com.jrobertgardzinski.security.system.verification.RequestEmailVerification;
+import com.jrobertgardzinski.security.system.verification.VerifyEmail;
+import io.micronaut.context.annotation.Context;
+import io.micronaut.core.annotation.Nullable;
+import io.micronaut.context.annotation.Factory;
+import io.micronaut.context.annotation.Value;
+import io.micronaut.context.env.Environment;
+import io.micronaut.core.type.Argument;
+import jakarta.inject.Named;
+import jakarta.inject.Singleton;
+
+import java.time.Clock;
+import java.util.List;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+/**
+ * Production wiring for the use cases behind the HTTP entry points. Each use case the controllers
+ * call is the very object the application-level Cucumber glue builds — shared behaviour, different
+ * entry point. The repositories and the {@link Clock} (system clock in production, a steerable one
+ * under the {@code test} environment) are contributed as beans elsewhere and injected here.
+ */
+@Factory
+public class BeanFactory {
+
+    /** One hash algorithm shared by registration (hashing) and authentication (verifying). */
+    @Singleton
+    HashAlgorithmPort hashAlgorithm() {
+        return new Argon2HashAlgorithm();
+    }
+
+    /**
+     * The live level of the configuration ladder: one snapshot of the {@code security_settings}
+     * table, answering every key. The table is read when the service starts - {@code @Context},
+     * so a table that cannot be read fails the boot, like an illegal property does - and again
+     * after each admin's write, never on a question. The table is this service's and its API is
+     * the only way in, so there is nothing to poll for: a row written behind the API's back is not
+     * in force until the next start or the next admin's write.
+     *
+     * <p>The first read touches the datasource, so it waits for everything a deployment must BRING
+     * with it: a missing or dev-default password, a missing JWT signing pair, a missing key for the
+     * TOTP seeds. Each must be refused in its own words, not by the placeholder error of a
+     * datasource that this snapshot would otherwise be the first to open. None of them has
+     * anything to do with the snapshot, and they are named here for exactly that reason — it is the
+     * cheapest way to say "before anything opens a connection". The list grows with every secret a
+     * deployment is expected to bring, and that is the point: each one refuses in its own words.
+     */
+    @Context
+    SnapshotLiveConfigPort settingsSnapshot(SecuritySettingsTable table, @Nullable CredentialsFuse fuse,
+                                            @Nullable JwtKeyFuse jwtKeyFuse, TotpSecretCipher totpSecrets,
+                                            @Nullable MetricsTokenFuse metricsTokenFuse) {
+        return new SnapshotLiveConfigPort(table::rows);
+    }
+
+    /**
+     * This deployment's configuration: the settings snapshot and the properties, from which every
+     * rule is read either live or bound, over the rule the code ships.
+     */
+    @Singleton
+    Configuration configuration(LiveConfigPort<String> rows, RestartConfigPort<String> properties) {
+        return new Configuration(rows, properties);
+    }
+
+    /**
+     * The password policy in force: every rule live over restart over rebuild, under the library's
+     * own keys ({@code security.password.policy.*}). {@code @Context} so an illegal property fails
+     * the boot and never the first request. The one bean of its kind: the use cases ask it as
+     * {@link PasswordPolicyInForce}, the admin report asks it for the length's provenance.
+     */
+    @Context
+    LadderedPasswordPolicy passwordPolicyInForce(Configuration configuration) {
+        return new LadderedPasswordPolicy(configuration);
+    }
+
+    /**
+     * The rules an ADMIN may set while the system runs: exactly the keys declared live, straight
+     * from the declarations - no list of its own to fall out of step with what the system reads.
+     */
+    @Singleton
+    SettingCatalog settingCatalog(Configuration configuration) {
+        return configuration::liveKey;
+    }
+
+    /**
+     * The write side of the live level: an ADMIN's decision lands in the table under the rule's
+     * key, and the snapshot is refreshed so the writer sees their own decision at once.
+     */
+    @Singleton
+    SettingsRepository settingsRepository(SecuritySettingsTable table, SnapshotLiveConfigPort snapshot) {
+        return (key, text) -> {
+            table.put(key, text);
+            snapshot.refresh();
+        };
+    }
+
+    @Singleton
+    SetSetting setSetting(SettingCatalog catalogue, SettingsRepository store) {
+        return new SetSetting(catalogue, store);
+    }
+
+    /**
+     * Who holds which role, for every admin gate at once: the persisted grants behind the port, and
+     * the deployment's bootstrap admins ({@code security.bootstrap-admins}) as the way the first
+     * admin exists before any grant.
+     */
+    @Singleton
+    RolesOf rolesOf(UserRepository users) {
+        return email -> users.findBy(email).map(User::roles).orElse(Set.of());
+    }
+
+    // at boot, like the e-mail policy: an address with a typo in security.bootstrap-admins must
+    // not wait for the first admin request to be noticed
+    @Context
+    BootstrapAdmins bootstrapAdmins(@Value("${security.bootstrap-admins:}") List<String> addresses) {
+        return BootstrapAdmins.of(addresses);
+    }
+
+    @Singleton
+    RequireRole requireRole(BootstrapAdmins bootstrapAdmins, RolesOf rolesOf) {
+        return new RequireRole(bootstrapAdmins, rolesOf);
+    }
+
+    /**
+     * The email policy for registration — which domains may not register (blocked, disposable)
+     * and, for a closed shop, which ones alone may (company). Deployment-level only for now: the
+     * three lists are read from properties once at startup, so a misspelt domain fails the boot
+     * rather than the first registration; an absent or empty list is an absent rule. Being fixed
+     * for the life of the service, it is handed to the use case as a value — unlike the password
+     * policy, which is asked for per attempt. The policy travels with every refusal, next to the
+     * password policy, so a client can say WHICH domains an employee may register from — not
+     * merely that this one was not among them.
+     */
+    @Context
+    EmailPolicy emailPolicyAtBoot(Environment environment) {
+        // @Context, not @Singleton: this is a VALUE read from properties, and the javadoc above has
+        // always claimed it is read "once at startup, so a misspelt domain fails the boot rather
+        // than the first registration". It was not: the policy was built inside the Register bean's
+        // factory method, which Micronaut creates on demand — so `company.domains=acme` (no dot)
+        // booted happily and the FIRST person to register met the failure.
+        return emailPolicy(environment);
+    }
+
+    private static EmailPolicy emailPolicy(Environment environment) {
+        return new EmailPolicy(
+                domains(environment, "security.email.blocked.domains", BlockedDomains::new),
+                domains(environment, "security.email.disposable.domains", DisposableDomains::new),
+                domains(environment, "security.email.company.domains", CompanyDomains::new));
+    }
+
+    /** An empty list is a vacant level: {@code null}, which the policy reads as "no such rule". */
+    private static <T> T domains(Environment environment, String property, Function<Set<DomainPart>, T> rule) {
+        List<String> values = environment.getProperty(property, Argument.listOf(String.class)).orElse(List.of());
+        Set<DomainPart> domains = values.stream()
+                .map(String::strip).filter(value -> !value.isEmpty())
+                .map(DomainPart::of)
+                .collect(Collectors.toSet());
+        return domains.isEmpty() ? null : rule.apply(domains);
+    }
+
+    /** One answer to "may this address hold an account here", for registration and for a change of address alike. */
+    @Singleton
+    AdmitEmail admitEmail(EmailPolicy emailPolicy) {
+        return new AdmitEmail(emailPolicy);
+    }
+
+    /**
+     * One judge of a new password, for registration, a change and a reset alike: it asks the policy
+     * in force per attempt, so a rule an ADMIN sets while the system runs is measured from the next
+     * attempt on.
+     */
+    @Singleton
+    CreatePasswordHash createPasswordHash(HashAlgorithmPort hashAlgorithm, PasswordPolicyInForce passwordPolicyInForce) {
+        return new CreatePasswordHash(hashAlgorithm, passwordPolicyInForce);
+    }
+
+    @Singleton
+    Register register(UserRepository userRepository, AdmitEmail admitEmail, CreatePasswordHash createPasswordHash) {
+        return new Register(userRepository, admitEmail, createPasswordHash);
+    }
+
+    /**
+     * One {@link SourceThrottle} per expensive anonymous endpoint — separate windows, so a burst
+     * against one endpoint cannot starve another. Zero disables an instance.
+     */
+    @Singleton
+    @Named("registration")
+    SourceThrottle registrationThrottle(
+            @io.micronaut.context.annotation.Value("${security.registration.max-per-window:5}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.registration.window-minutes:15}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    @Singleton
+    @Named("password-reset")
+    SourceThrottle passwordResetThrottle(
+            @io.micronaut.context.annotation.Value("${security.password-reset.max-per-window:5}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.password-reset.window-minutes:15}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    @Singleton
+    @Named("verification")
+    SourceThrottle verificationThrottle(
+            @io.micronaut.context.annotation.Value("${security.verification.max-per-window:5}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.verification.window-minutes:15}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    // step-up runs behind a live session, but it verifies a password and (for SECOND_FACTORS) mails a
+    // code on every start — unthrottled it is a full-speed password oracle and a code mail-bomb. Cap
+    // the rate per source, like the anonymous endpoints do.
+    @Singleton
+    @Named("step-up")
+    SourceThrottle stepUpThrottle(
+            @io.micronaut.context.annotation.Value("${security.step-up.max-per-window:10}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.step-up.window-minutes:15}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    // sign-in has a per-account brute-force guard, and a CORRECT password clears it — so somebody
+    // who already holds the password can open MFA tickets without limit, and each ticket buys five
+    // guesses at the second factor (and, for the code factors, mails the victim another code). The
+    // per-source window is what caps that loop; it is deliberately generous, because an address is
+    // not a person, and it is the same window for /authenticate and /authenticate/factor.
+    @Singleton
+    com.jrobertgardzinski.security.system.identity.DisplayNames displayNames(
+            com.jrobertgardzinski.security.domain.repository.UserRepository users) {
+        return new com.jrobertgardzinski.security.system.identity.DisplayNames(users);
+    }
+
+    // the display-name lookup is anonymous and cheap, but it is a way to enumerate which ids exist;
+    // a per-source window keeps a crawler from sweeping the id space at line speed
+    @Singleton
+    @Named("display-names")
+    SourceThrottle displayNamesThrottle(
+            @io.micronaut.context.annotation.Value("${security.display-names.max-per-window:120}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.display-names.window-minutes:1}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    @Singleton
+    @Named("authentication")
+    SourceThrottle authenticationThrottle(
+            @io.micronaut.context.annotation.Value("${security.authentication.max-per-window:30}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.authentication.window-minutes:15}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    // changing a password verifies the CURRENT one with a full Argon2, reachable with nothing but a
+    // live (possibly stolen) access token: unthrottled it is a password oracle answering in ~130 ms,
+    // and a hit turns a time-boxed session theft into a takeover, because the change revokes every
+    // session — the owner's included.
+    @Singleton
+    @Named("change-password")
+    SourceThrottle changePasswordThrottle(
+            @io.micronaut.context.annotation.Value("${security.change-password.max-per-window:10}") int maxPerWindow,
+            @io.micronaut.context.annotation.Value("${security.change-password.window-minutes:15}") int windowMinutes,
+            Clock clock) {
+        return new SourceThrottle(maxPerWindow, java.time.Duration.ofMinutes(windowMinutes), clock);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.roles.SetUserRoles setUserRoles(
+            UserRepository userRepository,
+            com.jrobertgardzinski.security.system.roles.BootstrapAdmins bootstrapAdmins) {
+        return new com.jrobertgardzinski.security.system.roles.SetUserRoles(userRepository, bootstrapAdmins);
+    }
+
+    /**
+     * Two limits inside one window. The per-account one stays tight (a guessed password is the
+     * threat); the per-source ceiling is deliberately far above it, because an address is not a
+     * person — behind one there may be an office, a CGNAT or a CI runner, and a number chosen for a
+     * single account locks all of them out over somebody else's typos. Every limit is declared
+     * from its record alone ({@code ConfigValue}: key and default), the deployment's property over
+     * the code default; a property outside a limit's range fails the boot, by name.
+     */
+    @Context
+    BruteForceConfig bruteForceConfig(Configuration configuration) {
+        return new BruteForceConfig(
+                configuration.boundOver(FailureWindowMinutes.DEFAULT),
+                configuration.boundOver(MaxFailures.DEFAULT),
+                configuration.boundOver(MaxFailuresPerSource.DEFAULT),
+                configuration.boundOver(MinBlockMinutes.DEFAULT),
+                configuration.boundOver(MaxBlockMinutes.DEFAULT));
+    }
+
+    /**
+     * How long an account nobody ever verified is kept, from the deployment's property over the
+     * code default.
+     *
+     * <p>Two levels and not three, on purpose. Shortening a retention period DELETES accounts, so
+     * it belongs to a release or a deployment — a live setting would be a deletion button on a web
+     * form, reachable by whoever holds an admin session at the time.
+     */
+    @Context
+    com.jrobertgardzinski.security.config.retention.vo.UnverifiedAccountDays unverifiedAccountDays(
+            Configuration configuration) {
+        return configuration.boundOver(
+                com.jrobertgardzinski.security.config.retention.vo.UnverifiedAccountDays.DEFAULT);
+    }
+
+    /** Token validities from the deployment's properties over the code defaults, declared from the value objects. */
+    @Context
+    SessionTokensConfig sessionTokensConfig(Configuration configuration) {
+        return new SessionTokensConfig(
+                configuration.boundOver(RefreshTokenValidityInHours.DEFAULT),
+                configuration.boundOver(AccessTokenValidityInHours.DEFAULT));
+    }
+
+    @Singleton
+    BlockDurationPolicy blockDurationPolicy(BruteForceConfig bruteForceConfig) {
+        return new RandomBlockDurationPolicy(bruteForceConfig);
+    }
+
+    /**
+     * Each bound social-login provider becomes the config layer's own type — the rest of the code
+     * never sees the Micronaut binding shim.
+     *
+     * <p>{@code @Context} so the settings are BUILT at boot: their rules live in the record's
+     * constructor, and a provider that breaks one (a USERINFO provider with no userinfo-url) used
+     * to boot without complaint and then take {@code GET /oauth/providers} down with a 500 — which
+     * the browser reads as "no social buttons", for every provider at once.
+     */
+    @Context
+    @io.micronaut.context.annotation.EachBean(OauthProviderConfig.class)
+    com.jrobertgardzinski.security.config.oauth.OauthProviderSettings oauthProvider(
+            OauthProviderConfig bound) {
+        return bound.settings();
+    }
+
+    @Context
+    com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig challengeCodeConfig(Configuration configuration) {
+        return new com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig(
+                configuration.boundOver(CodeTtlMinutes.DEFAULT),
+                configuration.boundOver(CodeMaxAttempts.DEFAULT),
+                configuration.boundOver(CodeLength.DEFAULT));
+    }
+
+    /** One {@link com.jrobertgardzinski.security.system.mfa.CodeFactor} per configured code channel
+     *  (e-mail, SMS): the channel decides the factor type, so a new channel bean is a new factor. */
+    @Singleton
+    java.util.List<com.jrobertgardzinski.security.system.mfa.CodeFactor> codeFactors(
+            java.util.List<com.jrobertgardzinski.security.domain.port.CodeChannel> channels,
+            com.jrobertgardzinski.security.system.mfa.CodeHasher codeHasher,
+            com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig challengeCodeConfig,
+            Clock clock) {
+        return channels.stream()
+                .map(channel -> new com.jrobertgardzinski.security.system.mfa.CodeFactor(
+                        channel, codeHasher, challengeCodeConfig, clock))
+                .toList();
+    }
+
+    /** The authenticator-app (TOTP) factor: self-contained, no channel. */
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.TotpFactor totpFactor(
+            Clock clock, @io.micronaut.context.annotation.Value("${security.mfa.totp.issuer:security}") String issuer,
+            com.jrobertgardzinski.security.system.mfa.SpentTotpSteps spentSteps) {
+        return new com.jrobertgardzinski.security.system.mfa.TotpFactor(clock, issuer, spentSteps);
+    }
+
+    /** The WebAuthn / passkey factor: pure-JDK signature verification, no library. The proof that
+     *  the factor port is plug-and-play — one more bean, no change to the chain. */
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.WebauthnFactor webauthnFactor(Clock clock,
+            @io.micronaut.context.annotation.Value("${security.webauthn.rp-id:localhost}") String rpId,
+            @io.micronaut.context.annotation.Value("${security.webauthn.rp-name:Security}") String rpName,
+            @io.micronaut.context.annotation.Value("${security.webauthn.origins:`http://localhost:4200,http://localhost:8080`}")
+                    String origins,
+            @io.micronaut.context.annotation.Value("${security.webauthn.challenge-ttl-minutes:5}") int ttlMinutes) {
+        java.util.List<String> allowed = java.util.Arrays.stream(origins.split(","))
+                .map(String::trim).filter(o -> !o.isBlank()).toList();
+        return new com.jrobertgardzinski.security.system.mfa.WebauthnFactor(clock, rpId, rpName, allowed, ttlMinutes);
+    }
+
+    /** Which factor methods this deployment offers = which factor beans are wired. */
+    @Context
+    com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry(
+            java.util.List<com.jrobertgardzinski.security.system.mfa.CodeFactor> codeFactors,
+            com.jrobertgardzinski.security.system.mfa.TotpFactor totpFactor,
+            com.jrobertgardzinski.security.system.mfa.WebauthnFactor webauthnFactor,
+            com.jrobertgardzinski.security.config.mfa.MfaPolicy mfaPolicy) {
+        java.util.List<com.jrobertgardzinski.security.system.mfa.AuthenticationFactor> factors =
+                new java.util.ArrayList<>(codeFactors);
+        factors.add(totpFactor);
+        factors.add(webauthnFactor);
+        com.jrobertgardzinski.security.system.mfa.FactorRegistry registry =
+                new com.jrobertgardzinski.security.system.mfa.FactorRegistry(factors);
+        refuseFloorsAboveWhatIsOffered(registry, mfaPolicy);
+        return registry;
+    }
+
+    /**
+     * A minimum nobody can reach is not a policy, it is a lock-out: each rule has a floor of 1 and
+     * no ceiling, so {@code security.mfa.min.factors.admin: 6} booted happily and then refused every
+     * ADMIN entry to {@code /admin/**} for ever — including the administrator who would have to
+     * change the number back. The ceiling is not a constant: it is how many factors this deployment
+     * actually offers, which is exactly what the registry knows and nothing else does.
+     */
+    private static void refuseFloorsAboveWhatIsOffered(
+            com.jrobertgardzinski.security.system.mfa.FactorRegistry registry,
+            com.jrobertgardzinski.security.config.mfa.MfaPolicy policy) {
+        int offered = registry.offered().size();
+        for (String role : java.util.List.of("USER", "MODERATOR", "ADMIN")) {
+            int required = policy.requiredFactorCount(java.util.Set.of(role));
+            if (required > offered) {
+                throw new IllegalStateException(("security.mfa.min.factors." + role.toLowerCase(java.util.Locale.ROOT)
+                        + " is " + required + ", but this deployment offers only " + offered
+                        + " factor" + (offered == 1 ? "" : "s") + " (" + registry.offered()
+                        + ") - a " + role + " could never comply, and would be locked out of every"
+                        + " guarded endpoint including the one that would put the number back"));
+            }
+        }
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.EnrolFactor enrolFactor(
+            com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
+            com.jrobertgardzinski.security.system.mfa.EnrolmentChallengeStore enrolmentChallengeStore) {
+        return new com.jrobertgardzinski.security.system.mfa.EnrolFactor(
+                factorRegistry, enrolmentChallengeStore);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment confirmEnrolment(
+            com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
+            com.jrobertgardzinski.security.system.mfa.EnrolmentChallengeStore enrolmentChallengeStore) {
+        return new com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment(
+                factorRegistry, enrolledFactorRepository, enrolmentChallengeStore);
+    }
+
+    /** The factor chain, shared by password sign-in, federated sign-in and the continuation. */
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain(
+            com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
+            com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig challengeCodeConfig,
+            com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository recoveryCodeRepository,
+            com.jrobertgardzinski.security.system.mfa.RecoveryCodeHasher recoveryCodeHasher,
+            Clock clock,
+            @io.micronaut.context.annotation.Value("${security.mfa.ticket-ttl-minutes:10}") int ticketTtlMinutes) {
+        return new com.jrobertgardzinski.security.system.mfa.MfaChain(
+                factorRegistry, challengeCodeConfig, recoveryCodeRepository, recoveryCodeHasher, clock,
+                ticketTtlMinutes);
+    }
+
+    @Context
+    com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig recoveryCodeConfig(Configuration configuration) {
+        return new com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig(
+                configuration.boundOver(RecoveryCodeCount.DEFAULT),
+                configuration.boundOver(RecoveryCodeLength.DEFAULT));
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes generateRecoveryCodes(
+            com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository recoveryCodeRepository,
+            com.jrobertgardzinski.security.system.mfa.RecoveryCodeHasher recoveryCodeHasher,
+            com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig recoveryCodeConfig) {
+        return new com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes(
+                recoveryCodeRepository, recoveryCodeHasher, recoveryCodeConfig);
+    }
+
+    /** Start and continue: assembled together so a sign-in begun by one is completed by the other. */
+    @Singleton
+    AuthenticationFactory.AuthenticationUseCases authenticationUseCases(
+            UserRepository userRepository,
+            EmailVerificationRepository emailVerificationRepository,
+            RejectedAuthenticationRepository rejectedAuthenticationRepository,
+            AuthenticationBlockRepository authenticationBlockRepository,
+            SessionRepository sessionRepository,
+            com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
+            BruteForceConfig bruteForceConfig,
+            SessionTokensConfig sessionTokensConfig,
+            Clock clock,
+            BlockDurationPolicy blockDurationPolicy,
+            AccessTokenMint accessTokenMint,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
+            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
+            com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingAuthenticationStore,
+            com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain) {
+        return AuthenticationFactory.assemble(
+                userRepository, emailVerificationRepository, rejectedAuthenticationRepository,
+                authenticationBlockRepository, sessionRepository, verifyPassword,
+                bruteForceConfig, sessionTokensConfig, clock, blockDurationPolicy, accessTokenMint,
+                enrolledFactorRepository, mfaChain, pendingAuthenticationStore, openMfaChain);
+    }
+
+    @Singleton
+    Authentication authentication(AuthenticationFactory.AuthenticationUseCases useCases) {
+        return useCases.authentication();
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.authentication.ContinueAuthentication continueAuthentication(
+            AuthenticationFactory.AuthenticationUseCases useCases) {
+        return useCases.continueAuthentication();
+    }
+
+    @Singleton
+    RefreshSession refreshSession(
+            SessionRepository sessionRepository,
+            Clock clock,
+            SessionTokensConfig sessionTokensConfig,
+            AccessTokenMint accessTokenMint,
+            com.jrobertgardzinski.security.config.session.vo.MaxSessionLifetimeHours maxLifetime) {
+        return new RefreshSession(sessionRepository, clock, sessionTokensConfig, accessTokenMint,
+                java.time.Duration.ofHours(maxLifetime.value()));
+    }
+
+    /**
+     * The ceiling on a whole sign-in, from the deployment's property over the code default.
+     *
+     * <p>Two levels, like the token validities beside it: how long a session may live is a
+     * deployment's policy, and a live one would let whoever holds an admin session at the time sign
+     * everybody else out.
+     */
+    @Context
+    com.jrobertgardzinski.security.config.session.vo.MaxSessionLifetimeHours maxSessionLifetimeHours(
+            Configuration configuration) {
+        return configuration.boundOver(
+                com.jrobertgardzinski.security.config.session.vo.MaxSessionLifetimeHours.DEFAULT);
+    }
+
+    @Singleton
+    Authorize authorize(SessionRepository sessionRepository, Clock clock) {
+        return new Authorize(sessionRepository, clock);
+    }
+
+    @Singleton
+    Logout logout(SessionRepository sessionRepository) {
+        return new Logout(sessionRepository);
+    }
+
+    @Singleton
+    RevokeAllSessions revokeAllSessions(SessionRepository sessionRepository) {
+        return new RevokeAllSessions(sessionRepository);
+    }
+
+    @Singleton
+    ListActiveSessions listActiveSessions(SessionRepository sessionRepository) {
+        return new ListActiveSessions(sessionRepository);
+    }
+
+    @Singleton
+    RequestEmailVerification requestEmailVerification(
+            EmailVerificationRepository emailVerificationRepository, EmailVerificationNotifier notifier) {
+        return new RequestEmailVerification(emailVerificationRepository, notifier);
+    }
+
+    @Singleton
+    VerifyEmail verifyEmail(EmailVerificationRepository emailVerificationRepository,
+                            @io.micronaut.context.annotation.Value(
+                                    "${security.verification.ttl-hours:48}") int verificationTtlHours,
+                            Clock clock) {
+        // Two days by default, and the number is a trade rather than a convention: shorter and a
+        // link read on Monday morning is dead, longer and an address somebody mistyped stays
+        // claimable for a week. The password reset (1 h) and the e-mail change (24 h) are shorter
+        // because what they open is bigger.
+        return new VerifyEmail(emailVerificationRepository,
+                java.time.Duration.ofHours(verificationTtlHours), clock);
+    }
+
+    @Singleton
+    RequestPasswordReset requestPasswordReset(
+            PasswordResetRepository passwordResetRepository,
+            com.jrobertgardzinski.security.domain.repository.UserRepository users,
+            PasswordResetNotifier notifier) {
+        return new RequestPasswordReset(passwordResetRepository, users, notifier);
+    }
+
+    @Singleton
+    ResetPassword resetPassword(PasswordResetRepository passwordResetRepository, UserRepository userRepository,
+                                CreatePasswordHash createPasswordHash,
+                                com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
+                                SessionRepository sessions,
+                                @io.micronaut.context.annotation.Value("${security.password-reset.ttl-minutes:60}")
+                                int resetTtlMinutes,
+                                Clock clock) {
+        return new ResetPassword(passwordResetRepository, userRepository,
+                createPasswordHash, passwordless,
+                sessions, java.time.Duration.ofMinutes(resetTtlMinutes), clock);
+    }
+
+    @Context
+    com.jrobertgardzinski.security.config.mfa.MfaPolicy mfaPolicy(Configuration configuration) {
+        return new com.jrobertgardzinski.security.config.mfa.MfaPolicy(
+                configuration.boundOver(UserMinFactors.DEFAULT),
+                configuration.boundOver(ModeratorMinFactors.DEFAULT),
+                configuration.boundOver(AdminMinFactors.DEFAULT));
+    }
+
+    /**
+     * The step-up requirement per action, one ladder per entry of the {@link StepUpAction}
+     * catalogue: the deployment's property ({@code security.step.up.<action>}) over the requirement
+     * the code ships. A property that is not NONE, SECOND_FACTORS or FULL_CHAIN fails the boot,
+     * by name; an action the catalogue does not know does not compile.
+     */
+    @Context
+    com.jrobertgardzinski.security.config.mfa.StepUpPolicy stepUpPolicy(Configuration configuration) {
+        java.util.List<com.jrobertgardzinski.security.config.mfa.StepUpFor> requirements = new java.util.ArrayList<>();
+        for (StepUpAction action : StepUpAction.values()) {
+            requirements.add(configuration.boundOver(com.jrobertgardzinski.security.config.mfa.StepUpFor.shipped(action)));
+        }
+        return com.jrobertgardzinski.security.config.mfa.StepUpPolicy.of(requirements);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.StepUp stepUp(
+            com.jrobertgardzinski.security.config.mfa.StepUpPolicy stepUpPolicy,
+            com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
+            com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
+            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
+            com.jrobertgardzinski.security.system.mfa.StepUpStore stepUpStore,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation) {
+        return new com.jrobertgardzinski.security.system.mfa.StepUp(
+                stepUpPolicy, verifyPassword, passwordless, enrolledFactors,
+                mfaChain, stepUpStore, sessionElevation);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.ContinueStepUp continueStepUp(
+            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
+            com.jrobertgardzinski.security.system.mfa.StepUpStore stepUpStore,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
+            Clock clock) {
+        return new com.jrobertgardzinski.security.system.mfa.ContinueStepUp(
+                new com.jrobertgardzinski.security.system.mfa.PresentProof(mfaChain, stepUpStore.chains(), clock),
+                stepUpStore, sessionElevation);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.MfaCompliance mfaCompliance(
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
+            com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
+            com.jrobertgardzinski.security.config.mfa.MfaPolicy mfaPolicy,
+            @io.micronaut.context.annotation.Value("${security.bootstrap-admins:}") java.util.List<String> bootstrapAdmins) {
+        return new com.jrobertgardzinski.security.system.mfa.MfaCompliance(
+                enrolledFactors, passwordless, mfaPolicy, java.util.Set.copyOf(bootstrapAdmins));
+    }
+
+    /**
+     * The one judge of "is this the account's own password", shared by sign-in, change-password and
+     * step-up, so all three answer an unknown address in the same time as a known one.
+     */
+    @Singleton
+    com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword(
+            UserRepository userRepository, HashAlgorithmPort hashAlgorithm) {
+        return new com.jrobertgardzinski.security.system.password.VerifyPassword(userRepository, hashAlgorithm);
+    }
+
+    /**
+     * The one way a factor chain is opened, shared by password and federated sign-in: it demands
+     * the source, so a wrong proof is always charged to the pair it came from.
+     */
+    @Singleton
+    com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain(
+            com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
+            com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingAuthenticationStore) {
+        return new com.jrobertgardzinski.security.system.mfa.OpenMfaChain(mfaChain, pendingAuthenticationStore);
+    }
+
+    @Singleton
+    ChangePassword changePassword(UserRepository userRepository,
+                                  com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
+                                  SessionRepository sessions, CreatePasswordHash createPasswordHash) {
+        return new ChangePassword(userRepository, verifyPassword, createPasswordHash, sessions);
+    }
+
+    @Singleton
+    RequestEmailChange requestEmailChange(UserRepository userRepository,
+                                          EmailChangeRepository emailChangeRepository,
+                                          EmailVerificationNotifier notifier, AdmitEmail admitEmail) {
+        // the same judge Register is given: one deployment, one answer to "may this address hold
+        // an account here"
+        return new RequestEmailChange(userRepository, emailChangeRepository, notifier, admitEmail);
+    }
+
+    @Singleton
+    ConfirmEmailChange confirmEmailChange(EmailChangeRepository emailChangeRepository, UserRepository userRepository,
+                                          EmailVerificationRepository emailVerificationRepository,
+                                          com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository
+                                                  federatedIdentityRepository,
+                                          com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository
+                                                  enrolledFactorRepository,
+                                          com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository
+                                                  recoveryCodeRepository,
+                                          com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository
+                                                  passwordlessAccountRepository,
+                                          PasswordResetRepository passwordResetRepository,
+                                          SessionRepository sessionRepository,
+                                          @io.micronaut.context.annotation.Value(
+                                                  "${security.email-change.ttl-minutes:1440}")
+                                          int changeTtlMinutes,
+                                          Clock clock) {
+        return new ConfirmEmailChange(emailChangeRepository, userRepository, emailVerificationRepository,
+                federatedIdentityRepository, enrolledFactorRepository, recoveryCodeRepository,
+                passwordlessAccountRepository, passwordResetRepository, sessionRepository,
+                java.time.Duration.ofMinutes(changeTtlMinutes), clock);
+    }
+
+    @Singleton
+    DeleteAccount deleteAccount(UserRepository userRepository, SessionRepository sessionRepository,
+                                com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
+                                com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository recoveryCodeRepository,
+                                com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository federatedIdentityRepository,
+                                EmailVerificationRepository emailVerificationRepository,
+                                PasswordResetRepository passwordResetRepository,
+                                EmailChangeRepository emailChangeRepository,
+                                com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordlessAccountRepository) {
+        return new DeleteAccount(userRepository, sessionRepository,
+                enrolledFactorRepository, recoveryCodeRepository, federatedIdentityRepository,
+                emailVerificationRepository, passwordResetRepository, emailChangeRepository,
+                passwordlessAccountRepository);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.system.federation.FederatedSignIn federatedSignIn(
+            com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository federatedIdentities,
+            UserRepository userRepository,
+            EmailVerificationRepository emailVerificationRepository,
+            SessionRepository sessionRepository,
+            HashAlgorithmPort hashAlgorithm,
+            SessionTokensConfig sessionTokensConfig,
+            Clock clock,
+            AccessTokenMint accessTokenMint,
+            com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
+            com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain) {
+        return new com.jrobertgardzinski.security.system.federation.FederatedSignIn(
+                federatedIdentities, userRepository, emailVerificationRepository,
+                sessionRepository, hashAlgorithm, sessionTokensConfig, clock, accessTokenMint,
+                passwordless, enrolledFactors, openMfaChain);
+    }
+
+    @Singleton
+    StartAccountDeletion startAccountDeletion(UserRepository userRepository,
+                                              SessionRepository sessionRepository,
+                                              ContentPurge saga) {
+        return new StartAccountDeletion(userRepository, sessionRepository, saga);
+    }
+}

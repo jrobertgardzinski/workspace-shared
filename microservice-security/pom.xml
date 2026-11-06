@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.jrobertgardzinski</groupId>
+    <artifactId>microservice-security</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <micronaut.version>5.1.0</micronaut.version>
+        <!-- the Maven plugin is versioned apart from the platform; 5.1.0 of it does not exist -->
+        <micronaut-maven-plugin.version>5.0.2</micronaut-maven-plugin.version>
+        <!-- Micronaut 5's platform BOM stopped managing testcontainers, the same change Spring Boot 4
+             made on the other side of the estate the same day. Pinned to 1.21.4 like the portal's
+             services: testcontainers reorganised in 2.x and several modules have no 2.x release. -->
+        <testcontainers.version>1.21.4</testcontainers.version>
+        <!-- ONE pact version for the five artifacts: they were pinned separately and had already
+             drifted (provider 4.7.3 beside junit5 4.7.5), which is how a consumer and a provider
+             end up disagreeing about the format of the thing they exist to agree on. -->
+        <pact.version>4.7.5</pact.version>
+    </properties>
+
+    <modules>
+        <module>security-domain</module>
+        <module>security-config</module>
+        <module>security-system</module>
+        <module>security-application</module>
+        <module>security-infrastructure</module>
+    </modules>
+
+    <!--Intentional DRY breakage-->
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!-- pin plugin version for build reproducibility; 3.13.0+ supports release=25 -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.15.0</version>
+                </plugin>
+                <!-- redirect Allure results and jqwik failure cache under target/ so mvn clean removes them -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.6</version>
+                    <configuration>
+                        <systemPropertyVariables>
+                            <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                            <jqwik.database>${project.build.directory}/.jqwik-database</jqwik.database>
+                            <pact_do_not_track>true</pact_do_not_track>
+                        </systemPropertyVariables>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.5.1</version>
+                </plugin>
+<!-- allure reports everywhere-->
+                <plugin>
+                    <groupId>io.qameta.allure</groupId>
+                    <artifactId>allure-maven</artifactId>
+                    <version>3.0.3</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+        <plugins>
+<!-- fail build on hidden coupling: any class used from a transitive dep must be declared explicitly -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.11.0</version>
+<!-- override bundled ASM to one that understands Java 25 bytecode (major 69) -->
+                <dependencies>
+                    <dependency>
+                        <groupId>org.ow2.asm</groupId>
+                        <artifactId>asm</artifactId>
+                        <version>9.10.1</version>
+                    </dependency>
+                </dependencies>
+                <executions>
+                    <execution>
+                        <id>analyze</id>
+                        <phase>verify</phase>
+                        <goals><goal>analyze-only</goal></goals>
+                        <configuration>
+                            <failOnWarning>true</failOnWarning>
+                            <ignoreUnusedRuntime>true</ignoreUnusedRuntime>
+<!-- test framework classes are pulled transitively from *-test-starter modules; that's the starter's job -->
+                            <ignoredUsedUndeclaredDependencies>
+                                <ignoredUsedUndeclaredDependency>org.assertj:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.junit.*:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.hamcrest:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>org.mockito:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>net.jqwik:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>io.qameta.allure:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>io.cucumber:*</ignoredUsedUndeclaredDependency>
+                            </ignoredUsedUndeclaredDependencies>
+                            <ignoredUnusedDeclaredDependencies>
+                                <ignoredUnusedDeclaredDependency>com.jrobertgardzinski:unit-test-starter</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>com.jrobertgardzinski:bdd-test-starter</ignoredUnusedDeclaredDependency>
+                            </ignoredUnusedDeclaredDependencies>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+<!-- fail build on version conflicts between transitive dependencies -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>enforce</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <requireUpperBoundDeps/>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- No JUnit override here. micronaut-test-bom's pin was once too old for cucumber,
+                 and the fix sat commented out for months, which says the opposite of what is true:
+                 the versions in force resolve on their own and the suites are green. If cucumber
+                 outgrows the BOM again, the import goes back in with the date and the symptom. -->
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>security-domain</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>security-config</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>security-system</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>security-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>security-infrastructure</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>email-domain</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>user-id</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>config</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>email-usecase</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>email-config</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>password-domain</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>password-usecase</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>password-config</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>argon2</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>adjustable-clock</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>infrastructure-micronaut-clock</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>bdd-test-starter</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.jrobertgardzinski</groupId>
+                <artifactId>unit-test-starter</artifactId>
+                <version>1.0.0-SNAPSHOT</version>
+                <scope>test</scope>
+            </dependency>
+            <!--
+              BEFORE the Micronaut platform on purpose - Maven takes the earliest matching entry.
+              Micronaut 5.1.0's platform manages jackson at 2.21.5 while its own micronaut-kafka
+              6.1.0 asks for 2.22.1, so the platform alone resolves a jackson-core OLDER than one of
+              its own modules requires. The enforcer's RequireUpperBoundDeps is what caught it, doing
+              exactly the job it is there for. One BOM keeps the whole jackson family on one version
+              instead of pinning artifacts one at a time as each is noticed.
+            -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.22.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.micronaut.platform</groupId>
+                <artifactId>micronaut-platform</artifactId>
+                <version>${micronaut.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

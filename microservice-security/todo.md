@@ -1,0 +1,1307 @@
+# TODO
+
+Tylko otwarte rzeczy. Historia zrobionego = git log.
+(Stara wersja z pełnym logiem faz: git log tego pliku.)
+
+**Plan pracy z instrukcjami wykonawczymi: [docs/opus-playbook.md](docs/opus-playbook.md)**
+(2026-07-07; S1, S2, S3 ZROBIONE. S3 WebAuthn WDROŻONY W CAŁOŚCI (kroki a–e):
+wire (`Challenge.publicData`→`challengeData` w 202, port `enrolledMaterial`),
+`WebauthnFactor` (czysty JDK, SPKI, zero CBOR/migracji), UI (create/get + auto-krok),
+e2e na wirtualnym authenticatorze; Faza H w docs/mfa-design.md. 178 testów JVM +
+36 e2e zielone. S5 zamknięte (gałęzie już nie istniały; runda 2 czeka). S4 na userze.)
+
+## UserId zamiast e-maila jako klucz (2026-09-26, etap 1 ZROBIONY)
+
+Etap 1 w kodzie: `UserId` (biblioteka `shared/user-id`), `User.id: UserId`, token `sub` = UUID +
+claim `email`, `/me` zwraca `id`, `GET /users?ids=` → `[{id, displayName}]` (maska adresu, anonimowo,
+throttle per źródło), `offline-jwt` czyta `email` z fallbackiem na `sub` ze starych tokenów.
+Analiza i pełny plan: `shared/docs/analysis/2026-09-26-user-id-as-the-key.md`. Otwarte:
+
+- [x] etap 2 — biblioteka `shared/author-directory`: port, `SecurityAuthorDirectory` (batch 100 + cache TTL,
+      absencje też; security niedostępne = listing bez nazw + WARN), kontrakt w test-jarze, pakt
+      weryfikowany przez security (`DisplayNamesPactProviderTest`)
+- [~] etap 3 — ZROBIONE: `author_id` (memes V13, comments V7; nullable), zapis z `sub` przy publikacji/komentarzu,
+      `/meta` i listing wątku pokazują nazwę z katalogu (wiersz bez id = maska adresu, nieznane id = „deleted
+      account"), `portal/dev/backfill-author-ids.sh`. OTWARTE: collections (`user_id` w `collection_items`,
+      port `CollectionRepository.add` musi przyjąć id), własność/autoryzacja i saga (`Field.USER_ID`) nadal
+      po e-mailu, anonimizacja zachowanej treści = `author_id NULL`, kopiec `HeapAuthorDirectory` w runnerze
+- [ ] etap 4 — kasacja rekeya (`EMAIL_CHANGED`, `UserContentRekey`…) i kolumn e-mailowych; `ClosureCommand` v2
+- [ ] security samo nadal kluczuje tabele e-mailem (`AccountClosure(Email…)`, `UserRepository` per Email) — poza zakresem mechanizmu, do osobnej decyzji
+
+## Stan (2026-07-02) — kontekst, nie backlog
+
+**19 feature'ów w `specs/`** (2026-09-12; było 13, gdy ta sekcja powstawała), każdy napędzany
+czarną skrzynką przez HTTP (+ warstwa application dla części; `mfa`, `mfa-passkey` i
+`federated-sign-in` nie mają runnera HTTP — TEST-2 w raporcie): Register, Authenticate (+brute-force; od 2026-07-02 wymaga zweryfikowanego
+emaila — 403 `EMAIL_NOT_VERIFIED`, rejestracja auto-wysyła link), RefreshSession
+(+reuse-detection), Authorize, Logout, Verify email (request+confirm), Reset hasła
+(request+complete), Change password, Change email (z re-weryfikacją nowego adresu; potwierdzenie
+oznacza nowy adres jako zweryfikowany), Delete account (RODO), List active sessions,
+Revoke all sessions. Persystencja: Micronaut Data JDBC + Flyway + Testcontainers (in-memory,
+gdy brak datasource). Deployment: `shared/docker-compose.identity.yml` w workspace-shared
+(Postgres 5433 + serwis + Kafka), włączany przez compose obu produktów; wersja „Postgres + serwis"
+z katalogu `docker-compose/` W TYM repo została SKASOWANA 2026-09-12 — nie miała Kafki, więc
+uruchamiała serwis, który nie potrafił wysłać maila, a jej `.env` z hasłami leżał w publicznym repo. Maile: od 2026-07-02 **zdarzenia przez Kafkę**
+— transactional outbox w Postgresie (`outbox_events`, V5; ta sama transakcja co zmiana stanu),
+poller publikuje na topik `mail-requests`, konsumuje `microservice-email` (at-least-once,
+dedup po id zdarzenia). Awaria mail-serwisu nie psuje rejestracji — zdarzenie czeka.
+**Delete account jest sagą** (orkiestracja, stan w `account_deletion_sagas`, V6): konto blokuje się
+od razu (`users.pending_deletion`), memes czyści treści (komenda `memes-commands` przez outbox,
+potwierdzenie `memes-events`), dopiero potwierdzenie kasuje usera i wysyła mail pożegnalny;
+brak potwierdzenia w limicie (`account-deletion.purge-timeout`, domyślnie 2 min) = kompensacja
+(odblokowanie + mail z przeprosinami).
+
+## Przegląd 2026-09-08 — naprawy (raport: `docs/review-2026-09-08.md`)
+
+Kolejność pracy = sekcja „Suggested order of work" w raporcie. Jedna paczka = jeden commit
++ reguła w `specs/`. Pozycje zmieniające kształt domeny/use-case'ów (DOM-2, DOM-9, DOM-12,
+DB-8, `Source` w `PendingAuthentication`) są decyzją właściciela — tylko wypisane, nie robione.
+
+- **MFA-1 (CRITICAL) — ZROBIONE 2026-09-12.** Koperta `webauthn.create` przyjmowana przy
+  logowaniu i step-upie (obejście passkeya samym hasłem). `WebauthnFactor.verify` akceptuje
+  gałąź `create` wyłącznie dla zapisu PENDING (puste `secretMaterial`); zapisany czynnik
+  zawsze niesie `{credentialId,publicKey}`, więc przy logowaniu i step-upie zostaje tylko
+  podpisana asercja `webauthn.get`. Dowód: `WebauthnFactorTest` (jednostkowo) +
+  `MfaHttpTest.webauthn_enrolment_envelope_does_not_sign_in` (po HTTP, logowanie i step-up),
+  oba sprawdzone na czerwono przed poprawką. Reguła: `specs/mfa-passkey.feature`
+  (warstwa przeglądarkowa — NIE chodzi w CI, tylko `run-e2e.sh`).
+- **ACC-1 (HIGH) — ZROBIONE 2026-09-12.** Anonimowy `POST /verify-email/request` odwerYfikowywał
+  dowolne konto (jedno żądanie na ofiarę = 403 `EMAIL_NOT_VERIFIED` przy logowaniu; wtórnie
+  otwierał przejęcie przez `FederatedSignIn.claimByEmail`). `RequestEmailVerification.execute`
+  wychodzi od razu, gdy `repository.isVerified(email)` — bez tokenu, bez maila; endpoint nadal
+  odpowiada tak samo dla każdego adresu (anty-enumeracja). Reguła w `specs/verify-email.feature`
+  („Requesting VERIFICATION for an already verified EMAIL changes nothing"), glue HTTP + UI;
+  wersja bez strażnika pada na 403 przy logowaniu właściciela. UWAGA: Background tego feature'a
+  zmieniony na wariant „whose EMAIL is not verified yet" — w harnessie przeglądarkowym „a
+  registered USER" kończy onboarding, więc reguła 1 musiała dostać własne zasianie.
+- **AUTH-3 + ACC-4 — ZROBIONE 2026-09-12.** Sesje przeżywały zmianę adresu i po zarejestrowaniu
+  zwolnionego adresu zaczynały mówić w imieniu NOWEGO właściciela. `ConfirmEmailChange` dostał
+  `AuthorizationDataRepository` i woła `revokeAllSessions(stary)` zaraz po `updateEmail` (ta sama
+  cena, którą płaci zmiana hasła). ACC-4: potwierdzenie zmiany w trakcie sagi usuwania jest
+  odrzucane (`isPendingDeletion` → `InvalidToken`, jak wygasły bilet) — inaczej saga gubiła
+  użytkownika pod nowym adresem. `sessions` DOŁĄCZYŁY do rejestru w `AddressKeyedStoresTest`
+  (kategoria „nie idzie za kontem"), akapit „deliberately NOT in the registry" skasowany.
+  Reguła w `change-email.feature` (@http-only); bez poprawki pada, pokazując `/me` odpowiadające
+  starym adresem po przeprowadzce. DOM-2 (kontrakt `updateEmail` przy zajętym adresie) NIE ruszony
+  — zmienia kontrakt portu i kształt wyniku use-case'u, decyzja właściciela.
+- **HTTP-1 + HTTP-2 — ZROBIONE 2026-09-12.** Za zaufanym proxy źródłem był LEWY element
+  `X-Forwarded-For`, czyli ten, który pisze klient (proxy DOKLEJA) — klucz throttle'ów i lockoutu
+  do wyboru przez atakującego (albo podstawiany ofierze). `ClientIpResolver` chodzi teraz od
+  PRAWEJ, pomija własne proxy i bierze pierwszy nie-nasz; element, który nie jest adresem
+  (`unknown`), leci na peera zamiast 500. `TrustedProxyHttpTest` (throttle rejestracji jako
+  przyrząd: „czy to samo źródło?"); na starym kodzie padają 2 z 4 przypadków.
+  **UWAGA do PLAN-P12 K1 (portal):** `security.trusted-proxies` porównuje DOKŁADNE adresy — CIDR
+  nie pasuje do niczego. K1 musi wymienić adresy podów ingressu, nie sieć podów. Zapisane też w
+  javadocu klasy.
+- **AUTH-2 + ATK-4 — ZROBIONE 2026-09-12.** Dwa nowe okna na źródło w `BeanFactory`:
+  `@Named("authentication")` (domyślnie 30/15 min, WSPÓLNE dla `/authenticate` i
+  `/authenticate/factor` — kto ma hasło, otwierał bilety bez końca, każdy wart 5 strzałów w drugi
+  czynnik i jeden mail do ofiary) oraz `@Named("change-password")` (10/15 min — `/account/password`
+  był wyrocznią Argon2 dla skradzionego tokenu, a trafienie = przejęcie, bo zmiana kasuje sesje).
+  Oba 0 w profilu `test`, oba udokumentowane w `application.yml` razem z czterema starszymi i
+  `trusted-proxies` (połowa HTTP-18: dokumentacja; migracja kluczy na drabinkę nadal otwarta).
+  Testy: `AuthThrottleHttpTest`, `ChangePasswordThrottleHttpTest`. Docs zrównane: change-password
+  NIE jest pod step-upem (`docs/mfa-design.md`, `docs/opus-playbook.md`).
+  NIE robione (decyzja właściciela): `Source` w `PendingAuthentication` i liczenie złych proofów
+  przez `_UpdateBruteForceRecords` — to zmiana kształtu use-case'u.
+- **DOM-1 — ZROBIONE 2026-09-12.** User-Agent dłuższy niż 400 znaków wywracał INSERT (22001):
+  500 z SQL-em w ciele i — co gorsza — ŻADNEGO wiersza porażki, więc blokada nigdy nie wskakiwała
+  i hasło można było zgadywać bez końca. `JdbcRejectedAuthenticationRepository` przycina nagłówek
+  do szerokości kolumny (`USER_AGENT_COLUMN_WIDTH = 400`, V9) — `Source` nietknięty, bo to adapter
+  zna kształt tabeli. Przypadek w `JdbcAdaptersTest` (Testcontainers, Postgres 18); bez przycięcia
+  pada z „value too long for type character varying(400)".
+- **OPS-1 — ZROBIONE 2026-09-12.** Auto-merge Dependabota bramkował po SAMEJ NAZWIE gałęzi: PR z
+  forka nazwany `dependabot/*/patches-*` wjeżdżał na main bez udziału człowieka (repo publiczne,
+  brak branch protection, job działa tokenem repo bazowego). Do `if` doszły `actor.login ==
+  'dependabot[bot]'` i `head_repository.full_name == github.repository`; krok dodatkowo pyta API
+  (`--author app/dependabot`, `gh pr view --json author,isCrossRepository`) i odmawia, gdy PR nie
+  jest Dependabota albo jest z forka.
+- **UI-1, UI-2, UI-3, UI-4, UI-5, UI-7 — ZROBIONE 2026-09-12.** Karta żyje dłużej niż sesja:
+  `clearAccountState()` czyści kody odzyskiwania (pokazywane raz, jawnie) i cały stan paneli —
+  wołane przy wylogowaniu I na wejściu w sesję; `signOut` czyści też adres i hasło z formularza,
+  `signIn` kasuje hasło ze stanu na obu gałęziach. 403 rozpoznawany po CIELE
+  (`STEP_UP_REQUIRED`), nie po samym statusie — MODERATOR pod progiem MFA nie kręci się już w
+  pętli elewacji. 401 na wywołaniu z tokenem = „sesja wygasła", a nie „złe hasło". Czynnikowa
+  połowa step-upu zna `nextFactor`: dla `WEBAUTHN` prosi authenticator (`assertPasskey`) zamiast
+  renderować pole na kod — konto tylko z passkeyem mogło dotąd nie zrobić NICZEGO za step-upem.
+  Wszystkie handlery lecą przez `run()`, dwa fetch-e z useEffect dostały `.catch`.
+  Testy: `security-ui/src/App.tab.test.tsx` (6 przypadków, wszystkie padają na starym kodzie);
+  vitest chodzi w CI (job `ui`). UWAGA: vitest wymaga Node 22 (lokalnie: nvm).
+- **ACC-2 — ZROBIONE 2026-09-12.** Polityka e-maili (blocked/disposable/company) obowiązywała
+  TYLKO przy rejestracji, więc zamknięty sklep był otwarty dla każdego, kogo raz wpuścił: zmiana
+  adresu wyprowadzała konto razem z rolami, czynnikami i linkami federacyjnymi. `RequestEmailChange`
+  dostał `CanRegisterConfig` i pyta pierwszy (`_NewEmailVerdict`, krok pakietowy wg ADR 0002),
+  nowy wynik `Rejected(codes, policy)`, `EmailChangeController` → 422 w kształcie `/register`
+  (`SecurityController.emailErrors`). Test jednostkowy + reguła w `change-email.feature`
+  (@http-only — compose nie konfiguruje żadnej listy, więc przeglądarkowa warstwa jej nie uruchomi;
+  glue HTTP startuje z `security.email.disposable.domains=mailinator.com`).
+- **Obsługa błędów brzegowych (HTTP-5 z rodziną, HTTP-8, HTTP-9, HTTP-4, HTTP-16, WIRE-3, WIRE-4)
+  — ZROBIONE 2026-09-12.** Moduł nie miał ŻADNEGO `ExceptionHandler`, więc zdanie value objectu
+  wracało do klienta jako 500. Teraz: `EdgeErrors` (IllegalArgumentException → 400 stały kształt,
+  `NotAuthenticatedException` → 401, prawdziwa przyczyna do logu), puste/białe pola odrzucane w
+  trzech adapterach (bilety MFA i step-upu, hasła), puste hasło w step-upie = brak hasła (401, jak
+  dotąd), `/me/**` w filtrze (`/me/` szło NIEfiltrowane), pusty cookie `refresh_token` = brak
+  cookie, adres z literówki w ścieżce admina parsowany PRZED strażnikiem step-upu (jednorazowa
+  elewacja nie przepada), `UNKNOWN_ROLE` podaje listę ról zamiast nazwy klasy enuma, allow-lista
+  return-URL normalizowana do „/" (inaczej `http://app.example` wpuszczało
+  `http://app.example.evil.net/` z tokenem we fragmencie), a bzdura od providera OAuth to
+  `#oauthError`, nie 500 na origin security. `EdgeErrorsHttpTest` (5 przypadków, wszystkie padają
+  na starym kodzie — z dokładnie tymi 500-kami z raportu) + przypadek WIRE-3 w `OauthFlowHttpTest`.
+- **Wyścigi (AUTH-1, AUTH-5/MFA-6, DB-6, DB-17, ACC-11, DB-3) — ZROBIONE 2026-09-12.**
+  AUTH-1: strażnik brute-force był check-then-act — 20 równoległych prób z jednego adresu
+  przechodziło przy limicie 3, a próba, która w końcu trafiła limit, KASOWAŁA nadmiarowe wiersze,
+  więc sufit per źródło też ich nie widział. Blokada doradcza `pg_advisory_xact_lock(hashtext(ip))`
+  w transakcji żądania. WAŻNE: raport kazał ją wziąć w `countFailuresOnAccount`, ale to ZA PÓŹNO —
+  strażnik najpierw pyta o istniejącą blokadę; blokada jest brana także w
+  `JdbcAuthenticationBlockRepository.findBy` (pierwsze pytanie strażnika). `BruteForceRaceTest`:
+  bez tego przechodzi 10 z 20, z tym ≤ 3.
+  AUTH-5: licznik prób przy drugim czynniku był read-modify-write na trzy wywołania store'a →
+  20 proofów naraz zużywało jedną próbę. Porty `PendingAuthenticationStore` i `StepUpStore` mają
+  `update(ticket, fn)` (domyślnie stara sekwencja, atomowo w adapterach in-memory = produkcja);
+  `PendingStoreAtomicityTest` pokazuje -6 zamiast -15 bez poprawki.
+  DB-6/DB-17/ACC-11: `ON CONFLICT` zamiast delete+save / exists+save / check+insert (blokada źródła,
+  ustawienie admina, start sagi usuwania — drugi „skasuj konto" dostawał 500 zamiast dołączyć).
+  DB-3: `consumeReset`/`confirmChange`/`completeVerification` — decyduje ZAPIS (warunkowy DELETE/
+  UPDATE i liczba wierszy), nie odczyt; dwie prezentacje tego samego linku nie mogą już obie wygrać.
+- **Config na starcie (WIRE-5/CFG-1, CFG-3, CFG-4) — ZROBIONE 2026-09-12.** Wartości ustalone na
+  całe życie serwisu czytane są teraz PRZY STARCIE (`@Context`): polityka e-maili (javadoc od
+  dawna to obiecywał, kod nie — `company.domains=acme` wstawał, a wywracała się pierwsza
+  rejestracja), bootstrap-admini i ustawienia providerów OAuth (provider USERINFO bez `userinfo-url`
+  wstawał, a `GET /oauth/providers` dawało 500 = zero przycisków social w UI).
+  CFG-3: sufit dla progu MFA — próg wyższy niż liczba czynników, które deployment OFERUJE, wywala
+  boot z nazwą klucza (`min.factors.admin: 6` zamykał każdego ADMINA poza `/admin/**` na zawsze,
+  łącznie z tym, kto miałby liczbę cofnąć). CFG-4: dwie reguły międzypolowe `BruteForceConfig` i
+  zakres `MaxFailuresPerSource` mają wreszcie testy. `ConfigAtBootTest` — 3 z 5 przypadków padają
+  na starym kodzie (czwarty to nowy sufit, piąty pilnuje, że pusty config nadal wstaje).
+- **Przegląd dokumentacji (OPS-3..OPS-11, DB-16, TEST-4) — ZROBIONE 2026-09-12.**
+  `todo.md`: sekcja „Otwarte — pilne" opisywała pracę, która OD MIESIĄCA jest na main (f94c99d,
+  a8ef840, 163755f) — zamknięta ze sprostowaniem; 13 → 19 feature'ów; akapit o odpinaniu tożsamości
+  federacyjnych przy zmianie adresu (dziś PRZEPINANIE); „klucze bez endpointu admina" (dziś każdy
+  `liveOver` idzie przez `PUT /admin/settings/{key}`).
+  `Readme.md`: przepis build clonował 5 z 8 repo (czysty `~/.m2` = brak buildu); „13 specs",
+  „UI not built yet", „in-memory adapters" — wszystko z lipca.
+  `Documentation.md`: nagłówek mówi wprost, że to zdjęcie jednego runu z 2026-07-02, a nie żywa
+  dokumentacja. `docs/mfa-design.md`: elewacja NIE jest kolumną w wierszu sesji i nie ma
+  `/account/step-up/start`. `docs/opus-playbook.md`: use case'y są w `security-system`
+  (`security-application` nie ma `src/main`); S5 zamknięte. `security-ui/README.md`: tagi, 39
+  scenariuszy, vitest w CI. DB-16: trzy komentarze w persystencji (V10→V18, „counts by IP alone",
+  „snapshot once per TTL"). TEST-4: świadek w CI obejmuje wszystkie 4 weryfikacje paktów i 5 suit
+  na Testcontainers (`disabledWithoutDocker` = ciche zielone), `SilentlySkippedPactTest` zna
+  wszystkich czterech konsumentów.
+  NIE ruszone celowo: komentarze w V22/V25 (dryf checksumy Flyway — DB-4).
+- **HTTP-3 + ACC-7 + AUTH-4 — ZROBIONE 2026-09-12.** `ProfileGuard` wymaga DOKŁADNIE jednego
+  profilu z trójki: para `prod,test` przechodziła, a `test` niesie anonimowe `/test/clock`
+  i `/test/mailbox` — czyli skrzynkę z linkami weryfikacyjnymi na produkcji. `/me` i claim `roles`
+  w JWT idą przez `RequireRole.rolesInForce`: bootstrap-admin miał `roles=[USER]` wszędzie poza
+  bramką `/admin/**`, więc każdy konsument bramkujący po tokenie nie zgadzał się z serwisem, który
+  ten token wystawił (przypadek w `JwtAccessTokenHttpTest`, pada na starym kodzie). `_VerifyCredentials`
+  liczy Argon2 także dla NIEZNANEGO adresu (hash policzony raz przy budowie kroku): dotąd nieznany
+  adres wracał w milisekundę, a znany kosztował pełny hash — enumeracja kont z zegara na endpoincie,
+  który słowami odmawia enumeracji. Stary test PINOWAŁ tę asymetrię (`verifyNoInteractions`).
+- **MFA-2 + MFA-3 — ZROBIONE 2026-09-12.** Kod TOTP działał przez całe okno ±1 krok, więc kto go
+  zobaczył (relay phishingowy, zrzut ekranu, ramię), miał jeszcze do 90 s, żeby wejść OBOK
+  właściciela. Nowy port `SpentTotpSteps` (+ `InMemorySpentTotpSteps`): krok jest do wydania RAZ,
+  `compute` zamiast get-then-put, wymiatanie po godzinie. Sweeper enrolmentów wywalał się NPE na
+  pierwszym oczekującym TOTP (`challenge()` = null) i zabijał zamiatanie DLA WSZYSTKICH —
+  porzucone sekrety TOTP żyły wiecznie i dawały się potwierdzić; każdy wpis ma teraz własny termin
+  (`security.mfa.enrolment.ttl-minutes`, domyślnie 15). `EnrolmentSweeperTest` na starym wyrażeniu
+  rzuca dokładnie tym NPE; prawo `StoresWithADeadlineEvictThemTest` samo złapało nowy store i
+  kazało go sklasyfikować (grepuje istnienie sweepera — dlatego NPE w środku przeszedł niezauważony).
+- **ATK-6 + WIRE-6 — ZROBIONE 2026-09-12.** `state` w OAuth był kluczem po stronie serwera i NICZYM
+  więcej, więc link callbacku działał jak bilet na okaziciela: atakujący zaczynał taniec, podsuwał
+  link ofierze, a przeglądarka ofiary dostawała sesję TOŻSAMOŚCI ATAKUJĄCEGO (session fixation).
+  `/oauth/{provider}/start` ustawia teraz krótkie ciasteczko `oauth_state` (HttpOnly, SameSite=Lax,
+  ścieżka `/oauth`, 10 min), a callback wymaga zgodności — bez tego 400 i ŻADEN flow nie jest
+  konsumowany. Testy niosą ciasteczko jak przeglądarka; nowy przypadek „callback to nie bilet".
+  WIRE-6: kody odzyskiwania miały nieosolony SHA-256 (2^49 kandydatów = godziny na jednym GPU, a
+  każdy kod zastępuje CAŁY łańcuch). Nowy port `RecoveryCodeHasher` + `PepperedRecoveryCodeHasher`
+  (HMAC-SHA256 pod pieprzem `security.mfa.recovery.pepper`) — kluczowany, nie solony, bo kod wydaje
+  się przez WYSZUKANIE hasha. Pod profilem `prod` brak pieprzu wywala boot po nazwie klucza.
+  **UWAGA MIGRACYJNA: kody wydane wcześniej (stary SHA-256) przestają pasować — użytkownicy muszą
+  wygenerować nowe.** To samo przy każdej zmianie pieprzu.
+- **Biblioteka `account-closure` — 2026-09-12.** Słownik zamknięcia konta (7 nazw komunikatów +
+  SELF/ADMIN z asymetrycznym odczytem) był rozpisany w PIĘCIU miejscach: enum w security, `final
+  class RequestedBy` w offboardingu i `private static final String BY_ADMIN` w memes/comments/
+  collections. Nowe repo `shared/account-closure` (czysta Java, zero zależności), wpięte we
+  wszystkie pięć serwisów; tu trzymane W INFRASTRUKTURZE (to słownik DRUTU), domena nietknięta —
+  `DeletionInitiator` zostaje, a `ClosureVocabularyTest` pilnuje, że obie strony mówią to samo.
+  **DO ZROBIENIA PRZEZ ROBERTA: repo nie istnieje na GitHubie** — trzeba je założyć i wypchnąć,
+  zanim CI któregokolwiek z pięciu serwisów zobaczy zielone (checkout + install już dopisane).
+- **LOW, paczka 1 (MFA-11, MFA-12, MFA-15, WIRE-2, WIRE-9, WIRE-12) — ZROBIONE 2026-09-12.**
+  `WebauthnFactor` sprawdza WRESZCIE `Challenge.expiresAt` (TTL był konfigurowalny, udokumentowany
+  i martwy) oraz porównuje `credentialId` asercji z zapisanym; TOTP porównywany stałoczasowo
+  (higiena, nie dziura — 5 prób na bilet). `OidcClient`: `alg=none` odrzucany, a alg asymetryczny
+  przyjmowany tylko dla providera z zadeklarowanym `issuer` (inaczej „nieweryfikowalny" przechodził
+  jako zaufany). JWKS ma `Cache-Control: public, max-age=3600` (godzina = okno nakładki kluczy).
+  `backTo` nie dokleja drugiego `#` — return-URL z własnym fragmentem gubił i stan appki, i token.
+  NIE zrobione świadomie: MFA-4 (brak limitu prób przy potwierdzaniu enrolmentu) — wymaga pola
+  w `PendingEnrolment`, czyli zmiany kształtu portu; okno i tak ogranicza TTL 15 min + elewacja.
+- **LOW, paczka 2 (AUTH-9, AUTH-12, DB-5, DB-7, DB-11) — ZROBIONE 2026-09-12.** `SourceThrottle`:
+  zamiatanie wolnych okien chodziło NA ŚCIEŻCE ŻĄDANIA przy każdym wywołaniu powyżej progu, a w
+  obrębie jednego okna nie ma czego zwolnić — czyli O(n) na żądanie, które nic nie daje; teraz raz
+  na przyrost + twardy sufit 100k (najstarsze okna lecą pierwsze). DB-5: `TimeZone.setDefault(UTC)`
+  w `App.main` — `Instant` idzie do JDBC przez `java.sql.Timestamp`, czyli przez strefę JVM-a, więc
+  serwis z IDE w Europe/Warsaw czytał sagi ze stacku o dwie godziny obok (a tak właśnie pracujemy).
+  DB-7: `V26` dodaje indeksy `sessions(email)` i `sessions(refresh_token_expiration)` — bez nich
+  każde „wyloguj wszędzie", lista sesji i reaper skanowały całą tabelę (i to brak indeksu na email
+  robił z dwóch blokujących zapytań różne plany → zakleszczenie opisane przy `lockFamily`).
+  DB-11: drain outboxu bierze partię (`security.outbox.drain-batch`, 500), nie CAŁEGO zaległego
+  backlogu co sekundę. AUTH-12: javadoc obiecywał nieprzewidywalną długość blokady, którą
+  `Retry-After` podaje co do sekundy — teraz mówi, po co naprawdę jest losowanie.
+- **LOW, paczka 3 — UI (UI-6, UI-8, UI-17, UI-18) — ZROBIONE 2026-09-12.** Panel step-upu mówił
+  „Wrong code." także na TOO_MANY_ATTEMPTS i wygasły bilet — czyli odsyłał człowieka do pola, które
+  już nigdy nie zadziała; teraz rozróżnia i zamyka panel, gdy nie ma czego wpisywać. Podwójny klik
+  liczył się jako DWIE nieudane próby w liczniku brute-force (kto ma wolne łącze, blokował się w
+  połowie limitu) — strażnik `once()` na ref (stan re-renderuje się o rundę za późno); test w
+  `App.tab.test.tsx` pokazuje 3 żądania bez poprawki. Skasowany martwy `src/index.html` z
+  `<app-root>` po Angularze i `.angular/` z `.gitignore`. `SECURITY` czyta teraz kolejno
+  `window.SECURITY_URL` (runtime, tak robi harness i tak może robić deployment przez `/ui-config.js`),
+  `VITE_SECURITY_URL` (build) i dopiero potem compose'owy localhost:8080 — produkcyjny bundle
+  wskazywał na localhost i nikt tego nie widział tylko dlatego, że `dist/` nikt jeszcze nie serwuje.
+- **LOW, paczka 4 — domena (DOM-3, DOM-5, DOM-7) — ZROBIONE 2026-09-12.** `AbstractToken.toString`
+  zwracał SUROWY sekret — pierwsza linijka logu, która wstawi token do napisu, wynosi żywy
+  credential do systemu z własną retencją; teraz zwraca nazwę klasy. `equals` był międzytypowy
+  (AccessToken == RefreshToken o tej samej wartości) — teraz typ jest połową tożsamości tokenu,
+  `hashCode` też. `TokenSecrecyTest` w domenie. DOM-3: `ClientIpResolver` kanonizuje adres (ucina
+  zone id `%eth0` — to nazwa interfejsu TEJ maszyny, nie dzwoniącego) i odrzuca kandydata dłuższego
+  niż kolumna `VARCHAR(64)`: źródła, którego nie da się ZAPISAĆ, nie da się też ograniczyć.
+- **LOW, paczka 5 — testy, które nic nie twierdziły (TEST-8, TEST-9, TEST-14) — ZROBIONE 2026-09-12.**
+  `MalformedEmailHttpTest` sprawdzał tylko „< 500" — 301 na stronę logowania albo 200, które po
+  cichu ZROBIŁO rzecz, też by przeszły; teraz: drzwi odmawiające dają 4xx, dwoje cichych drzwi
+  (`/verify-email/request`, `/reset-password/request`) dają dokładnie to samo 202 co dla obcego
+  adresu, i żadne nie cytuje wnętrza serwisu. Scenariusz „not a twin" twierdził wyłącznie, że ktoś
+  jest zalogowany — asercja o bliźniaku siedziała w kroku INNEGO przykładu i sama robiła drugie
+  logowanie, żeby mieć co porównać; teraz ma własne „the ACCOUNT ... is the one that already
+  existed". Scenariusz enumeracji przy zmianie adresu nie sprawdzał, czy do zajętego adresu NIE
+  poszedł link (porównanie do stanu sprzed żądania, bo adres bywa zasiany rejestracją).
+- **DOM-2 — ZROBIONE 2026-09-12 (decyzja Roberta: pełna naprawa).** Port `UserRepository.updateEmail`
+  ma wreszcie kontrakt na zajęty adres (jak `save`): rzuca `EmailAlreadyTakenException`, NIGDY nie
+  nadpisuje. JDBC tłumaczy 23505 (było: 500 i ten sam link dawał 500 aż do wygaśnięcia), in-memory
+  sprawdza zajętość po formie znormalizowanej (było: CICHE nadpisanie cudzego konta).
+  `ConfirmEmailChange` pyta przed ruszeniem czegokolwiek i łapie wyścig → nowy wynik
+  `EmailTaken`, HTTP 409 `EMAIL_TAKEN`, UI mówi „adres zajęty, poproś o zmianę na inny".
+  Reguła w `change-email.feature` + testy obu adapterów. PRZY OKAZJI: glue confirm-u zapamiętuje
+  token W MOMENCIE WYSŁANIA — skrzynka pamięta tylko ostatni, a w tym scenariuszu adres dostaje
+  własny link rejestracyjny.
+- **DB-8 — ZROBIONE 2026-09-12 (decyzja Roberta: dla wszystkich domen + raport kolizji).**
+  W bibliotece `email`: `LocalPart.normalize` sprowadza część lokalną do małych liter dla KAŻDEJ
+  domeny (reguły providerów — kropki gmaila, `+tagi`, sufiksy yahoo — bez zmian, bo to twierdzenia
+  providera o WŁASNEJ przestrzeni adresów). W security: `UserRepository.findBy` szuka po formie
+  ZNORMALIZOWANEJ (dotąd rejestracja odmawiała duplikatu, a logowanie tego samego adresu inną
+  wielkością liter mówiło „złe hasło"), a `_VerifyCredentials` zwraca ZAPISANĄ pisownię, więc
+  wszystko dalej (weryfikacja adresu, czynniki, sesja, token) trafia w to samo konto.
+  Migracja `V27` przenormalizowuje istniejące wiersze i **ODMAWIA**, jeśli powstałyby kolizje —
+  wtedy trzeba najpierw `docs/db8-case-collisions.sql` i decyzja człowieka, które konto zostaje
+  (migracja nie może tego wybrać za kogoś). `AddressCaseHttpTest` pada na starej regule.
+- **LOW, paczka 6 — build/ops/kontrakty (OPS-13, OPS-14, OPS-17, CFG-9, TEST-10, DOM-10, DOM-11)
+  — ZROBIONE 2026-09-12.** Skasowane: `set-security-domain-version.sh` (ustawiał property, którego
+  nie ma, a per-modułowe wersjonowanie rozjechałoby reaktor — w estacie wszystko jest
+  1.0.0-SNAPSHOT) i katalog `docker-compose/` (sierota bez Kafki, z `.env` i hasłami w PUBLICZNYM
+  repo; prawdziwy stack to `shared/docker-compose.identity.yml`). Pom: wywalona whitelista po
+  rozpuszczonym module `custom-min-password-length`, procesor lomboka, którego nikt nie używa,
+  i zakomentowany import `junit-bom`; pakty mają JEDNĄ wersję (`${pact.version}` — `provider` był
+  4.7.3 obok 4.7.5). Sprostowane: `application.yml` twierdził, że KAŻDY klucz ma trzy szczeble
+  (brute-force/mfa/session/step-up mają dwa), komentarz `RunCucumberTest` mówił o „trzech
+  feature'ach" (jest pięć z dziewiętnastu), javadoc `FailuresCount` opisywał tylko sufit per adres,
+  a port `AuthenticationBlockRepository.create` nie mówił, że to upsert.
+- **LOW, paczka 7 — konfiguracja (CFG-2, CFG-5, CFG-7, CFG-8, CFG-11, CFG-12, CFG-13)
+  — ZROBIONE 2026-09-12.** `CodeTtlMinutes` i `CodeMaxAttempts` mają wreszcie SUFIT (kod ważny
+  tydzień to hasło leżące w skrzynce; sto prób na bilet to nie drugi czynnik) — zakresy opisane
+  w `MfaValueRangesTest` razem z pozostałymi pięcioma VO MFA, które nie miały żadnego testu.
+  `OauthProviderSettings`: URL-e muszą być ABSOLUTNE http(s) (`idp:8091/token` wstawał i wywracał
+  callback 500-ką), a knobki USERINFO na providerze ID_TOKEN są ODRZUCANE zamiast cicho ignorowane;
+  pierwszy test tej klasy (`OauthProviderSettingsRulesTest`). `docs/oauth-providers.md` wymienia
+  `issuer` we wspólnych kluczach (kod sprawdzał `iss`, dokumentacja o kluczu milczała).
+  `StepUpRequirement.parse` SKASOWANY — drabinka parsuje enumy generycznie (`Parse.forType`),
+  a ten drugi parser miał tylko własny test i zero wywołań w main.
+- **LOW, paczka 8 — brzeg HTTP (HTTP-10, HTTP-14, HTTP-15, HTTP-17, HTTP-21) — ZROBIONE 2026-09-12.**
+  Jeden kształt odmowy: `Refusal` — `{"status": KOD}` wszędzie, `error` zostaje OBOK tam, gdzie był
+  (addytywnie wg ADR 0004), a bezciałowe 401 dostały ciało. `X-Correlation-Id` od klienta jest
+  przycinany do 64 znaków i kształtu id (echo + log w każdej linii żądania = kilobajt cudzego tekstu
+  w każdym agregatorze). Jednorazowa elewacja nie jest już wydawana PRZED walidacją: typ czynnika i
+  nowy adres czytane są przed strażnikiem (literówka kosztowała cały łańcuch step-upu). Usuwanie
+  czynnika: podłoga odpowiada NAJPIERW (409 bez wydawania elewacji) i PONOWNIE w transakcji, która
+  usuwa — dwa równoległe usunięcia czytały „jeden ponad podłogą" i oba usuwały. `RefreshCookies`
+  mówi wprost, czego SameSite NIE obejmuje (inny port na localhoście i sąsiedni subdomain to ta sama
+  witryna) i że uczciwą naprawą byłby double-submit, bo ostrzejszej flagi nie ma.
+- **LOW, paczka 9 — link, który nie wygasa, i wiersz, który nie znika (ACC-6, DB-14 cz. 1)
+  — ZROBIONE 2026-09-12.** Wiersz weryfikacji nie niósł ŻADNEJ daty, więc link z zeszłego roku
+  potwierdzał adres tak samo chętnie jak sprzed minuty — i nikt nigdy nie kasował wiersza, którego
+  nikt nie kliknął. V28 dokłada `requested_at` (jak V20 dla resetów hasła) + indeks częściowy;
+  `completeVerification` zwraca `PendingVerification(email, requestedAt)`, a `VerifyEmail` dostaje
+  `Duration` (`security.verification.ttl-hours`, 48) i `Clock` i odrzuca przeterminowany link
+  DOKŁADNIE tak jak nieznany (token i tak jest zużyty — przedstawiony token to zużyty token).
+  `AbandonedVerificationReaper` (30 dni, co godzinę) zamiata TYLKO niezweryfikowane wiersze:
+  zweryfikowany jest stanem KONTA i ginie z kontem, w sadze. Retencja jest celowo dłuższa niż TTL —
+  wygaśnięcie to decyzja i mieszka w use-case'ie, zamiatanie tylko sprząta to, co nie może już
+  znaczyć nic. Testy: dwa nowe w `VerifyEmailTest` (wygasły link, krawędź okna JEST w środku) i
+  przypadek w `RetentionReapersTest` na realnym Postgresie.
+  UWAGA na drugą połowę DB-14: konta, których NIKT nigdy nie zweryfikował, wciąż żyją wiecznie —
+  to decyzja PRODUKTOWA (po ilu dniach kasujemy niepotwierdzone konto?), nie sprzątanie, więc
+  czeka na werdykt właściciela.
+- **LOW, paczka 10 — trwałość (DB-14 cz. 2, DB-15, DB-9, DB-10) — ZROBIONE 2026-09-12.**
+  `password_resets` miały retencję tylko PRZEZ PRZYPADEK: wiersz ginie, gdy link zostanie UŻYTY.
+  Kto poprosił o reset i sobie przypomniał hasło — i każdy adres, który skaner wpisał w publiczny
+  „forgot password" — zostawiał adres i hash na zawsze. `UnclaimedPasswordResetReaper` (7 dni) +
+  V29 (indeks po `requested_at`, bo tabela jest kluczowana adresem).
+  DB-15: dubler sagi liczył wiek do eksmisji od `createdAt`, a tabela od `updated_at` — kasowanie,
+  które szło miesiąc i skończyło się minutę temu, dubler ZAPOMINAŁ, a Postgres pamiętał; rekord
+  niesie teraz `updatedAt`, a `compensateOverdue` stempluje czas werdyktu.
+  DB-9 (testy, których nie było — wszystkie na PRAWDZIWYM Postgresie): jednorazowość TRZECH
+  mailowanych tokenów (reset, zmiana adresu, weryfikacja — dotąd twierdziły to tylko dublery),
+  wyścig „wyloguj wszędzie" kontra rotacja (`revokeAllSessions` to INNA instrukcja niż
+  `revokeFamily` i potrzebuje własnego dowodu — bez `lockSessionsOf` test jest czerwony), oraz
+  `compensateOverdue` na Postgresie (odblokowuje przeterminowane, świeżej sagi NIE rusza).
+  DB-10: rejestracja i mail weryfikacyjny to była JEDNA transakcja za mało — konto się commitowało,
+  a link nie; zatrzymanie serwisu między nimi zostawiało konto, którego właściciel nigdy nie dostał
+  linku, a logowanie żąda zweryfikowanego adresu. Teraz jeden `transactionBoundary.execute`
+  (powiadamiacz i tak pisze do outboxu, więc nie ma tu żadnego wolnego wywołania do trzymania poza
+  transakcją). Dowód: `RegistrationAtomicityTest` — wysyłka pada, po żądaniu NIE MA konta;
+  rozdzielenie transakcji z powrotem zapala go na czerwono.
+- **LOW, paczka 11 — konto, które przestało być kontem (MFA-7, ACC-15, MFA-14, DOM-4)
+  — ZROBIONE 2026-09-13.** MFA-7: łańcuch dowodzi OSOBY, a czy KONTO nadal się loguje to osobne
+  pytanie — i odpowiedź linku #1 jest stara o tyle, ile trwało chodzenie po czynnikach. Kasowanie
+  zgłoszone PO kroku z hasłem dostawało świeżą sesję. Nowy krok `_AccountStillSignsIn` zadaje te
+  same trzy pytania (konto istnieje, nie czeka na usunięcie, adres zweryfikowany) tam, gdzie sesja
+  naprawdę powstaje; odmowa = `InvalidTicket`, czyli to samo, co nieznany bilet (zero enumeracji).
+  ACC-15: publiczny „forgot password" mintował token i WYSYŁAŁ mail na KAŻDY adres, który ktoś
+  wpisał — mail do kogoś, kto nigdy z tej usługi nie korzystał, plus rejestr adresów, którymi ktoś
+  się interesował. Teraz adres bez konta jest cicho pomijany (odpowiedź 202 BEZ ZMIAN — anty-
+  enumeracja mieszka na granicy HTTP), a `ResetPassword` odmawia, gdy konto zniknęło między mailem
+  a kliknięciem (dotąd mówił „hasło zmienione", choć `updatePassword` nie trafiał w żaden wiersz).
+  MFA-14: nowy czynnik dostawał LICZBĘ istniejących zamiast pozycji ZA ostatnią — to to samo tylko
+  dopóki nic nie usunięto; po usunięciu pierwszego dwa czynniki lądowały na jednej pozycji i
+  kolejność łańcucha zależała od tego, co magazyn zwróci pierwsze.
+  DOM-4: reguły domeny miały JEDEN test — doszły dwa (`AddressAndTokenRulesTest`,
+  `UserAndBlockRulesTest`): oktety i kompresja IPv6, strefa i prefiks (celowo przepuszczane —
+  skracanie robi `ClientIpResolver`), pusty token, podłoga ważności, „każdy jest USER-em",
+  niemodyfikowalność zbioru ról, krawędź bloku i próg licznika porażek.
+  ODŁOŻONE: ACC-8 (ostatni ADMIN może zdjąć sobie rolę) — uczciwa naprawa wymaga NOWEGO pytania do
+  portu `UserRepository` („ilu jest adminów?"), czyli zmiany kształtu Twojej domeny → czeka na Twoją
+  decyzję.
+- **LOW, paczka 12 — bezpiecznik, limit i licznik (WIRE-7, AUTH-10, MFA-4) — ZROBIONE 2026-09-13.**
+  WIRE-7: bez `security.jwt.private-key`/`public-key` serwis CICHO generował parę na starcie. W dev
+  to jest w porządku, w deployu to złamana obietnica: cały sens samodzielnego tokenu polega na tym,
+  że INNE serwisy weryfikują go offline po `/.well-known/jwks.json`, a efemeryczna para zmienia się
+  przy każdym restarcie i RÓŻNI SIĘ MIĘDZY REPLIKAMI — konsumenci dostają ważne tokeny, których nie
+  umieją zweryfikować, z niczym w logach. `JwtKeyFuse` (jak `CredentialsFuse`: `@Context` +
+  zadeklarowany profil `prod`) odmawia startu, a poza prodem generowanie jest teraz GŁOŚNE (WARN).
+  Bezpiecznik jest wstrzykiwany do `settingsSnapshot`, żeby odezwał się ZANIM cokolwiek otworzy
+  połączenie — dokładnie tym samym chwytem, co `CredentialsFuse`.
+  AUTH-10: limit step-upu był kluczowany ADRESEM na endpointcie, który WIE, kto woła — czyli jedno
+  biuro dzieliło jeden budżet i niecierpliwy kolega wylogowywał wszystkich zza NAT-a z ich własnych
+  kont. Teraz klucz to dzwoniący (`SourceThrottle.check(String)`), a udana elewacja KASUJE okno
+  (`forgive`) — ta sama reguła, którą poprawne hasło stosuje w strażniku brute-force.
+  MFA-4: potwierdzenie enrolmentu nie miało ŻADNEGO limitu prób — sześciocyfrowy kod dało się
+  przechodzić z prędkością sieci tak długo, jak żył wpis. `PendingEnrolment` niesie `attemptsLeft`
+  (5, jak przy logowaniu), a wyczerpanie kończy próbę.
+  ODŁOŻONE: AUTH-11 (blok z pułapu SOURCE czyści tylko bieżącą parę, więc adres siedzi na pułapie do
+  przesunięcia okna) — uczciwa naprawa potrzebuje `removeAllFor(Source)` w porcie
+  `RejectedAuthenticationRepository`, czyli znowu zmiany kształtu Twojej domeny.
+- **LOW, paczka 13 — prawo zamiast przykładu i dwie rzeczy w przeglądarce
+  (TEST-5, TEST-12, TEST-13, UI-10, UI-11) — ZROBIONE 2026-09-13.**
+  TEST-5: zasięg `AuthorizationFilter` to lista wzorców pisana RĘCZNIE — nic nie wiązało jej ze
+  zbiorem kontrolerów, więc nowy kontroler był chroniony tylko wtedy, gdy ktoś pamiętał, a
+  zapomnienie NIE MA objawów (endpoint działa, testy wysyłają token). `GuardedPathsTest` to prawo:
+  każdy kontroler albo jest za filtrem, albo stoi na liście DELIBERATELY_PUBLIC z powodem. Od razu
+  złapał `/test/clock` (z biblioteki zegara), o którym nie wiedziałem.
+  TEST-13: `AccountDeletionTimeouts` jest `@Requires(notEnv = "test")`, więc ŻADNA suita nigdy go
+  nie uruchamiała — a to jedyna rzecz, która odblokowuje konto, na które werdykt portalu nie
+  przyszedł. Dowody: zamiatanie idzie W TRANSAKCJI (odblokowanie + mail przeprosinowy to jedna
+  jednostka pracy) i tik, który padł, NIE JEST ostatni (dodany `catch` jak w reaperach).
+  TEST-12: `StartAccountDeletion` nie miał żadnego testu — scenariusz przeglądarkowy sprawdzał
+  tylko token WOŁAJĄCEGO, co spełniłoby też unieważnienie jednej sesji. Teraz: blokada PRZED
+  purge'em, `revokeAllSessions` (nie `revokeFamily`), i że żądanie WŁAŚCICIELA gubi warunki.
+  UI-11: uchwytem użytkownika w passkeyu był E-MAIL — dane osobowe zapisane w cudzym urządzeniu,
+  którego ta usługa nie skasuje, a spec ma twardy limit 64 bajtów (dłuższy adres NIE ENROLOWAŁ
+  SIĘ). Serwer mintuje teraz nieprzezroczysty uchwyt (32 B, SHA-256 po `rpId|adres`), adres zostaje
+  tylko jako `userName`, czyli to, co widzi człowiek.
+  UI-10: asercja passkeya nie podawała `rpId`, więc przeglądarka szukała klucza pod domeną STRONY —
+  dobre tylko dopóki `security.webauthn.rp-id` równa się hostowi UI. `WEBAUTHN_RP_ID` w `lib.ts`
+  tą samą drabinką co `SECURITY` (window → VITE → puste = domena strony).
+- **LOW, paczka 14 — co naprawdę jest sprawdzane (AUTH-15, TEST-7, TEST-2) — ZROBIONE 2026-09-13.**
+  AUTH-15: obie reguły liczenia strażnika brute-force były pinowane WYŁĄCZNIE mockami, a mock nie
+  może się pomylić co do zapytania — test mówił „countFailuresOnAccount zwraca 3" i strażnik się
+  tak zachowywał, cokolwiek naprawdę liczył SQL pod spodem. `BruteForceCountingTest` na realnym
+  Postgresie: poprawne hasło kasuje TĘ PARĘ i nic więcej, a pułap per źródło widzi to, czego licznik
+  pary nie widzi nigdy (pięć strzałów w pięć różnych kont). Obie mutacje zapalają go na czerwono.
+  TEST-7: glue rejestracji sądził literały specyfikacji polityką WŁASNEJ roboty
+  (`MinLength(12)`, `SpecialChars("#?!")`), więc `.feature` opisywał wdrożenie, którego nikt nie ma —
+  a README specs mówi wprost, że zmiana `MinLength.DEFAULT` MA te pliki zapalić. Teraz
+  `PasswordPolicy::withDefaults`, a `SpecLiteralsAreRebuildSamplesTest` jest prawem, które tego
+  pilnuje w całej warstwie application.
+  TEST-2: README obiecywał „jeden `RunHttp*Test` na plik", a było 16 suit na 19 plików — zdanie
+  czytało się jak gwarancja, będąc aspiracją. `EverySpecHasAnHttpSuiteTest` trzyma listę trzech
+  wyjątków (`federated-sign-in`, `mfa`, `mfa-passkey`) razem z tym, CO je tymczasem pokrywa; nowy
+  feature bez suity pada, a wyjątek, który przestał być wyjątkiem, też pada.
+  SPRAWDZONE I ODRZUCONE: TEST-6 (rzekomy dryf „a registered USER" między glue przeglądarkową a
+  HTTP) — obie warstwy mają osobny krok „whose EMAIL is not verified yet" od 2026-07-05, a konta w
+  e2e są scenariuszowo-unikalne (`support/account.mjs`), więc Rule 1 verify-email NIE startuje na
+  zweryfikowanym koncie. Zostawiam bez zmian.
+- **LOW, paczka 15 — panel, który pyta serwer zamiast człowieka (UI-14, UI-13) — ZROBIONE
+  2026-09-13.** UI-14: panel step-upu ZAWSZE żądał hasła, a dla akcji z polityką SECOND_FACTORS na
+  koncie, które ma już czynnik, serwer tego hasła NIE SPRAWDZA — odpowiada od razu
+  `FACTOR_REQUIRED`. Ekran prosił więc o poświadczenie, człowiek je wpisywał, i szło do kosza:
+  kłamstwo o tym, co jest weryfikowane, i nawyk, którego nie warto uczyć. Teraz panel po otwarciu
+  zadaje PUSTĄ próbę: odpowiedź to albo łańcuch czynników (pytamy o kod, nigdy o hasło), albo
+  `WRONG_PASSWORD` — czyli hasło naprawdę jest tym, czego chce serwer.
+  UI-13: glue e2e rozstrzygała „nie zażądano step-upu" PIĘCIOSEKUNDOWYM TIMEOUTEM — zgadywanie ze
+  stoperem: to samo mówi o usłudze, która jest po prostu wolna, kosztuje 5 s przy każdym enrolmencie
+  bez dowodu, a na obciążonym CI zamienia prawdziwy monit w ciche pominięcie. Teraz czekamy na
+  JEDNO Z DWOJGA (`prompt.or(proceeded)`), tak jak robi to już `signInCompletingMfa`.
+  ZMIERZONE: cała suita przeglądarkowa 1m22s → 39s (39 scenariuszy, 256 kroków, zielone w obu
+  przebiegach).
+  ODŁOŻONE: MFA-9 (konto passwordless z ZEREM czynników elewuje się dla FULL_CHAIN na samej żywej
+  sesji) — uczciwe wyjścia to albo re-autentykacja u dostawcy (`docs/mfa-design.md` to obiecuje, kod
+  nigdy nie pyta — to FUNKCJA, nie poprawka), albo reguła „konto federacyjne musi mieć czynnik przed
+  akcją destrukcyjną", czyli zmiana produktowa. Twoja decyzja.
+- **LOW, paczka 16 — zdania, które się zestarzały, i kontener na roocie
+  (OPS-6, OPS-18, OPS-21, WIRE-10) — ZROBIONE 2026-09-13.**
+  OPS-6: `Readme.md` (landing page spod kodu QR!) twierdził, że specyfikacje „dziś chodzą z warstwy
+  application" i że „KAŻDA spec chodzi po HTTP". Prawda: 19 plików, 16 po HTTP, 11 w prawdziwej
+  przeglądarce, 5 w warstwie application. Poprawione — i PRZYPIĘTE: `ReadmeCountsTest` liczy jedno
+  i drugie i pada, gdy zdanie przestanie być prawdą (bo zdanie o pokryciu jest warte dokładnie tyle,
+  ile rzecz, która zauważa, że przestało być prawdziwe).
+  OPS-18: `application-dev.yml` domyślał `DB_NAME` na `postgres` — bazę MAINTENANCE klastra. Gołe
+  `java -jar` bez zmiennych nie padało: migrowało schemat tej usługi do NIE TEJ bazy i wyglądało
+  zdrowo. Teraz `security`, czyli to, co nazywa każdy runner i compose.
+  OPS-21: obraz chodził jako root. Nic tego nie potrzebuje (port 8080, zero zapisów, zero instalacji),
+  więc `USER security` (uid 10001) — sprawdzone: `id` w kontenerze i start serwisu z obrazu.
+  WIRE-10: javadoc `TokenHashing` nazywał OBA tokeny 122-bitowymi UUID-ami; to przestało być prawdą,
+  gdy access token stał się JWT — teraz mówi, co jest czym i dlaczego jedno i drugie jest hashowane.
+  SPRAWDZONE I JUŻ NIEAKTUALNE (nic do roboty): OPS-7 (Readme opisuje `Documentation.md` uczciwie
+  jako fotografię przebiegu z 2026-07-02), OPS-9 (`docs/mfa-design.md` ma blok „As built"),
+  OPS-10 (playbook mówi, że `security-application` nie ma `src/main`, a S5 jest zamknięte),
+  MFA-8 (udokumentowane jako celowe w javadoc `MfaChain`).
+- **DECYZJE WŁAŚCICIELA, runda 1 (ACC-8, AUTH-11) — ZROBIONE 2026-09-13, za Twoją zgodą na dwie
+  nowe metody portów.** ACC-8: `UserRepository.countAdmins()` + reguła w `SetUserRoles` — zmiana,
+  która zostawia system BEZ ŻADNEGO admina, jest odrzucana (409 `WOULD_LEAVE_NO_ADMIN`). Warunkowo:
+  gdy deployment deklaruje `security.bootstrap-admins`, admin nadal istnieje (konfiguracją, nie
+  wierszem) i zmiana przechodzi. Nadawanie ról jest samo w sobie czynnością admina, więc ostatni
+  admin zdejmujący sobie rolę zamykał drzwi od środka.
+  AUTH-11: `removeAllFor(Source)` + `_BruteForceGuard` kasuje licznik CAŁEGO źródła, gdy blok
+  postawił PUŁAP (blok z pary nadal kasuje tylko parę — to jest dokładnie to rozróżnienie, którego
+  brakowało). Dotąd adres zostawał NA pułapie: blok mijał, pierwsza porażka znowu go wyzwalała, i
+  blok liczony w minutach zachowywał się jak liczony w godzinach. Pytanie o pułap zadawane jest
+  dalej tylko wtedy, gdy limit pary nie został osiągnięty — ten sam short-circuit co `||`, więc
+  żadna próba nie płaci za zapytanie, którego nie potrzebuje.
+- **DECYZJA WŁAŚCICIELA, runda 2 (MFA-9) — ZROBIONE 2026-09-13: „wymagać czynnika".**
+  Konto federacyjne nie ma hasła (dostawca JEST linkiem #1), a bez czynnika nie ma też drugiego —
+  więc „potwierdź, że to ty" nie miało o co zapytać i elewowało się na samej żywej sesji. Akcje
+  FULL_CHAIN (kasowanie konta, przeniesienie na inny adres, dźwignie admina) odpowiadają teraz 409
+  `ENROL_A_FACTOR_FIRST`. Akcje SECOND_FACTORS CELOWO nie są odmawiane — enrolment czynnika jest
+  jedną z nich i odmowa zamknęłaby użytkownika w pokoju bez klamki (to samo rozumowanie, co
+  `AuthorizationFilter` stosuje przy podłodze MFA). UI zamyka panel i mówi, co ZROBI robotę.
+  Decyzja dopisana do `docs/mfa-design.md` jako „Decision 4" razem z odrzuconą alternatywą
+  (re-auth u dostawcy — to funkcja, a dokument do dziś sugerował, że już działa).
+- **DECYZJA WŁAŚCICIELA, runda 3 (DB-14 cz. 2) — ZROBIONE 2026-09-13: „configurability, Rebuild =
+  wartość rekomendowana przez prawo".** Konto, którego adresu NIKT nigdy nie potwierdził, żyło
+  wiecznie: adres i hash hasła trzymane bez celu, i blokujące ten adres komuś, kto może naprawdę
+  jest jego właścicielem. Teraz `UnverifiedAccountDays` w drabince (`security.retention.unverified.
+  account.days`, 3-365) — DWA szczeble, nie trzy: skrócenie retencji KASUJE konta, więc to sprawa
+  release'u albo deploymentu, a nie przycisku w panelu. Default = 30 dni, bo prawo daje ZASADĘ
+  („nie dłużej, niż wymaga cel", art. 5(1)(e) RODO), a nie liczbę — a 30 to tyle samo, co retencja
+  samego WIERSZA weryfikacji, więc jedna liczba opowiada jedną historię: miesiąc po tym, jak ktoś
+  wpisał adres i nigdy go nie potwierdził, nie zostaje nic.
+  V30 dokłada `users.created_at` (istniejące wiersze backfillowane na DZIŚ — bezpieczny kierunek,
+  nikt nie traci konta przez zmianę schematu). Żniwiarz idzie przez `DeleteAccount`, a nie przez
+  DELETE: konto to nie jeden wiersz. Sagi nie otwiera — niezweryfikowane konto nigdy się nie
+  zalogowało, więc w portalu nie ma czego kasować. Wiersze `pending_deletion` pomija (nie wyścigamy
+  się z sagą, która już je kasuje).
+- **DECYZJE WŁAŚCICIELA, runda 4 (DOM-9, DOM-13, AUTH-13) — ZROBIONE 2026-09-13.**
+  DOM-9: `UserRegistration` skasowany — martwy rekord, nic go nigdy nie używało.
+  DOM-13: ważność tokenu miała PODŁOGĘ (1 h) i żadnego SUFITU, więc 87600 godzin (dekada) wchodziło
+  z jednej literówki w properties i nic tego nie zauważało. Sufit jest teraz PER RODZAJ, bo to dwie
+  różne prace: access 24 h (tego tokenu nie da się cofnąć przed wygaśnięciem — weryfikatory offline
+  trzymają go przy JWK i nigdy nie pytają, więc dłużej to już nie token sesji, tylko hasło z datą
+  ważności), refresh 8760 h (ten jest odwoływalny i „zostań zalogowany na telefonie" liczy się w
+  tygodniach).
+  AUTH-13: każde odświeżenie dawało PEŁNE nowe okno, więc sesja dotykana raz dziennie żyła
+  w nieskończoność — „zalogowany od marca" był stanem, którego nic nie kwestionowało. Ważność
+  refresh tokenu odpowiada na INNE pytanie (jak długo sesja może stać bezczynnie), a żadna liczba
+  okien bezczynności nie sumuje się w obietnicę, że po drugiej stronie wciąż jest ta sama osoba.
+  `MaxSessionLifetimeHours` (drabinka, `security.session.max.lifetime.hours`, default 720 h = 30 dni,
+  dwa szczeble — żywy szczebel = przycisk „wyloguj wszystkich" dla kogokolwiek, kto akurat ma sesję
+  admina). V31 dokłada `sessions.family_started_at`, DZIEDZICZONE przez każdego następcę (inaczej
+  sufit byłby dekoracją, bo każde odświeżenie kupowałoby nowy). Przekroczenie = `Expired` + rewokacja
+  rodziny (zostawienie zrotowanych wierszy zamieniłoby zwykłą starość w raport KRADZIEŻY).
+  Dowód na Postgresie: `JdbcAdaptersTest` — następca dziedziczy datę startu linii.
+- **DECYZJA WŁAŚCICIELA, runda 5 (MFA-10) — ZROBIONE 2026-09-13.** Javadoc `EnrolledFactor`, V11 i
+  `docs/mfa-design.md` OBIECYWAŁY „encrypted at rest", a kolumna trzymała ziarno TOTP jawnie. To nie
+  jest zwykły wyciek poświadczenia: ziarno nie jest czymś, co się raz przedstawia — ono MINTUJE kody,
+  na zawsze i bezgłośnie, więc kopia tabeli była kopią każdej aplikacji-autentykatora w niej i żaden
+  telefon by tego nie pokazał. `TotpSecretCipher` (AES-GCM, `security.mfa.secret-key`, base64
+  16/24/32 B) szyfruje przy zapisie i deszyfruje przy odczycie W ADAPTERZE JDBC.
+  Materiał pozostałych czynników CELOWO zostaje jawny: adres/telefon to miejsce, DOKĄD idzie kod
+  (i po nim `reassign` rozpoznaje wiersz przy przenosinach konta), a klucz publiczny passkeya jest
+  publiczny z definicji. W dublerze in-memory nie ma szyfrowania, bo „at rest" to zdanie o dysku,
+  a ten go nie ma.
+  BEZ MIGRACJI DANYCH: wartość bez znacznika `gcm:v1:` czytana jest jak dawniej i staje się
+  szyfrogramem przy najbliższym zapisie wiersza — nikomu nie przestaje działać autentykator w dniu
+  wdrożenia klucza. Pod zadeklarowanym profilem `prod` brak klucza ODMAWIA startu (jak pieprz do
+  kodów odzyskiwania). UTRATA klucza kosztuje wszystkie czynniki TOTP — ci użytkownicy enrolują się
+  od nowa; klucz należy trzymać tam, gdzie hasło do bazy.
+- **DECYZJA WŁAŚCICIELA, runda 6 (OPS-19) — ZROBIONE 2026-09-13.** Micronaut NIE MA osobnego portu
+  zarządzania — `/prometheus` jedzie tym samym konektorem, co API — więc endpoint odpowiadał
+  każdemu, kto dosięgnie usługi: czasy per trasa (profil opóźnień logowania to podpowiedź, co jest
+  próbowane), nasycenie puli, życiorys JVM i podgląd NA ŻYWO, czy atak działa. `MetricsAccessFilter`
+  wymaga tokenu (`security.metrics.token`, porównanie w stałym czasie), a `MetricsTokenFuse` odmawia
+  startu bez niego pod zadeklarowanym profilem `prod`. Filtr ISTNIEJE tylko wtedy, gdy token jest
+  ustawiony, więc stos compose (Prometheus po prywatnej sieci) działa bez konfigurowania czegokolwiek
+  — w `observability/prometheus.yml` dopisany komentarz, jak podać token, gdy deployment go ustawi.
+  `/health` NIE jest strzeżony i to jest osobna decyzja: oddaje `{"status":"UP"}` i nic więcej, a
+  sonda, która potrzebuje poświadczeń, zawodzi dokładnie w tych awariach, dla których istnieje.
+- **DECYZJE WŁAŚCICIELA, runda 7 (DOM-8, DOM-12, DOM-14, AUTH-2) — ZROBIONE 2026-09-13.**
+  DOM-14: `normalizedEmail` jest teraz WYLICZANY w kompaktowym konstruktorze `User` z adresu,
+  cokolwiek poda wołający. To tożsamość, po której konto się ZNAJDUJE (unikalny indeks i każde
+  wyszukanie), więc `User`, którego własny rekord się z nią nie zgadza, to konto, które istnieje i
+  nie da się do niego zalogować. Wszystkie miejsca konstrukcji podawały spójną wartość i nic ich do
+  tego nie zmuszało — teraz nic nie musi.
+  DOM-8: skasowane trzyargumentowe `SessionTokens.createFor`, które po cichu wybierało
+  `AccessTokenMint.RANDOM`. W produkcji NIC go nie wołało (wszędzie JWT), więc jedynym skutkiem było
+  to, że garść testów ćwiczyła token, którego ta usługa nie wydaje, czytając się, jakby ćwiczyła
+  prawdziwy.
+  DOM-12: `AuthorizationTokenExpiration` → `AccessTokenExpiration`, `AuthorizationDataRepository` →
+  `SessionRepository` (i adaptery: `JdbcSessionRepository`, `InMemorySessionRepository`). Jeden
+  słownik: token dostępu i sesje. Raport `docs/review-2026-09-08.md` CELOWO zostaje ze starymi
+  nazwami — to zapis tego, co znaleziono 2026-09-08, a nie żywy dokument.
+  AUTH-2: `PendingAuthentication` pamięta `Source`, z którego zaczęło się logowanie, a błędny dowód
+  idzie przez `_UpdateBruteForceRecords` na tę samą parę, co błędne hasło. Pięć prób NA BILET nigdy
+  nie było limitem dla człowieka: kto doszedł do kroku czynnikowego, ma już hasło, więc świeży bilet
+  kosztuje jedno żądanie i sześciocyfrowy kod dawało się chodzić w tym tempie. `Source` jest
+  `Optional`, bo przez ten sam rekord przechodzi łańcuch STEP-UPU, który nie jest zgadywaniem konta
+  (ma swój limit per dzwoniący) — puste znaczy „to nie jest próba logowania", a nie „ktoś zapomniał
+  ustawić".
+
+- **Otwarte z raportu — stan na 2026-09-13, po SIEDMIU rundach decyzji.** Wszystkie 98 znalezisk
+  zamknięte albo zapisane jako świadoma decyzja. Zostają CZTERY świadome „nie", każde z powodem:
+  ATK-8 (limity po DOKŁADNYM adresie, IPv6 rotuje w /64 — przejście na podsieć to decyzja o tym,
+  kogo jeszcze blokujemy razem z atakującym), MFA-13 (licznik podpisów i flaga UV — synchronizowane
+  passkeye raportują licznik 0, a wymaganie UV zderza się z `userVerification: 'preferred'`, którego
+  używa UI), UI-9/TEST-11 (wylogowanie cross-origin nie kończy sesji serwera — udokumentowane przez
+  właściciela w TRZECH miejscach), OPS-21 cz. 2 (nazwa jara na sztywno — zmiana wersji wywala się
+  GŁOŚNO na `COPY`, więc to nie jest cicha pułapka).
+
+## ~~Otwarte — pilne (2026-08-08)~~ — ZAMKNIĘTE, sekcja była NIEAKTUALNA (sprostowane 2026-09-12)
+
+Ta sekcja przez miesiąc twierdziła, że wygaszanie linków zmiany adresu i czynnikowa połowa
+step-upu w UI „czekają na gałęzi `wip-email-change-expiry`". Git mówi co innego: `f94c99d`
+(przywrócenie paczki), `a8ef840` (UI dokańcza czynnikową połowę step-upu — trzy akcje, jedna
+droga) i `163755f` (wygaszanie linków wraca na main z dokończonym UI) SĄ na main. Gałąź robocza
+została w tyle i nic z niej nie zostało do przeniesienia.
+
+Co z tamtej listy jest dziś prawdą: nic. Czynnikowa połowa step-upu w UI ma od 2026-09-12 także
+gałąź passkeya (UI-5) i sześć testów w `security-ui/src/App.tab.test.tsx`.
+
+Zostaje jedna rzecz warta pamięci, bo to pułapka harnessu, a nie dług: browser e2e **nie chodzi
+w CI** (potrzebuje całego stosu — `run-e2e.sh`), więc reguła, która żyje tylko w warstwie
+przeglądarkowej, nie jest bramką. Wiążący dowód = warstwa HTTP/JVM.
+
+## Otwarte — use case'y / security
+
+- ~~OAuth/social login~~ — ZROBIONE (2026-07-05): taniec Authorization Code + PKCE (S256) na
+  brzegu — `/oauth/{provider}/start` + `/oauth/callback` (state jednorazowy, TTL 10 min, nonce,
+  return-URL tylko z allowlisty, access token wraca FRAGMENTEM, refresh jak zwykle w HttpOnly
+  cookie); `OidcClient` (czysty JDK HttpClient) wymienia kod i waliduje id_token: HS256
+  weryfikowany client-secretem (stub), algorytmy asymetryczne (Google RS256) na mocy
+  bezpośredniego kanału TLS wg OIDC Core 3.1.3.7 — iss/aud/exp/nonce twardo zawsze. Provider =
+  czysty config (@EachProperty `security.oauth.providers.*`): w compose „google" wskazuje STUB
+  IdP (`microservice-idp`, Python stdlib, :8091 — 8090 zajęte przez race-sim), prod podmienia
+  URL-e i client-id/secret. Use case `FederatedSignIn` + VO `ProviderIdentity` +
+  `FederatedIdentityRepository` (migracja V10; jedno konto — wiele tożsamości): świeży email →
+  konto od urodzenia zweryfikowane i BEZHASŁOWE (hash odrzuconego losowego sekretu; hasło można
+  nadać resetem); konto ZWERYFIKOWANE → auto-link, hasło nietknięte; NIEZWERYFIKOWANE (squatter)
+  → przejęcie: link + verified + hasło skasowane + revoke wszystkich sesji; email bez poręczenia
+  providera nie tyka niczego; pending-deletion odmawia jak przy haśle.
+  `federated-sign-in.feature` (5 scenariuszy, warstwa application) + `OauthFlowHttpTest` (pełny
+  taniec po drucie z fake'owym providerem: replay state'a, zły nonce, cudzy return-URL) + krok
+  w infra-smoke (PASS live). Mail „already registered" podpowiada logowanie społecznościowe /
+  ustawienie hasła resetem; UI galerii ma przycisk „Sign in with Google". ZOSTAJE na później:
+  realny Google (client-id/secret od usera — ZABLOKOWANE na usera, przepis w docs/oauth-providers.md).
+  ~~Odświeżanie linku federacyjnego przy change-email~~ — ZROBIONE (2026-07-07, playbook S2),
+  ale UWAGA: decyzja została później ODWRÓCONA i ten akapit był nieaktualny do 2026-09-12.
+  Dziś potwierdzenie zmiany adresu PRZEPINA tożsamości federacyjne na nowy adres
+  (`FederatedIdentityRepository.relinkAll`), bo link jest kluczowany trwałym `subject` providera —
+  odpięcie osierociłoby tożsamość (provider dalej podaje swój stary adres, więc auto-link nigdy by
+  nie trafił w przeniesione konto). Prawo ruchu jest spisane w `AddressKeyedStoresTest`. Reguła w change-email.feature (HTTP glue), unit w
+  ConfirmEmailChangeTest, sekcja w docs/oauth-providers.md.
+  - ~~Uogólnienie na Facebook/GitHub/GitLab~~ — ZROBIONE (2026-07-06): `identity-source`
+    per provider — `ID_TOKEN` (Google/GitLab, jak dotąd) albo `USERINFO` (Facebook/GitHub:
+    exchange kodu → access_token → GET userinfo; mapowanie pól `subject-field`/`email-field`/
+    `email-verified-field`, opcjonalny `emails-url` GitHub-shaped — primary verified wygrywa,
+    `assume-email-verified` jako świadoma decyzja deploymentu — bez niej brak flagi =
+    `EMAIL_NOT_VOUCHED`); `scope` i `label` per provider; `GET /oauth/providers` → UI galerii
+    rysuje przyciski dynamicznie (dodanie providera = tylko config). W compose drugi provider
+    „github" na TYM SAMYM stubie ćwiczy USERINFO; smoke kryje obie ścieżki (PASS live).
+    Przepisy configu realnych providerów: [docs/oauth-providers.md](docs/oauth-providers.md).
+    `OauthFlowHttpTest`: 6 testów (dotychczasowe + hub/emails-url + faces/assume + strict/refused
+    + listing providerów). Ustawienia providera = `OauthProviderSettings` w WARSTWIE CONFIG
+    (framework-free rekord, defaulty+walidacja w konstruktorze; widoczny w glosariuszu UL);
+    infra tylko binduje propertisy (@EachProperty shim → @EachBean w BeanFactory).
+- **MFA: łańcuch czynników, metody PLUG-AND-PLAY, minimum per rola** — flagowy „wow"; największy
+  otwarty temat. PEŁNY PROJEKT: [docs/mfa-design.md](docs/mfa-design.md) (2026-07-05). Skrót:
+  port `AuthenticationFactor` + `FactorRegistry` = dodanie metody (TOTP/Google Authenticator,
+  WebAuthn…) to nowy adapter-bean, zero zmian w rdzeniu (email/SMS to tylko dwa adaptery); egzekutor
+  łańcucha (`PendingAuthentication` + ticket, jak OauthFlowStore) mintuje sesję dopiero po ostatnim
+  ogniwie; `MfaPolicy` wymusza minimum per rola (USER 1 / MODERATOR 2 / ADMIN 3, konfig) w TRZECH
+  miejscach — brama logowania (sesja `enrolment_only` dla niedopełnionych), grant roli (`/me`
+  `mfaCompliant`), usuwanie czynnika (podłoga); bootstrap-admin grace do pierwszego enrollmentu.
+  Fazy A–G w dokumencie. 4 decyzje usera ROZSTRZYGNIĘTE (2026-07-05): floor liczy cały łańcuch
+  z pierwszym; niedopełniony → sesja enrolment-only; federacyjni do PEŁNEGO floora (OAuth się nie
+  liczy); pierwszy factor = e-mail (TOTP w fazie B).
+  - ~~FAZA A~~ — ZROBIONE (2026-07-05): port `AuthenticationFactor` + `FactorRegistry` +
+    egzekutor łańcucha (`PendingAuthentication` + jednorazowy ticket w `PendingAuthenticationStore`)
+    + `EmailCodeFactor` nad portem `CodeChannel` (outbox `AUTH_CODE` prod / capturing test);
+    `Authentication` rozgałęzia po bramie zweryfikowanego maila (brak czynników = sesja jak dawniej;
+    są = 202 `MFA_REQUIRED` + ticket), `ContinueAuthentication` domyka; enrollment `EnrolFactor`
+    (start wysyła kod, confirm pieczętuje). `ChallengeCodeConfig` (TTL/próby/długość, default 5/5/6)
+    w warstwie config; kody SHA-256 hash. Migracja V11 `enrolled_factors`. Endpointy: `/authenticate`
+    (202), `/authenticate/factor`, `/account/factors` (list/enroll/confirm/remove). Mail `AUTH_CODE`
+    w microservice-email. UI: security-ui (dwustopniowe + enrollment) i galeria memów (krok kodu).
+    Testy: `mfa.feature` (application) + `MfaHttpTest` (po drucie) + krok w infra-smoke (live).
+  - ~~FAZA B~~ — ZROBIONE (2026-07-05): `EmailCodeFactor` → generyczny `CodeFactor(kanał)` — email i
+    SMS to dwie instancje jednej klasy (nowy kanał = nowy bean, nie nowy factor); `HttpSmsCodeChannel`
+    → microservice-sms; `TotpFactor` (RFC 6238/HMAC-SHA1, Google Authenticator) — factor posiadania,
+    enrollment mintuje sekret + otpauth URI, nic nie wysyła. Port zyskał `beginEnrolment`
+    (`EnrolmentSetup`: secret, co pokazać, opcjonalny challenge). Testy: `TotpFactorTest` (wektor RFC),
+    `MfaHttpTest` (TOTP po drucie), smoke (TOTP live). UI: manager enrollmentu (wszystkie oferowane
+    metody). SMS: unit+HTTP (stub nie ma czytelnej skrzynki na live).
+  - ~~FAZA C~~ — ZROBIONE (2026-07-05, drugi twardy wymóg usera): `MfaPolicy` (min per rola USER 1/
+    MOD 2/ADMIN 3, konfig); `MfaCompliance` liczy cały łańcuch (hasło jako #1 + czynniki; konta
+    federacyjne PASSWORDLESS — nowa tabela V12, ustawiana przy federated create/takeover, czyszczona
+    przy resecie hasła → OAuth NIE liczy się do floora). Egzekwowanie w 3 miejscach: brama
+    (`AuthorizationFilter` wpuszcza niedopełnionego tylko do /me i /account/factors, reszta 403
+    `MFA_ENROLMENT_REQUIRED` — sesja realna, „zabudowana"), grant (`/me` niesie
+    mfaCompliant/requiredFactors/haveFactors), usuwanie (409 `WOULD_BREAK_MFA_FLOOR`). Bootstrap-admin
+    grace do pierwszego enrollmentu. UI nudge. `MfaRoleFloorHttpTest` (pełny łuk) + `MfaPolicyRulesTest`.
+    ODSTĘPSTWO od doc: żywe sprawdzanie compliance w filtrze zamiast trwałej flagi `enrolment_only`
+    na wierszu sesji — prościej (bez zmian schematu sesji) i poprawniej (aktualizuje się natychmiast
+    po enrollmencie, bez re-logowania).
+  - ~~FAZA F~~ — ZROBIONE (2026-07-05): OAuth to tylko ogniwo #1. `_MfaChain` → publiczny `MfaChain`
+    (jeden bean: logowanie hasłem, federacyjne, kontynuacja). `FederatedSignIn` po rozwiązaniu konta
+    sprawdza czynniki: brak → sesja, są → `MfaRequired` + ticket w tym samym store; callback OAuth
+    zwraca `#mfaTicket`, galeria dokańcza przez `/authenticate/factor`. Zamyka dziurę z fazy C
+    (federacyjny admin z czynnikami był wpuszczany bez nich). Scenariusz w federated-sign-in.feature.
+  - ~~FAZA E~~ — ZROBIONE (2026-07-05): step-up. `StepUpPolicy` (per akcja NONE/SECOND_FACTORS/
+    FULL_CHAIN; delete=FULL_CHAIN, change-password=SECOND_FACTORS, config). `StepUp` odpala łańcuch na
+    żywej sesji (FULL_CHAIN = najpierw hasło, potem czynniki przez wspólny `MfaChain`), po ostatnim
+    czynniku mintuje jednorazowy `SessionElevation` na access-tokenie. `DeleteAccountController` konsumuje
+    elewację przez `StepUpGuard` (403 `STEP_UP_REQUIRED` bez niej — skradziona sesja nie usunie konta).
+    Endpointy `/account/step-up` (+`/factor`). `StepUpHttpTest` (ścieżka hasłowa i czynnikowa), dialog
+    delete w galerii robi step-up, saga w smoke poprzedzona step-upem. Live PASS.
+  - ~~FAZA D — admin reset~~ — ZROBIONE (2026-07-05): `PUT /admin/users/{email}/factors/reset`
+    (ADMIN + step-up), `EnrolledFactorRepository.removeAll`; użytkownik po resecie spada pod podłogę.
+    `AdminFactorResetHttpTest`.
+  - ~~recovery codes~~ — ZROBIONE (2026-07-06), dokładnie jako czynnik ALTERNATYWNY (nie ogniwo):
+    `MfaChain.verify` po odmowie czynnika próbuje skonsumować nieużyty recovery code (normalizacja
+    case/myślników → SHA-256 → warunkowy UPDATE, więc jednorazowość jest atomowa) — sign-in
+    continuation i step-up łapią to bez własnych zmian. `RecoveryCodeRepository` (V13, spent
+    zostaje wierszem — UI mówi „N z 10"), `GenerateRecoveryCodes` (alfabet bez homoglifów, grupy
+    po 5) + `RecoveryCodeConfig` (warstwa config). `POST /account/recovery-codes` pokazuje batch
+    RAZ i unieważnia stary; `GET` = licznik. UI: security-ui generuje/liczy + hint na ekranie
+    kodu; galeria hint. Testy: mfa.feature (2 scenariusze), MfaHttpTest (spend/replay/regeneracja),
+    infra-smoke krok. Szczegóły w docs/mfa-design.md.
+  - ~~FAZA G — MFA w e2e security-ui~~ — ZROBIONE (2026-07-06): mfa.feature (5 scenariuszy, w tym
+    oba recovery) przez realny UI (cucumber-js/Playwright, wspólne Gherkiny); backdoor
+    `/test/mailbox/signin-code` (AUTH_CODE); recovery codes zbierane ze strony po generacji —
+    jedyne miejsce, gdzie plaintext istnieje. 22/22 e2e. Znalazło i naprawiło realny bug UI:
+    fetch `r.ok` true dla 202 → gałąź MFA martwa po rebuildzie na Reacta (signIn + submitFactor).
+    Poza zakresem e2e security-ui: TOTP (MfaHttpTest+smoke), step-up przy delete (galeria+smoke;
+    security-ui nie ma UI delete).
+  - ~~FAZA H — WebAuthn / passkeys~~ — ZROBIONE (2026-07-07, S3 playbooka): flagowy dowód
+    plug-and-play — czynnik INNEGO KSZTAŁTU (podpis, nie kod) dodany BEZ biblioteki i BEZ
+    migracji, egzekutor łańcucha nietknięty. Dwie addytywne korekty portu: `enrolledMaterial`
+    default (sekret przychodzi z proofem — klucz publiczny generuje przeglądarka) i
+    `Challenge.publicData`→`challengeData` w czterech 202 (klient dostaje nonce do podpisu).
+    `WebauthnFactor` czysto JDK: SPKI z `getPublicKey()` (zero CBOR/COSE), assertion =
+    `SHA256withECDSA` nad `authenticatorData‖SHA256(clientDataJSON)`; credential w
+    `EnrolledFactor.secretMaterial`. UI: `navigator.credentials.create/get` (enroll w jednym
+    geście, sign-in automatyczny). Testy: WebauthnFactorTest (klucz P-256 gra przeglądarkę),
+    MfaHttpTest (enroll→sign-in po drucie + podrobiony assertion), mfa-passkey.feature e2e na
+    wirtualnym authenticatorze Chromium. Gotcha: dwukropki URL w defaulcie `@Value` → backticki.
+    Faza H w [docs/mfa-design.md](docs/mfa-design.md). 178 JVM + 36 e2e zielone.
+- **Step-up auth** — WPISANE W PROJEKT MFA (faza E, [docs/mfa-design.md](docs/mfa-design.md)):
+  ten sam egzekutor łańcucha odpalony na żywej sesji → jednorazowy znacznik `elevated`; polityka
+  per akcja w configu NONE/SECOND_FACTORS/FULL_CHAIN (delete-account=FULL_CHAIN,
+  change-password=SECOND_FACTORS, enrol/remove i admin-reset=SECOND_FACTORS). Odpowiedź na dawne
+  pytanie usera (credentials vs credentials+kod): to WARTOŚĆ W CONFIGU per akcja, nie jedno-lub-drugie.
+- ~~Role/permissions (RBAC)~~ — ZROBIONE W CAŁOŚCI. Serwerowo (2026-07-04, model 1 płaski):
+  enum `Role` (USER/MODERATOR/ADMIN) w domenie; `User` niesie zbiór ról (USER zawsze), port
+  `setRoles`, kolumna `roles` (migracja V8, comma-set, in-memory i JDBC), `/me` zwraca role —
+  źródło prawdy dla innych serwisów. Endpoint admina `PUT /admin/users/{email}/roles` (use case
+  `SetUserRoles`) za drugą bramą: wołający musi być ADMIN — z DB albo z bootstrapu
+  `security.bootstrap-admins`. Strona konsumencka TEŻ ZROBIONA (2026-07-04, w sub-repo):
+  memes (`50557b7`…`5dcdf70`) i comments (`3dcfc2a`) mają `Caller{email,roles}` z `/me`,
+  DELETE mema/komentarza — autor swój, MODERATOR/ADMIN cudzy; testy + Gherkin w obu.
+  Powiązany otwarty temat w memes/todo.md: flaga NSFW (moderator ukrywa/odkrywa treść).
+- ~~Enumeracja na `/register`~~ — ZROBIONE (2026-07-05, decyzja usera): zajęty adres odpowiada
+  IDENTYCZNIE jak świeża rejestracja (201, `{"status":"CHECK_YOUR_MAILBOX"}`, bez `id`); prawda
+  idzie mailem do właściciela adresu — niezweryfikowany dostaje świeży link (pewnie zgubił
+  pierwszy), zweryfikowany notkę „masz już konto" (nowy port `RegistrationNoticeNotifier`,
+  outbox typ `ALREADY_REGISTERED`, szablon w microservice-email). Hash liczony zawsze przed
+  sprawdzeniem zajętości (bez kanału czasowego). Rule 3 register.feature przepisana na „quiet
+  refusal"; kroki delete-account („email nie jest wolny"/„można znów") dowodzą przez kanał
+  mailowy, nie status. `RegisterEnumerationHttpTest` przybija nierozróżnialność.
+  Analogiczna enumeracja na `/account/email` — TEŻ ZAMKNIĘTA (2026-07-05): zajęty adres
+  odpowiada jak świeży request (202 EMAIL_CHANGE_LINK_SENT), właściciel dostaje notkę mailem
+  (ten sam port `RegistrationNoticeNotifier`); reguła + scenariusz w change-email.feature.
+- ~~Hardening rejestracji (throttling)~~ — ZROBIONE (2026-07-04): throttle okna stałego per-IP
+  (`security.registration.max-per-window` default 5 / `window-minutes` 15, 0 wyłącza),
+  sprawdzany PRZED kosztowną pracą (Argon2 + insert), 429 + Retry-After; źródło = spoof-odporny IP
+  z `ClientIpResolver`. Unit (3) + HTTP test (429) + live na PG.
+- ~~Throttling na pozostałe kosztowne wejścia~~ — ZROBIONE (2026-07-05): `RegistrationThrottle`
+  uogólniony do `SourceThrottle` (pakiet `system/throttle`); osobne instancje (@Named, osobne
+  okna — burst na jeden endpoint nie zjada drugiego) dla `/register`,
+  `/reset-password/request` (`security.password-reset.*`) i `/verify-email/request`
+  (`security.verification.*`), oba defaulty 5/15 min, 0 wyłącza; 429 + Retry-After
+  (TOO_MANY_RESET_REQUESTS / TOO_MANY_VERIFICATION_REQUESTS). Celowo OSOBNO od guarda
+  uwierzytelniania (tamten broni kont przed zgadywaniem haseł, ten serwisu przed wolumenem).
+  `RequestThrottleHttpTest` (3), unit throttle bez zmian. Compose podnosi limit rejestracji
+  do 100 (smoke rejestruje kilka kont z jednego IP).
+- ~~JWT self-contained~~ — ZROBIONE (2026-07-05) jako UZUPEŁNIENIE, nie zamiana: wartość access
+  tokena to podpisany JWS (EdDSA/Ed25519, czyste JDK — zero nowych zależności) z iss/sub/roles/
+  iat/exp/jti; port domenowy `AccessTokenMint` (RANDOM w unit testach, `JwtAccessTokenMint` w
+  infra), mintowany przy authenticate I refresh. Security dalej traktuje wartość jako opaque
+  (hash w bazie, introspekcja) ⇒ logout/revoke-all natychmiastowe. Inne serwisy MOGĄ weryfikować
+  offline: `GET /.well-known/jwks.json` (OKP/Ed25519, kid) — kompromis świadomy: offline nie
+  widzi logoutu/zmiany ról do wygaśnięcia; kto chce natychmiastowości, woła `/me` jak dotąd.
+  Klucze: `security.jwt.private-key`/`public-key` (base64 PKCS#8/X.509), brak = efemeryczne
+  (restart psuje TYLKO weryfikację offline — w stronę bezpieczną). `JwtAccessTokenHttpTest`:
+  weryfikacja podpisu przez JWKS + logout zabija ważny podpisowo token. Zweryfikowane live.
+  EWENTUALNY NASTĘPNY KROK: konsument (memes/comments) weryfikujący offline zamiast /me.
+- ~~`Source` jako podmiot domeny~~ — ZROBIONE (2026-07-05): VO `Source(ipAddress, userAgent)`;
+  TOŻSAMOŚĆ = samo IP (jedyne pole w equals/hashCode — klucz bloków i liczników; podsieć/ASN
+  mogą kiedyś doostrzyć tę oś), OBSERWOWANE = userAgent (forensyka, celowo POZA equals — pin
+  w `_BruteForceGuardTest`: rotacja user-agenta trafia w TEN SAM blok). `AuthenticationRequest`/
+  `AuthenticationBlock`/guard/repozytoria biorą `Source`; kontroler dokłada nagłówek User-Agent
+  z brzegu. Persystencja: `rejected_authentications.user_agent` (V9) — RODO: żyje dokładnie tak
+  długo jak rekordy porażek (czyszczone razem); bloki trzymają samo IP (odtworzony `Source` bez
+  kontekstu obserwowanego). Zweryfikowane live (V9 + kolumna wypełniana). Rozważane kiedyś:
+  `DeviceFingerprint`/`RequestContext`, gdy obserwowanych atrybutów przybędzie.
+
+## Otwarte — specs: rejestracja → aktywacja jako PROCES (2026-09-02, do przemyślenia)
+
+Ustalenia z rozmowy 2026-09-02 (Robert: „nie mam teraz do tego głowy" — nic nie wdrożone).
+Kontekst i reguła katalogu: `specs/README.md` (literały = próbki stopnia Rebuild, tagi asymetryczne).
+
+**Problem.** `register.feature` Rule 1 („the USER is REGISTERED") jest zielony, ale dowodzi tylko
+odpowiedzi systemu: w application typ `Registered`, w infra 201, w UI widoczny ekran skrzynki.
+Nikt nie mówi, że zarejestrowany ≠ aktywny i że logowanie odmawia do kliknięcia linku.
+Sam proces nie ma domu — jego fragmenty siedzą w cudzych plikach: `verify-email.feature` Rule 3
+(„Registration automatically starts VERIFICATION") i `authenticate.feature` Rule 7 (poprawne dane
+nie wystarczą przy niezweryfikowanym e-mailu).
+
+**Kierunek (Roberta): trzy pliki — dwa atomowe + orkiestrator.** Analogia: atomowe use-case'y vs
+orkiestrator. UWAGA do analogii: `security-application` NIE ma `src/main` — to wyłącznie runner
+i glue testów bez HTTP; orkiestracja w kodzie (Authentication+ContinueAuthentication, MfaChain)
+żyje w `security-system`. Dla specs analogia i tak działa: plik atomowy = kontrakt jednego
+polecenia, plik procesu = sekwencja poleceń i kamienie milowe między nimi.
+
+1. `register.feature` — zostaje kontraktem rejestracji (nie dopisywać do niego aktywacji).
+2. `activation.feature` — to DZIŚ `verify-email.feature` (właściwy token aktywuje, śmieciowy
+   odrzuca). Decyzja: nazwa od mechanizmu (verify-email) czy od skutku biznesowego (activation)?
+   Reszta plików nazywa się od skutku → skłaniamy się do zmiany nazwy.
+3. Plik procesu (nazwa robocza `register-and-activate.feature`; nie „e2e" — to technika, nie
+   biznes; alternatywa `account-activation.feature` / onboarding): rejestracja → logowanie
+   ODMAWIA (nieaktywne) → link z maila → logowanie PRZECHODZI. Nie powtarza reguł atomowych,
+   tylko je sekwencjonuje. Rule 3 z verify-email i Rule 7 z authenticate to kandydaci do
+   przeniesienia (decyzja o duplikacji otwarta).
+   Warstwy: **infra + UI** (proces potrzebuje poczty; testowa skrzynka + `?verify=` już są).
+   Application NIE — nie ma transportu i nie powinno go udawać. Tag `@ui`.
+
+**Odrzucone po drodze.** Klasa `Fact` (wyrocznia stanu przez repozytoria: user istnieje, hash
+zgadza się, aktywowany). W procesie zbędna: udane logowanie po kliknięciu dowodzi istnienia,
+hasła i aktywacji naraz, bez zaglądania do bazy; odmowa przed kliknięciem dowodzi, że aktywacja
+nie jest automatyczna. Sonda hashy na drucie = zły pomysł. `User` nie ma pola statusu —
+aktywacja żyje w `EmailVerificationRepository.isVerified(email)`.
+
+**Blokada techniczna — glue infra nie jest atomowe (to trzeba zrobić PRZED plikiem procesu):**
+- każdy `RunHttp*Test` ładuje JEDEN pakiet glue; każda klasa kroków startuje własny
+  `EmbeddedServer` w `@Before`;
+- `@Given("a registered USER {string} with password {string}")` ma **13 kopii** w 13 pakietach
+  (`the USER has AUTHENTICATED` — 6, `REGISTRATION is rejected` — 2, itd.);
+- runner procesu ładujący pakiety registration + verification dostanie od Cucumbera
+  DuplicateStepDefinitionException, a gdyby przeszedł — dwa serwery na scenariusz.
+Refaktor: rozdzielić AKCJE (obiekty Javy: zarejestruj, odczytaj token ze skrzynki, zaloguj) od
+KROKÓW (wiązania zdań); jeden wspólny kontekst (serwer, klient, ostatnia odpowiedź) dzielony przez
+picocontainer (już w `bdd-test-starter`); wspólne kroki w jednym pakiecie `feature.common`.
+Runner procesu = własna klasa z listą kilku pakietów glue, zero nowych akcji.
+Ten refaktor broni się sam (spłaca 13 kopii) i można go zrobić niezależnie od decyzji o procesie.
+**UI już tak działa**: cucumber-js ładuje `e2e/steps/*.mjs` naraz przez jeden World; kolizja
+zdania = ambiguous → suita by padła; skoro zielona, kroki są tam współdzielone. Plik procesu
+w UI zadziała bez przebudowy.
+
+**Najmniejszy pierwszy krok, gdy Robert wróci:** sam TEKST pliku procesu, bez glue — sprawdzić,
+czy sekwencja czyta się jako historia. Powiązane otwarte: password-policy przez 3 warstwy
+(brak: kroki application dla `SetSetting` + panel admina w security-ui).
+
+## Use case'y na podobieństwo `Register` (2026-11-05, gałąź RegisterRebuild)
+
+Dekret Roberta: „Przerób usecase'y w security na podobieństwo Register. Na pierwszy ogień
+ChangePassword." Wzorzec: wynik sędziego w nazwanej zmiennej (`createPasswordHashResult`), bramka
+`errors().isEmpty()`, `Rejected` niesie listę kodów i politykę, wobec której sądzono; linie łamane
+jak w `273f693`.
+
+- [x] `ChangePassword` — STAN OBECNY (werdykty Roberta z tego dnia, po kolei): wynik to sealed
+      `Result` ZAGNIEŻDŻONY w klasie use case'u („ChangePasswordResult uczyń wewnętrzną klasą
+      Result w ChangePassword wzorem Register"), z czterema rekordami: `Changed()`,
+      `UserNotFound()`, `WrongPassword()`, `Rejected(passwordErrors, policy)`. Sukces jest
+      nazwany (`return new Result.Changed()`), brak konta i złe hasło to WARIANTY wyniku, nie
+      wyjątki („UserNotFound i WrongPassword powinny być jego częścią"), każdy warunek w osobnym
+      `if`. Brzeg zlewa oba w jedno ramię `switch` i odpowiada `400
+      FAILED_AUTHENTICATION_ATTEMPT` (było `WRONG_CURRENT_PASSWORD`), bez szczegółów pod brute
+      force. `ChangePasswordResult.java` skasowany.
+      ODRZUCONE po drodze: rekord `Result(errors, policy)` z sukcesem jako pustą listą („to
+      wygląda jeszcze gorzej! Gdzie info, że udało się zmienić hasło?") i wyjątki domenowe.
+      ZMIANA DRUTU: przy słabym haśle `422 {"passwordErrors": [{"KOD": parametr}]}` (kształt
+      `/register`, `SecurityController.passwordErrors`) zamiast `400 {"status":"WEAK_PASSWORD"}`.
+      Wymaganie: `password-policy.feature` („every place a password is established measures
+      against the new floor") — goły kod nie mówił, jaka podłoga obowiązuje. UI pokazuje złamane
+      reguły tą samą listą co rejestracja. Reguła w `change-password.feature`.
+      ZAMKNIĘTE (Robert 2026-11-05: „Niech będzie FAILED_AUTHENTICATION_ATTEMPT"): nazwa
+      odpowiedzi brzegu zostaje `FAILED_AUTHENTICATION_ATTEMPT`, nie
+      `UserNotFoundOrPasswordDoesNotMatch`.
+- [x] `ResetPassword` — zmiana drutu (`422 passwordErrors` na `POST /reset-password`, token nie
+      przepada na odrzuconym haśle, reguła w `reset-password.feature`) i wynik w klasie.
+- [x] `RequestEmailChange` — tylko nazwy i łamanie linii (`admitEmailResult`); `Email` zostaje
+      skonstruowany na brzegu, bo literówka nie może zjeść jednorazowej elewacji (HTTP-10).
+- [x] `RequireRole` — wymuszone kasacją `libs`: `List<RoleError>` zamiast `Outcome<Set<Role>>`.
+- [x] REGUŁA WYNIKU (werdykt Roberta 2026-11-05: „Miejsce zgoda. Rodzaj też zgoda. Działaj"):
+      `Result` zawsze ZAGNIEŻDŻONY w klasie, nigdy osobny plik `XResult`. Rodzaj zależy od roli:
+      sędzia (`AdmitEmail`, `CreatePasswordHash`) oddaje REKORD `Result(wartość, errors, …)`,
+      czytany `if`-em na `errors().isEmpty()`; use case oddaje SEALED `Result` z nazwanymi
+      wariantami, w tym nazwanym sukcesem. Wykonane: dziesięć osobnych plików przeniesionych do
+      klas (`Register`, `ResetPassword`, `RequestEmailChange`, `ConfirmEmailChange`,
+      `Authentication`, `ContinueAuthentication`, `Authorize` (było `AuthorizationResult`),
+      `FederatedSignIn`, `RefreshSession`, `VerifyEmail`); `SetUserRoles` i `SetSetting` z rekordu
+      z enumem `Status` na sealed (`Updated`/`NoSuchUser`/`WouldLeaveNoAdmin`,
+      `Accepted`/`Refused`/`UnknownKey`). `StepUp` i `EnrolFactor` już tak miały. Drut bez zmian.
+- [x] WNĘTRZA ujednolicone względem `Register` i `ChangePassword` (dekret Roberta 2026-11-05:
+      „security ma z 20 usecaseów. Trzeba je ujednolicić względem Register i ChangePassword").
+      Reguły zdjęte z tych dwóch klas: pola → konstruktor (parametr na linię, wcięcie 20 spacji,
+      gdy parametrów jest więcej niż jeden) → `Result` → `execute`; pusta linia po sygnaturze i
+      między krokami; `if (` / warunki po jednym na linię, operator na końcu / `) {`; każda odmowa
+      to wczesny `return new Result.X(...)`; argumenty będące wywołaniami łamane po jednym na
+      linię; `Optional` jako zmienna lokalna z `isEmpty()`/`get()`, bez łańcuchów
+      `map`/`filter`/`orElseGet` i bez lambd sterujących przepływem; komentarz „dlaczego" nad
+      instrukcją, nie na jej końcu. Zachowanie i drut bez zmian, testy nietknięte.
+      Przepisane: `Authentication` (zagnieżdżony `switch` zastąpiony wczesnymi zwrotami),
+      `ContinueAuthentication`, `Authorize`, `VerifyEmail`, `RefreshSession`,
+      `ConfirmEmailChange`, `ResetPassword`, `RequestEmailChange`, `RequestEmailVerification`,
+      `RequestPasswordReset`, `Logout`, `StartAccountDeletion`, `DeleteAccount`, `SetUserRoles`,
+      `SetSetting`, `EnrolFactor`, `StepUp`, `FederatedSignIn`, konstruktor
+      `GenerateRecoveryCodes`. Bez zmian, bo nie ma w nich czego łamać: `ListActiveSessions`,
+      `RevokeAllSessions`, `DisplayNames`.
+      ŚWIADOME ODSTĘPSTWA: (1) `Authentication` czyta dwa sealed zdarzenia domenowe kroków
+      pakietowych przez `instanceof` w `if` (`Blocked blocked`, `!(… instanceof Valid valid)`),
+      bo kroki `_BruteForceGuard` i `_VerifyCredentials` zwracają sealed
+      `BruteForceProtectionEvent`/`AuthenticationEvent`; zdjęcie tego wymaga zmiany typów w
+      `security-domain`. (2) Strumienie zostały tam, gdzie przekształcają dane, a nie sterują
+      przepływem (`GenerateRecoveryCodes`, `DisplayNames`, `EnrolFactor#candidate`, ostatnie
+      wyrażenie `SetUserRoles`). (3) Kroki pakietowe `_*` w `authentication` nietknięte.
+      Regresja z Dockerem: 19 + 42 + 112 + 36 + 341, zero pominiętych.
+
+- [x] USE CASE MÓWI WPROST, BRZEG UKRYWA (werdykt Roberta 2026-11-05, „1 ok"): każda odmowa ma
+      własny wariant, a kontroler zlewa te, których drut nie może rozróżniać, w jedno ramię
+      `switch`. `ResetPassword`: `TokenNotFound`/`TokenExpired`/`UserNotFound` (było 3×
+      `InvalidToken`); `ConfirmEmailChange`: `TokenNotFound`/`TokenExpired`/`AccountClosing`;
+      `VerifyEmail`: `TokenNotFound`/`TokenExpired` (było `Rejected`); `RequestPasswordReset`:
+      `LinkSent`/`UserNotFound` (było `void`); `RequestEmailVerification`:
+      `LinkSent`/`AlreadyVerified` (było `void`). Drut bez zmian. Nowy
+      `TokenRefusalsLookAlikeHttpTest` pilnuje, że przeterminowany link resetu i weryfikacji
+      odpowiada dokładnie jak nieznany.
+- [x] DROBIAZGI („5 poprawić"): `FederatedSignIn.Result.Refused(String)` rozbity na
+      `EmailNotVouched`/`AccountClosing` (fragment URL bez zmian); pola repozytoriów nazwane po
+      typie we wszystkich klasach `security-system` (`userRepository`, `sessionRepository`,
+      `enrolledFactorRepository`, …); jeden zapis „za stary link":
+      `MailedLinkExpiration` w `security-domain` i `pending.expiration(ttl).hasExpired(clock)`
+      w trzech use case'ach.
+- [x] MAŁE USE CASE'Y JAKO SPOSÓB NA WSPÓŁDZIELENIE (werdykt Roberta 2026-11-05: „Wychodzi na
+      to, że plan zaakceptowany. Koduj!"):
+      (2) `VerifyPassword` (`security-system/password`), sędzia z rekordem
+      `Result(User user, CredentialsStatus status)`; enum `CredentialsStatus` (`PASSED`,
+      `USER_NOT_FOUND`, `WRONG_PASSWORD`) w `security-domain`. Do 2026-11-06 była to lista
+      `errors` i enum `CredentialsError` bez `PASSED` (pod tą nazwą występuje w starszych
+      wpisach); werdykty Roberta z tego dnia: „lista jest zbędna" oraz „Daj 3 stany zamiast
+      error: passed i dwa errory", żeby `switch` w `ChangePassword` nie potrzebował `null`. Zawsze liczy jeden hash, także dla
+      nieistniejącego konta. Zastąpił trzy rozjechane miejsca: `_VerifyCredentials` (skasowany z
+      testem), `ChangePassword` (stracił `HashAlgorithmPort`: teraz repozytoria + dwa use case'y,
+      jak `Register`) i `StepUp#passwordMatches`. Jeden bean dla wszystkich trzech.
+      (4) `OpenMfaChain` (`security-system/mfa`), rekord `Result(ticket, nextFactor,
+      challengeData)`; WYMAGA `Source`. Używają go `Authentication` i `FederatedSignIn`, więc
+      `FederatedSignIn.execute` dostał `Source` (z `OauthController`) i złe kody po logowaniu
+      przez dostawcę trafiają do liczników brute force. Dowód: `OpenMfaChainTest`; testu HTTP
+      przez pełny taniec OAuth nie ma.
+      (3) `StepUp` rozbity na `StepUp` (start) + `ContinueStepUp`; `EnrolFactor` na `EnrolFactor`
+      (start) + `ConfirmEnrolment`. Każda klasa ma jedno `execute` i `Result` tylko z wariantami,
+      które mogą z niej przyjść; z kontrolerów zniknęły martwe ramiona.
+      ZMIANY ZACHOWANIA: zmiana hasła i step-up odpowiadają teraz na nieistniejące konto w tym
+      samym czasie co na istniejące; konto w trakcie usuwania jest w `Authentication` osobnym
+      `if` i pytane o STAN PO ZAPISANEJ pisowni adresu (było: po wpisanej).
+      Regresja z Dockerem: 19 + 42 + 116 + 36 + 343, zero pominiętych; e2e 42 scenariusze.
+- [x] DOKOŃCZENIE (Robert 2026-11-05: „Dokończ"):
+      `PresentProof` (`security-system/mfa`) — trzeci mały use case, jeden protokół „dowód przeciw
+      biletowi" dla logowania i step-upu: rekord `Result(chain, List<ProofError> errors,
+      chainCompleted)`; enum `ProofError` (`INVALID_TICKET`, `WRONG_PROOF`, `TOO_MANY_ATTEMPTS`) w
+      `security-domain`. Wąski port `ChainTickets` (łańcuch pod biletem): `PendingAuthenticationStore`
+      go rozszerza, `StepUpStore` oddaje widok `chains()`. `ContinueAuthentication` i
+      `ContinueStepUp` zostały cienkie: mapują błędy na swoje warianty i robią to, co tylko ich
+      (wpis do liczników i sesja; elewacja). Test `PresentProofTest` (6 przypadków).
+      `_BruteForceGuard.execute` zwraca `Optional<AuthenticationBlock>` (blokada w mocy albo
+      nic), więc w `Authentication` nie ma już żadnego `instanceof`.
+      SKASOWANE martwe typy domenowe: `AuthenticationEvent`, `BruteForceProtectionEvent` (cały
+      pakiet `domain.event`) i `Credentials`. W `AuthenticationEvent` był todo „bring permits
+      back whenever you are ready to introduce security notifications" (rozbicie `Invalid` na
+      brak konta i złe hasło): to rozróżnienie żyje teraz w `CredentialsError`, a powiadomienia
+      bezpieczeństwa pozostają pomysłem do zrobienia.
+      NIUANSE ZACHOWANIA: wpis złego kodu do liczników brute force następuje teraz PO zużyciu
+      próby (było przed); podmiana łańcucha step-upu idzie przez atomowe `update`, więc bilet
+      zamknięty w międzyczasie nie jest wskrzeszany.
+      Regresja z Dockerem: security 19 + 42 + 122 + 36 + 343, zero pominiętych; pełny build
+      kernela 823 testy, zero pominiętych; e2e 42 scenariusze.
+- [x] RESZTKI (Robert 2026-11-05: „Zostało coś?"): kroki pakietowe `_*` w `authentication`
+      przeszły przez te same reguły, więc odstępstwo (3) z punktu o wnętrzach już nie obowiązuje:
+      `_BruteForceGuard` (konstruktor, `if (`, stojąca blokada jako lokalny `Optional` zamiast
+      `.filter`), `_AccountStillSignsIn`, `_GenerateSession`, `_UpdateBruteForceRecords`. Bez
+      zmian, bo jednolinijkowe: `_CleanBruteForceRecords`, `_RequireVerifiedEmail`. Zachowanie bez
+      zmian. Martwe `_VerifyCredentials` poprawione w żywych dokumentach: `Readme.md` tutaj,
+      `portal/PODRECZNIK.md` (2 miejsca), `portal/PODRECZNIK-ETAP-2.md`; komentarz w
+      `portal/microservice-memes/memes-ui/src/api.ts` mówi `RefreshSession.Result`. Dokumenty
+      datowane (`BLEDY-*`, `PRZEGLAD-*`, `PLAN-*`, `docs/`) zostają, jak były.
+      Regresja z Dockerem: 19 + 42 + 122 + 36 + 343, zero pominiętych.
+- [x] WERDYKTY KOŃCOWE (Robert 2026-11-05: „Commituj. Nazwy ok. Niech będzie
+      FAILED_AUTHENTICATION_ATTEMPT. Repo do wyjebania. Testy http narazie w dupie."):
+      nazwy nowych typów ZATWIERDZONE (`VerifyPassword`, `CredentialsError`, `OpenMfaChain`,
+      `PresentProof`, `ChainTickets`, `ProofError`, `ContinueStepUp`, `ConfirmEnrolment`,
+      `MailedLinkExpiration`); status na drucie zostaje `FAILED_AUTHENTICATION_ATTEMPT`;
+      całość zacommitowana na `RegisterRebuild`.
+- [x] STAN ZAMIAST LISTY, `switch` ZAMIAST `if` (werdykty Roberta 2026-11-06: „Daj 3 stany
+      zamiast error: passed i dwa errory", „czytelniej będzie kiedy case success zwróci {}
+      zamiast metody prywatnej", „Zatwierdzam. To samo z resztą use case zrób"): sędzia oddaje
+      enum STANU z nazwanym sukcesem `PASSED`, a use case czyta go INSTRUKCJĄ `switch`: odmowa to
+      `case X -> { return new Result.X(); }`, sukces to `case PASSED -> {}`, dalej kod leci w tej
+      samej metodzie. Żadnego `null` jako „brak błędu" i żadnych metod prywatnych na ciąg dalszy.
+      Enumy: `CredentialsStatus` (był `CredentialsError`), `ProofStatus` (był `ProofError`),
+      `RoleStatus` (był `RoleError`) w `security-domain`; `PasswordStatus` w `password-domain` i
+      `EmailStatus` w `email-domain` (`PASSED`/`REJECTED`, wyliczane akcesorem `Result.status()` z
+      listy `errors`, która zostaje, bo reguł może paść kilka naraz).
+      Przepisane: `ChangePassword`, `ResetPassword`, `RequestEmailChange`, `Authentication`,
+      `StepUp` (prywatne `passwordMatches` wciągnięte do `execute`), `ContinueAuthentication`,
+      `ContinueStepUp`, `RefreshSession` (po `SessionStatus`), `RequireRole.check` z `RoleGuard`.
+      `PresentProof.Result(chain, ProofStatus status, chainCompleted)` zamiast listy `errors`.
+      ŚWIADOME ODSTĘPSTWA: trzy (`Register`, `ContinueAuthentication#writeDownWrongProof`,
+      `Optional`/`boolean`), opisane szczegółowo w następnym punkcie.
+      KOSZT: instrukcja `switch` po enumie nie jest sprawdzana przez kompilator na komplet ramion;
+      nowy stan w enumie przeszedłby po cichu do ścieżki sukcesu i złapie go dopiero test.
+      Drut bez zmian. Regresja z Dockerem: email 22, password 28, security 19 + 42 + 122 + 36 +
+      343, pominięty 1 (niżej). E2E UI nie puszczane.
+- [ ] TRZY ODSTĘPSTWA OD WZORCA „stan + `switch`" (opisane 2026-11-06 na prośbę Roberta; każde
+      czeka na jego werdykt). Wzorzec: sędzia oddaje enum stanu, use case czyta go instrukcją
+      `switch`, sukces to `case PASSED -> {}`. Niżej trzy miejsca, w których tak NIE jest: jak
+      jest, dlaczego, czym można to zdjąć i co rekomenduję.
+
+      **(1) `Register#execute` czyta dwóch sędziów jednym `if`-em.**
+
+      Jak jest:
+
+      ```java
+      if (
+              !admitEmailResult.errors().isEmpty() ||
+              !createPasswordHashResult.errors().isEmpty()
+      ) {
+          return new Result.Rejected(
+                  admitEmailResult.errors(),
+                  createPasswordHashResult.errors(),
+                  createPasswordHashResult.policy());
+      }
+      ```
+
+      Dlaczego: obaj sędziowie są pytani ZAWSZE. Formularz pokazuje błędy adresu i hasła w jednej
+      rundzie, a hasło jest haszowane przed `existsBy`, żeby zajęty adres odpowiadał w tym samym
+      czasie co wolny. Odmowa to JEDEN wariant `Rejected(emailErrors, passwordErrors, policy)` z
+      obiema listami, z których co najmniej jedna jest niepusta. `switch` skacze po jednym
+      stanie, a tu decyduje alternatywa dwóch.
+
+      Czym można to zdjąć:
+
+      (a) Dwa płaskie `switch`-e pod rząd, oba z tym samym zwrotem. Zachowanie identyczne, bo
+          każdy bierze obie listy. Cena: ten sam `return new Result.Rejected(…)` napisany dwa
+          razy, czyli sześć linii duplikatu.
+
+          ```java
+          switch (admitEmailResult.status()) {
+              case REJECTED -> {
+                  return new Result.Rejected(
+                          admitEmailResult.errors(),
+                          createPasswordHashResult.errors(),
+                          createPasswordHashResult.policy());
+              }
+              case PASSED -> {}
+          }
+
+          switch (createPasswordHashResult.status()) {
+              case REJECTED -> {
+                  return new Result.Rejected(
+                          admitEmailResult.errors(),
+                          createPasswordHashResult.errors(),
+                          createPasswordHashResult.policy());
+              }
+              case PASSED -> {}
+          }
+          ```
+
+      (b) `switch` zagnieżdżony w `switch`-u: cztery kombinacje, z których trzy to ta sama
+          odmowa. Ten kształt Robert odrzucił 2026-11-04 („jeszcze gorzej").
+
+      (c) Zostawić `if`, ale pytać o stan zamiast o listę, żeby słownictwo było to samo co w
+          reszcie use case'ów:
+
+          ```java
+          if (
+                  admitEmailResult.status() == EmailStatus.REJECTED ||
+                  createPasswordHashResult.status() == PasswordStatus.REJECTED
+          ) {
+          ```
+
+      Rekomendacja: zostawić jak jest albo (c). `Register` to klasa-wzorzec napisana przez
+      Roberta, a (a) dokłada jej duplikat.
+
+      **(2) `ContinueAuthentication` ma metodę prywatną `writeDownWrongProof(chain)`.**
+
+      Jak jest:
+
+      ```java
+      switch (presentProofResult.status()) {
+          case INVALID_TICKET -> { return new Result.InvalidTicket(); }
+          case TOO_MANY_ATTEMPTS -> {
+              writeDownWrongProof(chain);
+              return new Result.TooManyAttempts();
+          }
+          case WRONG_PROOF -> {
+              writeDownWrongProof(chain);
+              return new Result.WrongProof(
+                      chain.attemptsLeft());
+          }
+          case PASSED -> {}
+      }
+      ```
+
+      Dlaczego: zły dowód ma trafić do liczników brute force tak samo jak złe hasło (para adres +
+      konto, od której łańcuch wystartował), i dotyczy to DWÓCH stanów: `WRONG_PROOF` i
+      `TOO_MANY_ATTEMPTS`. `INVALID_TICKET` zapisu nie robi, bo nie ma łańcucha, więc nie ma kogo
+      obciążyć; `PASSED` też nie. Sam zapis to sześć linii, bo `chain.lockoutSubject()` jest
+      `Optional`-em (ten sam typ łańcucha obsługuje step-up, który nie jest próbą na koncie),
+      plus czterolinijkowy komentarz „dlaczego". Przed zmianą był to jeden
+      `if (!presentProofResult.errors().isEmpty())` przed zwrotami, czyli dokładnie ten `if` na
+      wyniku sędziego, który wzorzec usuwa.
+
+      To NIE jest drabina cofnięta w `ChangePassword` (metoda prywatna jako ciąg dalszy
+      `execute`): tu `execute` dalej czyta się od góry do dołu, a metoda robi jeden efekt uboczny
+      i nic nie zwraca.
+
+      Czym można to zdjąć:
+
+      (a) Wkleić sześć linii zapisu do obu ramion: duplikat razem z komentarzem.
+
+      (b) Jedno ramię `case TOO_MANY_ATTEMPTS, WRONG_PROOF -> { zapis; … }`, a w środku drugi
+          `if` po tym samym stanie, żeby wybrać wariant. Czyli skok po stanie wewnątrz skoku po
+          stanie.
+
+      (c) Przenieść obsługę `Optional`-a do kroku pakietowego: przeciążenie
+          `_UpdateBruteForceRecords.execute(PendingAuthentication chain)`, które samo pyta o
+          `lockoutSubject()`. Oba ramiona mają wtedy jedną linię i use case nie ma żadnej metody
+          prywatnej:
+
+          ```java
+          case TOO_MANY_ATTEMPTS -> {
+              updateBruteForceRecords.execute(chain);
+              return new Result.TooManyAttempts();
+          }
+          ```
+
+      Rekomendacja: (c), jeśli metoda prywatna razi, bo kroki `_*` są od takich rzeczy. Inaczej
+      zostawić.
+
+      **(3) `Optional` i `boolean` dalej czyta `if`.**
+
+      Dlaczego: `switch` potrzebuje enuma albo typu sealed. Po `boolean` Java 25 nie skacze bez
+      `--enable-preview` (sprawdzone na JDK 25.0.2: „primitive patterns are a preview feature
+      and are disabled by default"), a `Optional` nie ma stanu, po którym dałoby się skakać.
+      Żeby to zmienić, każde takie miejsce musiałoby dostać własny dwustanowy enum powtarzający
+      `isEmpty()` albo `true`/`false`, czyli typ-nosiciel, jakich w use case'ach nie dokładamy.
+
+      Co zostało na `if` (stan na 2026-11-06):
+
+      - `Optional` z repozytorium albo magazynu („jest albo nie ma"): `ResetPassword`
+        (`pendingReset`, `userRepository.findBy`), `VerifyEmail` (`pendingVerification`),
+        `ConfirmEmailChange` (`pendingEmailChange`), `RefreshSession` (`storedSession` oraz
+        `sessionTokens` z warunkowej rotacji), `Logout` (`session`), `Authorize` (`accessGrant`),
+        `SetUserRoles` (`user`), `SetSetting` (`liveKey`), `EnrolFactor` i `ConfirmEnrolment`
+        (`factor`, `enrolment`), `ContinueStepUp` (`stepUpPending`), `FederatedSignIn`
+        (`existing`), `Authentication` (`authenticationBlock` z `_BruteForceGuard`).
+      - `boolean` z repozytorium albo kroku pakietowego: `existsBy` (`Register`,
+        `RequestEmailChange`, `ConfirmEmailChange`, `RequestPasswordReset`), `isPendingDeletion`
+        (`Authentication`, `FederatedSignIn`, `ConfirmEmailChange`), `isVerified`
+        (`Authentication` przez `_RequireVerifiedEmail`, `RequestEmailVerification`),
+        `_AccountStillSignsIn.isTrueOf` (`ContinueAuthentication`), `identity.emailVerified()` i
+        `linked` (`FederatedSignIn`), `wouldLeaveNoAdmin` (`SetUserRoles`).
+      - Upływ czasu: `expiration(ttl).hasExpired(clock)` w `ResetPassword`, `VerifyEmail` i
+        `ConfirmEmailChange`; `refreshTokenExpiration().hasExpired(clock)` i `isPastItsWholeLife`
+        w `RefreshSession`.
+      - Pusta lista czynników: `factors.isEmpty()` w `Authentication` i `FederatedSignIn`,
+        `enrolled.isEmpty()` w `StepUp`.
+      - Potwierdzanie enrolmentu: `factor.get().verify(…)` i `attemptsLeft() <= 0` w
+        `ConfirmEnrolment`.
+
+      Cztery miejsca z tej listy nie są zwykłym „jest albo nie ma" i są kandydatami, gdyby iść
+      dalej:
+
+      (a) `PresentProof.Result.chainCompleted`: `boolean` obok stanu, czytany `if`-em po
+          `switch`-u w `ContinueAuthentication` i `ContinueStepUp`. Dałoby się go wciągnąć do
+          `ProofStatus` jako dwa sukcesy (`CHAIN_COMPLETED`, `FACTOR_DUE`), ale wtedy KAŻDE ramię
+          zwraca wynik, nie ma `case PASSED -> {}`, a instrukcja `switch` wymaga martwego
+          `return`/`throw` za sobą albo formy `return switch`, którą Robert cofnął.
+
+      (b) `_BruteForceGuard.execute` oddaje `Optional<AuthenticationBlock>` („blokada w mocy albo
+          nic"). To sędzia, tylko że jego odmowa niesie dane; stan obok bloku oznaczałby
+          rekord-nosiciel wokół `Optional`-a.
+
+      (c) `StepUp` czyta enum `StepUpRequirement` (`NONE`, `SECOND_FACTORS`, `FULL_CHAIN`) przez
+          `==` w trzech warunkach, z czego dwa są złożone (np. `requirement == FULL_CHAIN &&
+          enrolled.isEmpty() && isPasswordless`). `switch` po samym wymaganiu rozbiłby je na
+          zagnieżdżone `if`-y w ramionach.
+
+      (d) `StepUp`: `passwordAttempt == null` znaczy „hasła nie podano" i jest ostatnim `null`-em
+          w roli stanu. Zdjęcie: `StepUp#execute` bierze `Supplier<PlaintextPassword>` jak
+          `ChangePassword`, a `VerifyPassword.verify(email, supplier)` już dziś nazywa hasło,
+          które się nie konstruuje, `WRONG_PASSWORD`. Zmiana sięga kontrolera step-upu.
+
+      Rekomendacja: (d) warto zrobić, bo usuwa `null`; (a)–(c) zostawić.
+- [ ] `DisplayNamesPactProviderTest` jest pomijany po cichu: szuka paktów w
+      `../../author-directory/pacts`, a od przenosin 2026-09-28 leżą w
+      `portal/portal-libs/author-directory/pacts`. Poprawić ścieżkę w `@PactFolder` i w
+      `consumerPactsCheckedOut` (zauważone 2026-11-06, czeka na werdykt).
+- [ ] ODŁOŻONE („narazie"): test HTTP na liczniki brute force po logowaniu przez dostawcę
+      (dziś dowodzi tego tylko `OpenMfaChainTest`; pełnego tańca OAuth z drugim czynnikiem na
+      drucie nikt nie jedzie).
+- [ ] Repo `jrobertgardzinski/libs` na GitHubie: werdykt to KASACJA. Kolejność: najpierw
+      `RegisterRebuild` musi trafić na `main`, bo `main` tego repo (workflow CI, pomy, lista
+      klonowania w `Readme.md`) wciąż buduje się z `libs`.
+
+## Otwarte — nazwy pól po wprowadzeniu portu odczytu (2026-09-02, drobne)
+
+**ZAMKNIĘTE 2026-11-04 (werdykt Roberta, gałąź RegisterRebuild):** pola zniknęły z use case'ów.
+`PasswordPolicyInForce` jest wstrzyknięty do `CreatePasswordHash` (password-usecase), który pyta
+`current()` raz na próbę; `Register`, `ChangePassword`, `ResetPassword` dostają jeden bean
+`CreatePasswordHash` (`BeanFactory#createPasswordHash`). Asymetria z `AdmitEmail(EmailPolicy)`
+została, ale siedzi w bibliotekach: wartość z bootu kontra port, oba podane raz w konstruktorze.
+`Register` nie ma już try/catch: `AdmitEmail.evaluate(Supplier<Email>)` i
+`CreatePasswordHash.create(Supplier<PlaintextPassword>)` same wyciągają kandydata, a odmowę
+konstruktora VO nazywają własnym kodem (`EMAIL_*` z `InvalidEmailException#error`,
+`PASSWORD_BLANK`). Wyniki sędziów to REKORDY, nie sealed `Success`/`Failure`:
+`AdmitEmail.Result(Email email, List<EmailError> errors)` i
+`CreatePasswordHash.Result(HashedPassword hashedPassword, List<PasswordError> errors, PasswordPolicy policy)`
+(Robert, po trzech podejściach z instanceof/switch w `Register`: „wygląda okropnie”). `Register`
+czyta akcesory i bramkuje na `errors().isEmpty()`; `Rejected(List<EmailError>, List<PasswordError>,
+PasswordPolicy)` niesie tylko to, co konsumuje drut.
+
+Po `5656eb9` pole i argument nazywają się `passwordPolicy`, a mają typ `PasswordPolicyInForce`
+— nazwa kłamie: trzymamy PYTAJĄCEGO o politykę, nie politykę. Do przemianowania na
+`passwordPolicyInForce` w: `Register`, `ChangePassword`, `ResetPassword` (pole + argument
+konstruktora) oraz `BeanFactory` (metoda fabryki i trzy argumenty wstrzyknięć).
+
+Przy okazji zanotowane: asymetria `CanRegisterConfig` (wartość, stopień Restart) vs
+`PasswordPolicyInForce` (port, stopień Live) jest CELOWA — jeśli domeny e-maila dostaną kiedyś
+stopień Live, dostaną taki sam port i asymetria zniknie.
+
+## Otwarte — po przeprojektowaniu drabinki (2026-09-05, przepisane 2026-09-06)
+
+Stan po 2026-09-06: poziom live to JEDEN snapshot tabeli `security_settings`, brany przy starcie
+(`@Context`, brak bazy wali boot) i po każdym zapisie admina — nigdy przy pytaniu, nigdy z zegara
+(`SnapshotLiveConfigPort` w `shared/config`; TTL i property `security.settings.cache.ttl.seconds`
+SKASOWANE tego samego dnia: TTL istniał tylko po to, żeby zauważać wiersze pisane obok API, czyli
+legitymizował złamanie zasady Newmana), więc każdy klucz ma live/restart/rebuild i nie ma
+„zamówień" na live per klucz.
+Moduły `security-custom`, `security-roles`, `security-http` ROZPUSZCZONE w warstwach
+(reguła właściciela: 3–5 warstw, nie wymyślać nowych): `RequireRole`/`RolesOf`/`BootstrapAdmins`
+→ `security-system/roles`; `SetMinPasswordLength` + `MinLengthRepository` →
+`security-system/passwordpolicy` (od 2026-09-06 wieczorem: `SetSetting` w `security-system/settings`); `Caller`/`RoleGuard`/`StepUpGuard`, `AdminPasswordPolicyController`,
+`LadderedPasswordPolicy` (5 drabinek pod kluczami rekordów `password-config`, jedna polityka, bez
+@Primary/@Secondary) → `security-infrastructure`; `SecuritySettingsTable` (Jdbc + InMemory) →
+`security-infrastructure/persistence`. `password-application` w bibliotece SKASOWANY.
+Zapis admina odświeża snapshot (`BeanFactory#minLengthRepository`, refresh czyta całą tabelę);
+przy replikach (k3s, odłożone) unieważnienie musi pójść zdarzeniem między instancjami, nie zegarem. Nielegalny wiersz: warn RAZ per odmowa (nie per pytanie),
+raport `rejected` niesie to, co wiersz trzymał (liczbę albo surowy tekst).
+
+- **~~Zaakceptowana konsekwencja: klucze BEZ endpointu admina~~ — NIEAKTUALNE od 2026-09-06**
+  (sprostowane 2026-09-12). Każdy klucz zadeklarowany jako `liveOver` jest ustawialny przez
+  `PUT /admin/settings/{key}` — dotyczy to WSZYSTKICH pięciu reguł hasła. Restartem pozostają
+  klucze `boundOver` (brute-force, mfa, session, step-up): tam wiersz w bazie wchodzi dopiero przy
+  następnym starcie, a bramka drabinki chroni przed wartością nielegalną. Tak też mówi
+  `specs/password-policy.feature` (krok „written at the console before the last start").
+- **ZROBIONE 2026-09-06 (wieczór): generyczny zapis po kluczu.** `Configuration.liveOver` buduje
+  katalog `LiveKey` (parser + bramka reguły, ta sama co przy odczycie); `SetSetting(key, text)` w
+  `security-system/settings` (porty `SettingCatalog`, `SettingsRepository`) zastępuje
+  `SetMinPasswordLength` + `MinLengthRepository`; `PUT /admin/settings/{key}` + `GET /admin/settings`
+  (`AdminSettingsController`), `POST .../password/min-length` zostaje jako przypadek filmu 5.
+  Spec `specs/settings.feature` (7 scenariuszy, glue `feature.settings`). Każdy nowy `liveOver`
+  jest ustawialny bez linijki kodu. Decyzja właściciela: ryzyko „admin nadpisze każdy klucz"
+  przyjęte świadomie — bramka = rola ADMIN + step-up; flaga per klucz „nie przez API" do
+  dołożenia, gdy zajdzie potrzeba.
+- **ADR do spisania** (właściciel): kontrakt drabinki + snapshot + dlaczego biblioteka nie zna
+  drabinki. `SourceThrottle` → Live = te same trzy szczeble w `BeanFactory`, bez nowego modułu.
+
+## Otwarte — wejścia i dokumentacja
+
+- **Dokumentacja use case'ów — do usprawnienia (2026-09-04, do przemyślenia).** Punkt
+  wyjścia: jest jeden `.feature` na klasę use case'u. Pomysł: opis spod `Feature:` przenieść
+  do javadoca klasy — `{@link User}`, `{@link Email}` dają nawigację po klasach i zdejmują
+  wersaliki (USER, EMAIL). Argumenty PRZECIW, spisane w rozmowie:
+  - opis Feature ma innego czytelnika niż javadoc — `specs/README.md` czyni `.feature` jedynym
+    źródłem prawdy dla trzech warstw; opis trafia do raportów Cucumbera (`report.html`,
+    cucumber-js) i do warstwy UI, która nie ma żadnej klasy Javy; javadoc widzi tylko IDE;
+  - wersaliki nie znikną — w `authenticate.feature` 27 z 78 linii ma CAPS i prawie wszystkie
+    siedzą w krokach (`the USER AUTHENTICATES with the correct CREDENTIALS`), nie w opisie;
+    CAPS to konwencja na słownik wspólny z biznesem (persony GUEST/USER/MODERATOR/ADMIN);
+  - commit 10a3609 (2026-09-02) „no javadoc from Register down — the code is the document"
+    wyciął 55 linii javadoców z rejestracji; javadoc na use case'ie to powrót do tego.
+  Co już jest za darmo: plugin Cucumber w IntelliJ skacze krok → glue, glue → `Authenticate`
+  / `User` przez Ctrl+B. Najtańszy most z `.feature` do klasy: jedna linia
+  `# use case: Authenticate` pod `Feature:`. Otwarte pytanie: CO konkretnie w dokumentacji
+  jest niewygodne (nawigacja? duplikacja opisu między `.feature` a kodem? raport?) — od tego
+  zależy, czy odpowiedzią jest komentarz w `.feature`, generator (jak `build_documentation.py`
+  w portalu), czy jednak javadoc.
+
+- ~~UI jako 3. wejście~~ — ZROBIONE W CAŁOŚCI (2026-07-07, playbook S1, kroki 0–7): KAŻDY
+  feature ze `specs/` zadeklarował wejścia tagiem — `@ui` jedzie przez realną przeglądarkę
+  (cucumber-js+Playwright, `security-ui/run-e2e.sh`, selekcja `@ui and not @http-only`),
+  `@http-only` to mechanika drutu (cookie/rotacja, introspekcja, taniec OAuth, logout —
+  unieważnienie jedzie na cookie, którego cross-originowe dev UI nie trzyma; per-scenariusz
+  także saga delete i federacyjny unlink). UI dorósł do speców: forgot/reset hasła,
+  zmiana hasła i emaila w koncie (link `?change=`), lista sesji + „Sign out everywhere",
+  danger zone ze step-upem FULL_CHAIN; sign-out przestał być kosmetyczny (POST /logout).
+  Backdoory skrzynki: `/test/mailbox/{reset-token,notice}` obok istniejących. Konta w glue
+  są scenariuszowo-unikalne (`support/account.mjs` — mutacje hasła/konta nie zatruwają
+  innych feature'ów). **35 scenariuszy UI / 157 kroków zielone**; suita JVM 175 zielona.
+
+## Porządki — ZAMKNIĘTE
+
+- ~~Gałęzie remote-only, runda 2~~ — ZROBIONE (2026-07-07, zgoda usera): skasowane WSZYSTKIE
+  gałęzie poza main w 6 repo. 4 były w pełni zmergowane (security: development/
+  interactive-documentation/simplify-modules, test-starter/feature/mfa). 6 miało „stare"
+  commity ale zbadane jako superseded: security feature/mfa (stare OTP MFA — main ma fazy
+  A–H), restructure/smarter-factory (porzucone refaktory usuwające `AuthenticationRequest`,
+  którego main używa), password/constraint/config/email feature/mfa (tytuł „Add maven
+  wrapper" mylący — wrapper JUŻ na main; reszta to stare źródła + zacommitowane `target/`).
+  Wszystkie repo mają teraz tylko main.
+
+## Gotchas (operacyjne, warte pamięci)
+
+- Po przeniesieniu pliku `.feature` zrób `mvn clean` — stara kopia w `target/test-classes`
+  dubluje scenariusze.
+- Runtime wymaga `org.yaml:snakeyaml`, inaczej Micronaut MILCZĄCO ignoruje `application*.yml`
+  (w tym datasource!).
+- `docker compose build` wymaga wcześniejszego `mvn package` (jar + `target/lib` budowane
+  na hoście — build w kontenerze nie widzi security-libów z innych repo).
+- Po micronaut-data POST bez `consumes` rejestruje trasę dwuznacznie (stąd `consumes=ALL`
+  na `/refresh`).

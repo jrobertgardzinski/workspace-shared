@@ -1,0 +1,196 @@
+package com.jrobertgardzinski.security.infrastructure.persistence;
+
+import com.jrobertgardzinski.TransactionBoundary;
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
+import com.jrobertgardzinski.password.domain.PlaintextPassword;
+import com.jrobertgardzinski.security.domain.entity.User;
+import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
+import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
+import com.jrobertgardzinski.security.domain.vo.IpAddress;
+import com.jrobertgardzinski.security.domain.vo.AttemptedAccount;
+import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
+import com.jrobertgardzinski.security.domain.vo.Source;
+import com.jrobertgardzinski.security.system.authentication.Authentication;
+import com.jrobertgardzinski.security.system.authentication.ContinueAuthentication;
+import io.micronaut.context.ApplicationContext;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * The two counting rules of the brute-force guard, against a real PostgreSQL.
+ *
+ * <p>Both were pinned only by mocks, and a mock cannot be wrong about a query: the test said
+ * "countFailuresOnAccount returns 3" and the guard behaved accordingly, whatever the SQL behind it
+ * actually counted. What the rules protect is precisely the difference between two shapes of
+ * attack, and the difference lives in a WHERE clause.
+ *
+ * <ul>
+ *   <li>A correct password clears THIS PAIR's failures and nothing else. Clearing the whole
+ *       address makes one known-good credential an amnesty for everything that address is trying;
+ *       clearing nothing leaves an office locked out over one person's typos.</li>
+ *   <li>The per-source ceiling sees what the pair counter cannot: a few guesses spread over many
+ *       accounts, where no single account ever reaches its own limit.</li>
+ * </ul>
+ */
+@Testcontainers(disabledWithoutDocker = true)
+class BruteForceCountingTest {
+
+    private static final String THEIR_PASSWORD = "TheirRealPassword1!";
+    private static final String WRONG_PASSWORD = "NotTheirPassword1!";
+    private static final int MAX_FAILURES = 3;
+    private static final int MAX_FAILURES_PER_SOURCE = 5;
+
+    @Container
+    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:18-alpine");
+
+    static ApplicationContext context;
+
+    @BeforeAll
+    static void startContext() {
+        context = ApplicationContext.run(Map.of(
+                "datasources.default.url", POSTGRES.getJdbcUrl(),
+                "datasources.default.username", POSTGRES.getUsername(),
+                "datasources.default.password", POSTGRES.getPassword(),
+                "datasources.default.driver-class-name", "org.postgresql.Driver",
+                "datasources.default.dialect", "POSTGRES",
+                "flyway.datasources.default.enabled", true,
+                "security.brute.force.max.failures", MAX_FAILURES,
+                "security.brute.force.max.failures.per.source", MAX_FAILURES_PER_SOURCE));
+    }
+
+    @AfterAll
+    static void stopContext() {
+        if (context != null) {
+            context.close();
+        }
+    }
+
+    @Test
+    @DisplayName("a correct password clears that pair's failures and leaves the address's others")
+    void success_forgives_the_pair_and_only_the_pair() {
+        Source source = new Source(new IpAddress("198.51.100.21"), "counting/1.0");
+        Email mine = account("mine@example.com");
+        Email theirs = account("theirs@example.com");
+
+        // one miss on each account: below both limits, and deliberately from the same address
+        attempt(source, mine, WRONG_PASSWORD);
+        attempt(source, theirs, WRONG_PASSWORD);
+
+        // I get my own password right
+        assertThat(attempt(source, mine, THEIR_PASSWORD))
+                .isInstanceOf(Authentication.Result.Authenticated.class);
+
+        // ...which forgives MY misses: two more are needed to reach the limit of three again
+        attempt(source, mine, WRONG_PASSWORD);
+        attempt(source, mine, WRONG_PASSWORD);
+        assertThat(attempt(source, mine, WRONG_PASSWORD))
+                .as("if my earlier miss still counted, the limit would have been reached one"
+                        + " attempt sooner")
+                .isNotInstanceOf(Authentication.Result.Blocked.class);
+
+        assertThat(attempt(source, mine, WRONG_PASSWORD))
+                .as("and the fourth is where it does hold — a success is an amnesty, not an"
+                        + " exemption")
+                .isInstanceOf(Authentication.Result.Blocked.class);
+    }
+
+    @Test
+    @DisplayName("the per-source ceiling catches a spray no single account ever notices")
+    void the_ceiling_sees_what_the_pair_counter_cannot() {
+        Source source = new Source(new IpAddress("198.51.100.22"), "spray/1.0");
+
+        // one guess each against five accounts: no pair ever reaches its own limit of three
+        for (int i = 0; i < MAX_FAILURES_PER_SOURCE; i++) {
+            Email victim = account("sprayed-" + i + "@example.com");
+            assertThat(attempt(source, victim, WRONG_PASSWORD))
+                    .as("attempt %d is a single miss on a fresh account — nothing to block yet", i)
+                    .isNotInstanceOf(Authentication.Result.Blocked.class);
+        }
+
+        assertThat(attempt(source, account("sprayed-last@example.com"), WRONG_PASSWORD))
+                .as("five misses from one address, and the ceiling is what sees them: the pair"
+                        + " counter is still at one for every account involved")
+                .isInstanceOf(Authentication.Result.Blocked.class);
+    }
+
+    @Test
+    @DisplayName("a block placed by the ceiling answers for the whole source's failures")
+    void a_ceiling_block_clears_what_it_stands_for() {
+        Source source = new Source(new IpAddress("198.51.100.23"), "ceiling/1.0");
+        RejectedAuthenticationRepository rejections =
+                context.getBean(RejectedAuthenticationRepository.class);
+
+        for (int i = 0; i < MAX_FAILURES_PER_SOURCE; i++) {
+            attempt(source, account("ceiling-" + i + "@example.com"), WRONG_PASSWORD);
+        }
+        assertThat(attempt(source, account("ceiling-last@example.com"), WRONG_PASSWORD))
+                .isInstanceOf(Authentication.Result.Blocked.class);
+
+        assertThat(rejections.countFailuresFromSource(source, LocalDateTime.now().minusDays(1)).count())
+                .as("the block stands for every one of those failures. Leaving them behind leaves"
+                        + " the source AT its ceiling: the block expires, the next failure trips it"
+                        + " again, and a block of minutes behaves like one of hours")
+                .isZero();
+    }
+
+    @Test
+    @DisplayName("a wrong factor proof counts against the account, like a wrong password")
+    void the_second_factor_is_not_a_free_guessing_ground() {
+        Source source = new Source(new IpAddress("198.51.100.24"), "codes/1.0");
+        Email victim = account("code-guessed@example.com");
+        context.getBean(com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository.class)
+                .enrol(new com.jrobertgardzinski.security.domain.entity.EnrolledFactor(
+                        victim, com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE,
+                        "e-mail code", 0, victim.value()));
+
+        // link #1 passes — the guesser HAS the password; what they are after is the code
+        Authentication.Result first = attempt(source, victim, THEIR_PASSWORD);
+        assertThat(first).isInstanceOf(Authentication.Result.MfaRequired.class);
+        String ticket = ((Authentication.Result.MfaRequired) first).ticket();
+
+        ContinueAuthentication chain = context.getBean(ContinueAuthentication.class);
+        TransactionBoundary transactions = context.getBean(TransactionBoundary.class);
+        transactions.execute(() -> chain.execute(ticket, "000000"));
+
+        assertThat(context.getBean(RejectedAuthenticationRepository.class)
+                .countFailuresOnAccount(new LockoutSubject(source, AttemptedAccount.of(victim)),
+                        LocalDateTime.now().minusDays(1)).count())
+                .as("five attempts per TICKET is a limit on one ticket, not on the person minting"
+                        + " them: link #1 is a password they already hold, so a fresh ticket costs"
+                        + " one request and the codes could be walked at that rate")
+                .isEqualTo(1);
+    }
+
+    private static Authentication.Result attempt(Source source, Email email, String password) {
+        Authentication authentication = context.getBean(Authentication.class);
+        TransactionBoundary transactions = context.getBean(TransactionBoundary.class);
+        return transactions.execute(() -> authentication.execute(
+                new AuthenticationRequest(source, email, PlaintextPassword.of(password))));
+    }
+
+    /** A real, verified account with a known password — so a WRONG one is the only thing refused. */
+    private static Email account(String address) {
+        Email email = Email.of(address);
+        UserRepository users = context.getBean(UserRepository.class);
+        HashAlgorithmPort hashing = context.getBean(HashAlgorithmPort.class);
+        context.getBean(TransactionBoundary.class).execute(() -> {
+            users.save(new User(email, hashing.hash(PlaintextPassword.of(THEIR_PASSWORD))));
+            context.getBean(EmailVerificationRepository.class).markVerified(email);
+            return null;
+        });
+        return email;
+    }
+}

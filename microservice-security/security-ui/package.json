@@ -1,0 +1,33 @@
+{
+  "name": "security-ui",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.14"
+  },
+  "description": "The auth service's own face — and the specs' third entry point: cucumber-js + Playwright drive the same Gherkin the JVM runners do, through this React UI.",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "start": "vite",
+    "build": "tsc && vite build",
+    "e2e": "cucumber-js --config e2e/cucumber.mjs",
+    "e2e:full": "./run-e2e.sh"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^13.2.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.0.5",
+    "jsdom": "^30.0.1",
+    "playwright": "^1.62.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

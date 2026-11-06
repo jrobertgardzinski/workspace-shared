@@ -1,0 +1,440 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.jrobertgardzinski</groupId>
+        <artifactId>microservice-security</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>security-infrastructure</artifactId>
+    <packaging>jar</packaging>
+
+    <dependencies>
+        <!-- the registration use case + the types its HTTP adapter touches directly -->
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>security-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>security-system</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>security-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>email-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>email-usecase</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>user-id</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>email-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>password-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>password-usecase</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>password-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>argon2</artifactId>
+        </dependency>
+        <!-- env-gated Clock bean + test-only time-control endpoint; beans discovered from the jar -->
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>infrastructure-micronaut-clock</artifactId>
+        </dependency>
+
+        <!-- Micronaut runtime: HTTP server + DI + JSON (serde) -->
+        <dependency>
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-inject-java</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-http-server-netty</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-runtime</artifactId>
+        </dependency>
+        <!-- observability: /prometheus endpoint for the workspace's Prometheus+Grafana -->
+        <dependency>
+            <groupId>io.micronaut.micrometer</groupId>
+            <artifactId>micronaut-micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-management</artifactId>
+        </dependency>
+        <!-- capture the request's trace context so the outbox can carry it across the async drain:
+             the OTel Java agent (attached at runtime) bridges this API to its active span. Version
+             is managed by the Micronaut platform BOM, so it stays in step with micronaut-tracing. -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-api</artifactId>
+        </dependency>
+        <!-- Context/Scope, used directly to re-establish the parent span in the outbox drain;
+             declared explicitly (not just via opentelemetry-api) so dependency:analyze is happy -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut.serde</groupId>
+            <artifactId>micronaut-serde-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.annotation</groupId>
+            <artifactId>jakarta.annotation-api</artifactId>
+        </dependency>
+        <!-- jakarta.transaction.Transactional on the transaction boundary; needed at runtime too -->
+        <dependency>
+            <groupId>jakarta.transaction</groupId>
+            <artifactId>jakarta.transaction-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <!-- version from the Micronaut BOM: a hand-pinned 1.5.16 classic next to the
+                 BOM's 1.5.32 core made logback's model processor drop the appender ref
+                 (root logger silently lost its output) -->
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <!-- Already here transitively through logback-classic; named explicitly because two
+                 tests assert on what is ACTUALLY LOGGED (no e-mail address in the access line, none
+                 in the deletion path) and attach a ListAppender to do it. Runtime scope, exactly
+                 like classic, so the runtime classpath is unchanged and the test compile classpath
+                 gains visibility of it — same arrangement as jackson-databind below. -->
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Persistence: Micronaut Data JDBC over a Hikari pool to PostgreSQL; schema by Flyway.
+             The JDBC repository adapters activate only when a datasource is present; with none
+             (tests) the in-memory repositories take over. -->
+        <dependency>
+            <groupId>io.micronaut.data</groupId>
+            <artifactId>micronaut-data-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut.sql</groupId>
+            <artifactId>micronaut-jdbc-hikari</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micronaut.flyway</groupId>
+            <artifactId>micronaut-flyway</artifactId>
+        </dependency>
+        <!-- transactional-outbox publisher: mail requests leave as Kafka events, not HTTP calls -->
+        <dependency>
+            <groupId>io.micronaut.kafka</groupId>
+            <artifactId>micronaut-kafka</artifactId>
+        </dependency>
+        <!-- Both arrive through micronaut-kafka and micronaut-management anyway; they are declared
+             because OffboardingListenerHealth USES them directly — it reads the consumer's own
+             last-poll metric (kafka-clients' Metric/MetricName) and returns a Publisher of health
+             results (reactive-streams). dependency:analyze is right to insist: a transitive
+             dependency that a class imports is a dependency, and the day micronaut-kafka stops
+             pulling kafka-clients in is not the day to find that out from a compile error. -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.reactivestreams</groupId>
+            <artifactId>reactive-streams</artifactId>
+        </dependency>
+        <!-- reactor-core is deliberately NOT declared here. It arrives transitively at runtime
+             scope for micronaut-http-server-netty, and declaring it `test` — which is what the
+             lamp's first test tempted us into, to get a Flux — NARROWS that transitive scope:
+             Maven's nearest definition wins, reactor left target/lib, and the packaged service
+             died on startup with NoClassDefFoundError: reactor/core/CorePublisher. `mvn verify`
+             stayed green throughout, because tests run on the test classpath, where it was
+             present. The test subscribes to the Publisher directly instead; it needs no reactor,
+             and this comment is here so nobody adds it back for convenience. -->
+
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- YAML config parser: without it Micronaut silently ignores application*.yml at runtime
+             (tests get it transitively). Needed so the dev/prod datasource config is actually read. -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- BDD: the same Cucumber stack the application runner uses, plus an HTTP client to
+             drive the embedded server "from the outside" -->
+        <dependency>
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>bdd-test-starter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- production HTTP clients are gone (mail travels over Kafka); tests still drive
+                 the embedded server with it -->
+            <groupId>io.micronaut</groupId>
+            <artifactId>micronaut-http-client</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <!-- real PostgreSQL for the JDBC adapter integration tests (skipped when Docker is absent) -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- the producer's half of the cross-service contracts: verifies the consumers' committed
+             pacts (mail-requests, content-commands) against the REAL producer code; skipped
+             gracefully when the consumer repos are not checked out next to this one -->
+        <dependency>
+            <groupId>au.com.dius.pact.provider</groupId>
+            <artifactId>junit5</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- @PactVerifyProvider lives here (junit5 above pulls it in; declared for the
+                 dependency analyzer) -->
+            <groupId>au.com.dius.pact</groupId>
+            <artifactId>provider</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- the consumer's half of the saga-confirmation contracts: this service states which
+                 USER_CONTENT_PURGED fields it reads; the pacts (../pacts, committed) are verified
+                 by the three participants' provider tests -->
+            <groupId>au.com.dius.pact.consumer</groupId>
+            <artifactId>junit5</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- MessagePactBuilder and the dsl live here (declared for the dependency analyzer) -->
+            <groupId>au.com.dius.pact</groupId>
+            <artifactId>consumer</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- @Pact, Message, PactSpecVersion live here (declared for the dependency analyzer) -->
+            <groupId>au.com.dius.pact.core</groupId>
+            <artifactId>model</artifactId>
+            <version>${pact.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- the closing loop: a REAL token this service mints, verified through the REAL
+                 library every offline consumer uses — the JWT's shape can no longer drift away
+                 from its verifiers -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>offline-jwt</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <!-- the words this service shares with the portal's orchestrator and its participants
+                 when an account closes: the fact's name, the verdicts' names, and the initiator.
+                 A WIRE vocabulary, so it is held here at the edge and never below it -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>account-closure</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <!-- ObjectMapper handed to the offline-jwt verifier in tests. Deliberately NOT
+                 test-scoped: Flyway's plugin registry needs jackson-databind at runtime and used
+                 to get it transitively — a direct test-scope declaration would out-rank that and
+                 evict it from target/lib (found the hard way: the container died on startup) -->
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <dependency>
+            <!-- jackson-core, explicitly: HttpSmsCodeChannel builds the SMS request with an
+                 ObjectMapper (it used to concatenate a JSON string from an unvalidated phone
+                 number) and therefore catches JsonProcessingException, which lives HERE rather
+                 than in databind. It arrived transitively and analyze-only rightly refused to let
+                 a compile-time dependency stay implicit. -->
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+        </dependency>
+        <dependency>
+            <!-- the request pact-jvm replays (mutated to carry the real bearer); comes with the
+                 pact provider, declared for the dependency analyzer.
+
+                 5.4.3, raised from 5.3.4 when Micronaut 5 arrived: it brings httpclient5 5.6.2,
+                 which pulls httpcore5-h2 5.4.4 and calls MessageSupport.parseHeaders(MessageHeaders,
+                 String, BiConsumer) - a method that does not exist in 5.3. Left at 5.3.4 the
+                 provider verification died with NoSuchMethodError, and only there: nothing else on
+                 the classpath touches that call. -->
+            <groupId>org.apache.httpcomponents.core5</groupId>
+            <artifactId>httpcore5</artifactId>
+            <version>5.4.4</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- the confirmation contract test writes its pacts to the repo root
+                             (committed) so the participants' provider tests can verify them from
+                             a sibling checkout -->
+                        <pact.rootDir>${project.basedir}/../pacts</pact.rootDir>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>io.micronaut.maven</groupId>
+                <artifactId>micronaut-maven-plugin</artifactId>
+                <version>${micronaut-maven-plugin.version}</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>io.micronaut</groupId>
+                            <artifactId>micronaut-inject-java</artifactId>
+                        </path>
+                        <path>
+                            <groupId>io.micronaut.data</groupId>
+                            <artifactId>micronaut-data-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <!-- single source of truth: the shared specs/register.feature, on the test classpath -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.2</version>
+                <executions>
+                    <execution>
+                        <id>add-shared-specs</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>add-test-resource</goal>
+                        </goals>
+                        <configuration>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../specs</directory>
+                                    <includes>
+                                        <include>**/*.feature</include>
+                                    </includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- This is the project's first framework module. The strict dependency-analyze
+                 (failOnWarning) is built for plain library modules; Micronaut's annotation- and
+                 runtime-driven graph (HTTP server impl, DI, serde) is invisible to static
+                 byte-code analysis and trips both "used undeclared" and "unused declared". Keep
+                 the check ON for our own modules, but whitelist the framework's own coordinates. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <!-- collect the runtime classpath next to the jar so the container can run
+                         `java -cp 'app.jar:lib/*' App` — Micronaut scans each jar's own
+                         META-INF/micronaut, so no fragile fat-jar metadata merging is needed -->
+                    <execution>
+                        <id>copy-runtime-dependencies</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>analyze</id>
+                        <configuration>
+                            <ignoredUsedUndeclaredDependencies combine.children="append">
+                                <ignoredUsedUndeclaredDependency>io.micronaut*:*</ignoredUsedUndeclaredDependency>
+                                <ignoredUsedUndeclaredDependency>jakarta.inject:*</ignoredUsedUndeclaredDependency>
+                            </ignoredUsedUndeclaredDependencies>
+                            <ignoredUnusedDeclaredDependencies combine.children="append">
+                                <ignoredUnusedDeclaredDependency>io.micronaut*:*</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>jakarta.annotation:*</ignoredUnusedDeclaredDependency>
+                                <!-- supplies the Clock bean + time-control endpoint via Micronaut
+                                     bean discovery from the jar; no compile-time reference here -->
+                                <ignoredUnusedDeclaredDependency>com.jrobertgardzinski:infrastructure-micronaut-clock</ignoredUnusedDeclaredDependency>
+                                <!-- a custom order: its beans are discovered from the jar, the
+                                     neutral service never references it — see security-custom -->
+                                <!-- runtime-only: JDBC driver + Flyway migrations, no compile-time reference -->
+                                <ignoredUnusedDeclaredDependency>org.postgresql:*</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>org.flywaydb:*</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>org.testcontainers:*</ignoredUnusedDeclaredDependency>
+                                <ignoredUnusedDeclaredDependency>org.yaml:*</ignoredUnusedDeclaredDependency>
+                                <!-- main code never touches ObjectMapper, but Flyway's plugin
+                                     registry needs it at runtime and tests hand it to the
+                                     offline-jwt verifier — see the dependency's own comment -->
+                                <ignoredUnusedDeclaredDependency>com.fasterxml.jackson.core:jackson-databind</ignoredUnusedDeclaredDependency>
+                            </ignoredUnusedDeclaredDependencies>
+                            <ignoredNonTestScopedDependencies combine.children="append">
+                                <!-- same story: compile scope on purpose (runtime need + test
+                                     compile visibility); the analyzer sees only the test usage -->
+                                <ignoredNonTestScopedDependency>com.fasterxml.jackson.core:jackson-databind</ignoredNonTestScopedDependency>
+                                <!-- the custom order is packaged for RUNTIME (bean discovery) and
+                                     only the tests name its classes; compile scope on purpose -->
+                            </ignoredNonTestScopedDependencies>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

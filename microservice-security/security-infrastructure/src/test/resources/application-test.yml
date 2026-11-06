@@ -1,0 +1,23 @@
+# test environment only: serve the refresh cookie without the Secure flag so it round-trips over
+# plain HTTP in the embedded-server tests. Production keeps Secure on (the default in RefreshCookies).
+security:
+  cookie:
+    secure: false
+  # designate a bootstrap admin so the roles feature has someone who can grant roles
+  bootstrap-admins:
+    - admin@example.com
+  # the registration throttle is off for the shared-context feature suites (many users register
+  # from localhost across scenarios); it is exercised in isolation by RegisterThrottleHttpTest
+  registration:
+    max-per-window: 0
+  # same reason: every feature suite signs in over and over from localhost, and a chain-completing
+  # scenario spends two calls per sign-in. The windows are exercised in isolation by
+  # AuthThrottleHttpTest and ChangePasswordThrottleHttpTest, which boot with their own values.
+  authentication:
+    max-per-window: 0
+  change-password:
+    max-per-window: 0
+
+# no broker in tests: the outbox publisher is @Requires(notEnv=test); this silences kafka's health check
+kafka:
+  enabled: false

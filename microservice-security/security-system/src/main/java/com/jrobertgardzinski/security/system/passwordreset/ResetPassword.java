@@ -1,0 +1,142 @@
+package com.jrobertgardzinski.security.system.passwordreset;
+
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.password.domain.PasswordError;
+import com.jrobertgardzinski.password.domain.PlaintextPassword;
+import com.jrobertgardzinski.password.policy.CreatePasswordHash;
+import com.jrobertgardzinski.password.policy.PasswordPolicy;
+import com.jrobertgardzinski.security.domain.repository.SessionRepository;
+import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
+import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
+import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
+
+/**
+ * Completes a password reset: the new password must meet the policy, the token must match a pending
+ * reset, and that reset must still be young enough. The password is validated first so a weak
+ * password does not burn the token; then the single-use token is consumed and the user's password
+ * hash replaced. This is also how a federated (passwordless) account gains its first password — so
+ * the account stops being passwordless and its password starts counting toward the MFA floor.
+ *
+ * <p>Single use alone was not enough: a reset is matched by ADDRESS, and an address outlives the
+ * account that owned it. An unexpiring link e-mailed months ago would still be redeemable after the
+ * account closed and the address was registered by someone else — and would then set THAT person's
+ * password. An expired token is consumed and refused. This use case names each refusal for what it
+ * is; the edge answers all of them alike, because telling "expired" from "unknown" apart on the
+ * wire would confirm to a stranger that the address has an account.
+ *
+ * <p><b>Every session goes with the old password.</b> Sessions are rows unrelated to the password
+ * hash, so replacing the hash left them all authorizing — and a reset is what a user reaches for
+ * PRECISELY when they believe someone else is on their account. A thief's stolen access token kept
+ * working, and kept rotating itself on {@code /refresh}, for the whole refresh window after the
+ * victim did the one thing every guide tells them to do. {@code revokeAllSessions} runs in the same
+ * transaction as the new hash: either the password changed and no old session survived, or neither
+ * happened.
+ */
+public class ResetPassword {
+
+    private final PasswordResetRepository passwordResetRepository;
+    private final UserRepository userRepository;
+    private final CreatePasswordHash createPasswordHash;
+    private final PasswordlessAccountRepository passwordlessAccountRepository;
+    private final SessionRepository sessionRepository;
+    private final Duration tokenTtl;
+    private final Clock clock;
+
+    public ResetPassword(
+                    PasswordResetRepository passwordResetRepository,
+                    UserRepository userRepository,
+                    CreatePasswordHash createPasswordHash,
+                    PasswordlessAccountRepository passwordlessAccountRepository,
+                    SessionRepository sessionRepository,
+                    Duration tokenTtl,
+                    Clock clock) {
+        this.passwordResetRepository = passwordResetRepository;
+        this.userRepository = userRepository;
+        this.createPasswordHash = createPasswordHash;
+        this.passwordlessAccountRepository = passwordlessAccountRepository;
+        this.sessionRepository = sessionRepository;
+        this.tokenTtl = tokenTtl;
+        this.clock = clock;
+    }
+
+    public sealed interface Result {
+
+        record PasswordReset(Email email) implements Result {}
+
+        record TokenNotFound() implements Result {}
+
+        record TokenExpired() implements Result {}
+
+        record UserNotFound() implements Result {}
+
+        /**
+         * The rules the new password broke, never empty, and the policy it was judged against,
+         * because that policy can change between attempts: the password half of what registration
+         * answers with.
+         */
+        record Rejected(List<PasswordError> passwordErrors, PasswordPolicy policy) implements Result {
+            public Rejected {
+                passwordErrors = List.copyOf(passwordErrors);
+            }
+        }
+    }
+
+    public Result execute(PasswordResetToken token, Supplier<PlaintextPassword> newPasswordCandidate) {
+
+        CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
+
+        switch (createPasswordHashResult.status()) {
+            case REJECTED -> {
+                return new Result.Rejected(
+                        createPasswordHashResult.errors(),
+                        createPasswordHashResult.policy());
+            }
+            case PASSED -> {}
+        }
+
+        Optional<PasswordResetRepository.PendingReset> pendingReset = passwordResetRepository.consumeReset(token);
+
+        if (
+                pendingReset.isEmpty()
+        ) {
+            return new Result.TokenNotFound();
+        }
+
+        if (
+                pendingReset.get().expiration(tokenTtl).hasExpired(clock)
+        ) {
+            // too old; consumed, so it is spent for good
+            return new Result.TokenExpired();
+        }
+
+        Email email = pendingReset.get().email();
+
+        if (
+                userRepository.findBy(email).isEmpty()
+        ) {
+            // the account went away between the mail and the click (deleted, or moved to another
+            // address). updatePassword would have matched no row and this used to answer "your
+            // password has been reset" all the same.
+            return new Result.UserNotFound();
+        }
+
+        userRepository.updatePassword(
+                email,
+                createPasswordHashResult.hashedPassword());
+
+        // the account now has a password
+        passwordlessAccountRepository.setPasswordless(email, false);
+
+        // the old password's sessions do not survive it
+        sessionRepository.revokeAllSessions(email);
+
+        return new Result.PasswordReset(email);
+    }
+}
