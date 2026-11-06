@@ -2,6 +2,56 @@
 
 Cross-project backlog. Per-project backlogs live in each repo's own `todo.md`.
 
+## WYKONANE (2026-11-06) — jedno repozytorium na workspace: z 32 zostały 3
+
+Werdykty właściciela z 2026-11-06: „Granice per workspace", potem „1. zachowaj, 2. archive,
+3. prywatne! 4. kolejność dowolna" (historia, stare repo na GitHubie, widoczność gry, kolejność)
+i „jak skończysz to usuń wszystkie branche poza main. Potem push".
+
+- 29 repozytoriów weszło do swoich workspace'ów jako katalogi, pod tą samą ścieżką co na dysku,
+  z pełną historią (`git subtree add`, po jednym commicie `Fold <katalog> in, with its history`):
+  20 do `shared`, 6 do `portal`, 3 do `formula`. Liczba commitów: `shared` 1027, `portal` 603,
+  `formula` 509.
+- Dowód, że nic się nie zmieniło: dla każdego z 29 katalogów drzewo w scalonym repo jest
+  identyczne z drzewem commita, z którego zostało wzięte; po podmianie `git status` czysty.
+  Pełne buildy na scalonych repo: kernel 823 testy (1 pominięty: `DisplayNamesPactProviderTest`),
+  portal 1098, gra 93 + paddock 20, zero błędów.
+- Przed scaleniem do gałęzi roboczych weszły zaległe podbicia Dependabota z `main` (pom.xml w
+  `infrastructure-spring-outbox`, `microservice-security`, `microservice-memes`,
+  `microservice-comments`); po nich cztery pakty w portalu podają Pact 4.7.6.
+- CI w korzeniu każdego workspace'u: zamiast 37 / 74 / 15 checkoutów jest jeden albo dwa (własne
+  repo i `workspace-shared`), bez `REPO_PAT`. Z kernela wypadł nocny przebieg, który istniał tylko
+  dlatego, że push do biblioteki nie uruchamiał tu niczego; z portalu `check-workflow-checkouts.sh`
+  razem z listą, której pilnował.
+- `estate/*.repos`: trzy workspace'y, zero sub-repozytoriów; `./estate.sh check` mówi
+  „3 repositories". `CLAUDE.md` i trzy README opisują nowy układ.
+- GitHub: wszędzie została tylko gałąź `main` (stan `RegisterRebuild` i `dev-env-ide` jest w niej);
+  `workspace-formula` jest PRYWATNE, bo wchłonęło trzy prywatne repo gry; 29 starych repo
+  zarchiwizowanych, z dopiskiem w opisie, dokąd się przeniosły (`gh repo unarchive` to cofa).
+- Kopia zapasowa: wszystkie dawne katalogi `.git` (gałęzie, reflogi) leżą w
+  `../.estate-backup-2026-11-06/` (165 MB). Do skasowania, gdy właściciel uzna.
+- Historia pliku sprzed scalenia: `git blame` sam przechodzi przez commit `Fold …`; `git log`
+  trzeba pytać o ścieżkę sprzed scalenia i z `--full-history`.
+
+ZOSTAŁO (każde czeka na werdykt):
+- [ ] Zagnieżdżone `.github/` są martwe, bo GitHub czyta tylko korzeń: 25 workflowów i 12 plików
+      `dependabot.yml` w katalogach dawnych repo. Skutek: Dependabot nie pilnuje już Mavena, npm,
+      pip ani Dockera w podkatalogach (korzeń ma tylko `github-actions` i `docker` w `/`), a
+      auto-merge patchy nie działa. Do zrobienia: przenieść wpisy do korzenia z prefiksem
+      katalogu, przenieść auto-merge, skasować zagnieżdżone.
+- [ ] Gałęzie Dependabota `dependabot/github_actions/actions/setup-java-6` w `workspace-shared` i
+      `workspace-portal` zostały: to otwarte PR-y bota, skasowanie gałęzi je zamyka.
+- [ ] Gałęzie dawnych repo, które NIE weszły do scalonych (są w kopii i w archiwach na GitHubie):
+      `microservice-security`: `feature-packages` (15 commitów), `application-bridge` (9),
+      `restructure` (2), `smarter-factory` (1), `feature/mfa` (1); `password`: `feature/mfa` (2) i
+      stary czubek `main` (bliźniak commita zamendowanego 2026-10-29); `config` i `email`:
+      `feature/mfa` (po 1); `microservice-memes`: `spike/spring-boot-4` (1).
+- [ ] Pięć martwych repo na GitHubie poza posiadłością: `author-directory`, `meme-deletion`,
+      `purge-rule`, `system-time`, `libs`. Dla `libs` werdykt to KASACJA (2026-11-05, „po
+      zmergowaniu"): warunek jest spełniony, bo `main` we wszystkich trzech repo nie sięga już po
+      `libs`.
+- [ ] Sekret `REPO_PAT` nie jest już używany przez żaden workflow; można go usunąć z trzech repo.
+
 ## WYKONANE (2026-11-05) — `libs` (artefakt `constraint`) skasowane z posiadłości
 
 Właściciel skasował repo `libs`; `Outcome`/`Constraints` nie mają już ani jednego użytkownika.
