@@ -45,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - name: Checkout the kernel
+        uses: actions/checkout@v7
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v7
         with:

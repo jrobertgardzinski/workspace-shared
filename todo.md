@@ -51,6 +51,11 @@ ZOSTAŁO (każde czeka na werdykt):
       zmergowaniu"): warunek jest spełniony, bo `main` we wszystkich trzech repo nie sięga już po
       `libs`.
 - [ ] Sekret `REPO_PAT` nie jest już używany przez żaden workflow; można go usunąć z trzech repo.
+- [ ] CI kernela jest czerwone z powodu sprzed scalenia: `CredentialsFuseTest.
+      a_missing_jwt_signing_pair_refuses_a_prod_start` pada na GitHubie (ten sam test padł w
+      nocnym przebiegu `main` 2026-11-06 10:47, jeszcze przed scaleniem, i w CI dawnego repo
+      `microservice-security`), a lokalnie przechodzi. Test oczekuje odmowy startu „requires an
+      explicit JWT signing pair"; na runnerze start kończy się inaczej. Do zbadania.
 
 ## WYKONANE (2026-11-05) — `libs` (artefakt `constraint`) skasowane z posiadłości
 
