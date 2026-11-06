@@ -1,0 +1,45 @@
+name: CI
+
+# The password rules (policy, constraints, hashing) prove themselves here on every push. The
+# library builds against the shared SNAPSHOT starters and config (for the
+# ConfigValue contract its value objects honour - not the ladder: which level a rule is bound to
+# is the consuming service's business), checked out next to it in the workspace layout the other
+# repos use and installed in dependency order.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: shared/password
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/test-starter
+          path: shared/test-starter
+      - uses: actions/checkout@v7
+        with:
+          repository: jrobertgardzinski/config
+          path: shared/config
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Install the shared libraries (dependency order)
+        run: |
+          for lib in test-starter config; do
+            mvn -B -q --no-transfer-progress -f "shared/$lib/pom.xml" install -DskipTests
+          done
+
+      - name: Build and test
+        run: mvn -B --no-transfer-progress -f shared/password/pom.xml clean verify
