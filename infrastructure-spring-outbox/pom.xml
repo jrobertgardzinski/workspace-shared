@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.jrobertgardzinski</groupId>
+    <artifactId>infrastructure-spring-outbox</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <!--
+      Spring wiring for the framework-free transactional-outbox, the same split as
+      adjustable-clock + infrastructure-micronaut-clock: the core knows nothing about this module,
+      so a Micronaut or Quarkus service can use the outbox without a line of Spring on its
+      classpath, and a Spring service does not have to re-derive the three things that are fiddly
+      to get right — reaching the connection bound to the ambient transaction, deferring the send
+      until after the commit, and running the republisher on a schedule.
+
+      Spring is `provided`: the consuming service brings the runtime (it is a Spring Boot app by
+      definition), and this module must not be the thing that decides which Spring version it runs.
+    -->
+    <properties>
+        <maven.compiler.release>25</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- The Spring Framework version behind Spring Boot 4.1.0, the estate's Boot line since
+             2026-07-29. It says 4.1.0 rather than 3.5.x because both consumers - memes and
+             comments - moved that day; compiling against what this library actually runs on is the
+             point of pinning it at all, and a stale number here would be a claim, not a constraint. -->
+        <spring.version>7.0.10</spring.version>
+        <junit.version>6.1.3</junit.version>
+    </properties>
+
+    <!--
+      The JUnit BOM is imported, not merely a version on junit-jupiter, and the reason is a real
+      failure rather than tidiness. JUnit 6 renumbered the platform to match Jupiter (6.x), while
+      allure-junit5 still declares a transitive junit-platform-launcher from the 1.x line. Maven's
+      nearest-wins then puts a 1.10 launcher next to a 6.1 engine, and surefire dies during
+      discovery with the unhelpful "TestEngine with ID 'junit-jupiter' failed to discover tests".
+      Importing the BOM pins every junit-platform-* artifact to one generation, so the skew cannot
+      reappear the next time a test library is bumped.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.junit</groupId>
+                <artifactId>junit-bom</artifactId>
+                <version>${junit.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <!-- the framework-free outbox this module adapts to Spring -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>transactional-outbox</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- compile-time only: DataSourceUtils, TransactionSynchronizationManager, @Scheduled.
+             The consuming service brings the runtime. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <version>${spring.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+            <version>${spring.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <version>${spring.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- the module's own tests drive a REAL Spring transaction manager over a real H2, so the
+             rollback/commit claims are proven, not asserted against a mock -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.qameta.allure</groupId>
+            <artifactId>allure-junit5</artifactId>
+            <version>2.35.5</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>2.4.240</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>2.0.20</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.6</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- under target/, so mvn clean removes them and reports never accumulate stale runs -->
+                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+            <!-- allure reports everywhere -->
+            <plugin>
+                <groupId>io.qameta.allure</groupId>
+                <artifactId>allure-maven</artifactId>
+                <version>3.0.3</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>
