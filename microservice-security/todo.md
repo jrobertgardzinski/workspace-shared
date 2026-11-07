@@ -995,7 +995,13 @@ jak w `273f693`.
       nowy stan w enumie przeszedłby po cichu do ścieżki sukcesu i złapie go dopiero test.
       Drut bez zmian. Regresja z Dockerem: email 22, password 28, security 19 + 42 + 122 + 36 +
       343, pominięty 1 (niżej). E2E UI nie puszczane.
-- [ ] TRZY ODSTĘPSTWA OD WZORCA „stan + `switch`" (opisane 2026-11-06 na prośbę Roberta; każde
+- [x] ODSTĘPSTWA OD WZORCA, zdjęte 2026-11-07 według rekomendacji z opisu poniżej („Rób całość"):
+      (1c) `Register` pyta o `status()`, nie o listę; `if` zostaje, bo decyduje alternatywa dwóch
+      sędziów. (2c) `_UpdateBruteForceRecords.execute(PendingAuthentication)` obsługuje `Optional`,
+      `ContinueAuthentication` nie ma metody prywatnej. (3d) `StepUp#execute` bierze
+      `Supplier<PlaintextPassword>`, ostatni `null` w roli stanu zniknął; drut bez zmian. (3a)–(3c)
+      zostały, tak jak zalecał opis.
+- [x] TRZY ODSTĘPSTWA OD WZORCA „stan + `switch`" (opisane 2026-11-06 na prośbę Roberta; każde
       czeka na jego werdykt). Wzorzec: sędzia oddaje enum stanu, use case czyta go instrukcją
       `switch`, sukces to `case PASSED -> {}`. Niżej trzy miejsca, w których tak NIE jest: jak
       jest, dlaczego, czym można to zdjąć i co rekomenduję.
@@ -1177,16 +1183,15 @@ jak w `273f693`.
           które się nie konstruuje, `WRONG_PASSWORD`. Zmiana sięga kontrolera step-upu.
 
       Rekomendacja: (d) warto zrobić, bo usuwa `null`; (a)–(c) zostawić.
-- [ ] `DisplayNamesPactProviderTest` jest pomijany po cichu: szuka paktów w
-      `../../author-directory/pacts`, a od przenosin 2026-09-28 leżą w
-      `portal/portal-libs/author-directory/pacts`. Poprawić ścieżkę w `@PactFolder` i w
-      `consumerPactsCheckedOut` (zauważone 2026-11-06, czeka na werdykt).
+- [x] `DisplayNamesPactProviderTest` czyta pakty z `portal/portal-libs/author-directory/pacts`
+      (2026-11-07) i ma świadka w `SilentlySkippedPactTest` oraz w CI portalu. Przy okazji: ten sam
+      świadek wymienia `MemesFacts…`, `CommentsFacts…` i `CollectionsFactsPactProviderTest`, których
+      klas nie ma; sprawdza tylko katalogi, więc nic nie pada.
 - [ ] ODŁOŻONE („narazie"): test HTTP na liczniki brute force po logowaniu przez dostawcę
       (dziś dowodzi tego tylko `OpenMfaChainTest`; pełnego tańca OAuth z drugim czynnikiem na
       drucie nikt nie jedzie).
-- [ ] Repo `jrobertgardzinski/libs` na GitHubie: werdykt to KASACJA. Kolejność: najpierw
-      `RegisterRebuild` musi trafić na `main`, bo `main` tego repo (workflow CI, pomy, lista
-      klonowania w `Readme.md`) wciąż buduje się z `libs`.
+- [ ] Repo `jrobertgardzinski/libs` na GitHubie: werdykt to KASACJA, warunek spełniony (patrz
+      `todo.md` workspace'u).
 
 ## Otwarte — nazwy pól po wprowadzeniu portu odczytu (2026-09-02, drobne)
 

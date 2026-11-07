@@ -33,29 +33,38 @@ i „jak skończysz to usuń wszystkie branche poza main. Potem push".
 - Historia pliku sprzed scalenia: `git blame` sam przechodzi przez commit `Fold …`; `git log`
   trzeba pytać o ścieżkę sprzed scalenia i z `--full-history`.
 
-ZOSTAŁO (każde czeka na werdykt):
-- [ ] Zagnieżdżone `.github/` są martwe, bo GitHub czyta tylko korzeń: 25 workflowów i 12 plików
-      `dependabot.yml` w katalogach dawnych repo. Skutek: Dependabot nie pilnuje już Mavena, npm,
-      pip ani Dockera w podkatalogach (korzeń ma tylko `github-actions` i `docker` w `/`), a
-      auto-merge patchy nie działa. Do zrobienia: przenieść wpisy do korzenia z prefiksem
-      katalogu, przenieść auto-merge, skasować zagnieżdżone.
-- [ ] Gałęzie Dependabota `dependabot/github_actions/actions/setup-java-6` w `workspace-shared` i
-      `workspace-portal` zostały: to otwarte PR-y bota, skasowanie gałęzi je zamyka.
-- [ ] Gałęzie dawnych repo, które NIE weszły do scalonych (są w kopii i w archiwach na GitHubie):
-      `microservice-security`: `feature-packages` (15 commitów), `application-bridge` (9),
-      `restructure` (2), `smarter-factory` (1), `feature/mfa` (1); `password`: `feature/mfa` (2) i
-      stary czubek `main` (bliźniak commita zamendowanego 2026-10-29); `config` i `email`:
-      `feature/mfa` (po 1); `microservice-memes`: `spike/spring-boot-4` (1).
-- [ ] Pięć martwych repo na GitHubie poza posiadłością: `author-directory`, `meme-deletion`,
-      `purge-rule`, `system-time`, `libs`. Dla `libs` werdykt to KASACJA (2026-11-05, „po
-      zmergowaniu"): warunek jest spełniony, bo `main` we wszystkich trzech repo nie sięga już po
-      `libs`.
-- [ ] Sekret `REPO_PAT` nie jest już używany przez żaden workflow; można go usunąć z trzech repo.
-- [ ] CI kernela jest czerwone z powodu sprzed scalenia: `CredentialsFuseTest.
-      a_missing_jwt_signing_pair_refuses_a_prod_start` pada na GitHubie (ten sam test padł w
-      nocnym przebiegu `main` 2026-11-06 10:47, jeszcze przed scaleniem, i w CI dawnego repo
-      `microservice-security`), a lokalnie przechodzi. Test oczekuje odmowy startu „requires an
-      explicit JWT signing pair"; na runnerze start kończy się inaczej. Do zbadania.
+ZROBIONE 2026-11-07 („Rób całość"):
+- [x] Zagnieżdżone `.github/` skasowane (25 workflowów, 12 `dependabot.yml`). Wpisy Mavena, npm,
+      pip i Dockera są w `.github/dependabot.yml` korzenia `shared` i `portal`, z katalogiem jako
+      prefiksem; PR-y popłynęły zaraz po pushu (po 30 w `shared` i `portal`). Wypadły wpisy `pip`
+      dla `idp`, `push`, `sms`: tylko stdlib, nie ma manifestu.
+- [x] `dependabot-auto-merge.yml` w korzeniu `shared` i `portal`, w wersji z kontrolą tożsamości z
+      `microservice-security`. Część zagnieżdżonych kopii jej nie miała (mergowały po samej nazwie
+      gałęzi), więc wersja utwardzona jest jedyną.
+- [x] Do korzenia przeszło to, co sprawdzały tylko zagnieżdżone CI: świadkowie „pakty i testy
+      bazodanowe naprawdę chodzą" (`shared`, `portal`), `npm run build` dla `security-ui`, job
+      `python-image` w portalu. NIE przeszły kroki „spakowany serwis wstaje i odpowiada na sondy":
+      serwisy podnoszą joby `e2e`, a to nie to samo (nikt nie pyta już o `offboardingListener`,
+      `kafkaListeners` ani o port actuatora). Treść jest w historii, np. `git show
+      45a52faf:microservice-security/.github/workflows/ci.yml`.
+- [x] CI kernela zielone. `CredentialsFuseTest` nie miał nic wspólnego z JWT: każdy bezpiecznik jest
+      `@Context`, kolejność ich budowy nie jest ustalona, a test nie ustawiał tokena metryk, więc na
+      runnerze pierwszy strzelał `MetricsTokenFuse`. Każdy przypadek startuje teraz z kompletnej
+      konfiguracji i zabiera dokładnie jedną rzecz.
+
+ZOSTAŁO (po stronie właściciela, automat uprawnień Claude'a odmówił zapisów na GitHubie):
+- [ ] PR-y `dependabot/github_actions/actions/setup-java-6` (#1) w `workspace-shared` i
+      `workspace-portal`.
+- [ ] Sekret `REPO_PAT` w trzech repo: nieużywany.
+- [ ] Pięć martwych repo: `author-directory`, `meme-deletion`, `purge-rule`, `system-time`, `libs`.
+      Dla `libs` werdykt to KASACJA; `gh` nie ma zakresu `delete_repo`.
+
+ZOSTAJE ŚWIADOMIE:
+- Gałęzie dawnych repo poza `main` są w archiwach na GitHubie, dopóki archiwów nikt nie skasuje:
+  poza wymienionymi wyżej także `feature-packages` i `area-modules` w `microservice-memes`,
+  `microservice-comments` i `microservice-user-collections`. Na laptopie w
+  `~/git/.estate-backup-2026-11-07/` są dodatkowo gałęzie, których nie ma nigdzie indziej:
+  `laptop-2026-04` (cztery repo) i `gemini-refactor` (`password`).
 
 ## WYKONANE (2026-11-05) — `libs` (artefakt `constraint`) skasowane z posiadłości
 
