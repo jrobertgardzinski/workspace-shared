@@ -2,9 +2,11 @@ package com.jrobertgardzinski.security.system.registration;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
+import com.jrobertgardzinski.email.domain.EmailStatus;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.password.domain.PasswordError;
+import com.jrobertgardzinski.password.domain.PasswordStatus;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
@@ -61,8 +63,8 @@ public class Register {
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(passwordCandidate);
 
         if (
-                !admitEmailResult.errors().isEmpty() ||
-                !createPasswordHashResult.errors().isEmpty()
+                admitEmailResult.status() == EmailStatus.REJECTED ||
+                createPasswordHashResult.status() == PasswordStatus.REJECTED
         ) {
             return new Result.Rejected(
                     admitEmailResult.errors(),
