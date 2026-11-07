@@ -63,8 +63,8 @@ public class Register {
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(passwordCandidate);
 
         if (
-                admitEmailResult.status() == EmailStatus.REJECTED ||
-                createPasswordHashResult.status() == PasswordStatus.REJECTED
+                admitEmailResult.status() instanceof EmailStatus.Rejected ||
+                createPasswordHashResult.status() instanceof PasswordStatus.Rejected
         ) {
             return new Result.Rejected(
                     admitEmailResult.errors(),

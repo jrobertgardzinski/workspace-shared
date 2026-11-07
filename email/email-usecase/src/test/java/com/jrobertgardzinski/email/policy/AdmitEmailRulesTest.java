@@ -58,7 +58,7 @@ class AdmitEmailRulesTest {
         Email email = Email.of("user@acme.example");
 
         assertThat(admitEmail.evaluate(email)).isEqualTo(new AdmitEmail.Result(email, List.of()));
-        assertThat(admitEmail.evaluate(email).status()).isEqualTo(EmailStatus.PASSED);
+        assertThat(admitEmail.evaluate(email).status()).isInstanceOf(EmailStatus.Passed.class);
     }
 
     @Example
@@ -75,7 +75,7 @@ class AdmitEmailRulesTest {
         AdmitEmail.Result result = admitEmail.evaluate(() -> Email.of("invalid"));
 
         assertThat(result).isEqualTo(new AdmitEmail.Result(null, List.of(EmailError.EMAIL_FORMAT_INVALID)));
-        assertThat(result.status()).isEqualTo(EmailStatus.REJECTED);
+        assertThat(result.status()).isInstanceOf(EmailStatus.Rejected.class);
     }
 
     @Example

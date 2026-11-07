@@ -16,6 +16,7 @@ import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
 import java.util.Optional;
+import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 
 public class Authentication {
 
@@ -94,12 +95,12 @@ public class Authentication {
                 request.plaintextPassword());
 
         switch (verifyPasswordResult.status()) {
-            case USER_NOT_FOUND, WRONG_PASSWORD -> {
+            case CredentialsStatus.UserNotFound _, CredentialsStatus.WrongPassword _ -> {
                 // a miss is written down, whichever half was wrong
                 updateBruteForceRecords.execute(subject);
                 return new Result.Rejected();
             }
-            case PASSED -> {}
+            case CredentialsStatus.Passed _ -> {}
         }
 
         // the STORED spelling from here on, not the one that was typed: everything after this — the

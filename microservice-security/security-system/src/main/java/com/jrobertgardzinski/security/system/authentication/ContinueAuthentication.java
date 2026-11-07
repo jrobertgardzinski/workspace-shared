@@ -4,6 +4,7 @@ import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.system.mfa.PendingAuthentication;
 import com.jrobertgardzinski.security.system.mfa.PresentProof;
+import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 
 /**
  * Drives a sign-in that is past link #1 through its remaining factors, one proof at a time. Lives
@@ -56,17 +57,17 @@ public class ContinueAuthentication {
         PendingAuthentication chain = presentProofResult.chain();
 
         switch (presentProofResult.status()) {
-            case INVALID_TICKET -> { return new Result.InvalidTicket(); }
-            case TOO_MANY_ATTEMPTS -> {
+            case ProofStatus.InvalidTicket _ -> { return new Result.InvalidTicket(); }
+            case ProofStatus.TooManyAttempts _ -> {
                 updateBruteForceRecords.execute(chain);
                 return new Result.TooManyAttempts();
             }
-            case WRONG_PROOF -> {
+            case ProofStatus.WrongProof _ -> {
                 updateBruteForceRecords.execute(chain);
                 return new Result.WrongProof(
                         chain.attemptsLeft());
             }
-            case PASSED -> {}
+            case ProofStatus.Passed _ -> {}
         }
 
         if (

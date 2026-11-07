@@ -17,15 +17,15 @@ public final class RequireRole {
         this.rolesOf = rolesOf;
     }
 
-    /** {@code PASSED} when the caller holds the role; otherwise the one refusal that names it. */
+    /** {@link RoleStatus.Passed} when the caller holds the role; otherwise the one refusal that names it. */
     public RoleStatus check(Email caller, Role required) {
         if (rolesInForce(caller).contains(required)) {
-            return RoleStatus.PASSED;
+            return new RoleStatus.Passed();
         }
         return switch (required) {
-            case USER -> RoleStatus.NOT_A_USER;
-            case MODERATOR -> RoleStatus.NOT_A_MODERATOR;
-            case ADMIN -> RoleStatus.NOT_AN_ADMIN;
+            case USER -> new RoleStatus.NotAUser();
+            case MODERATOR -> new RoleStatus.NotAModerator();
+            case ADMIN -> new RoleStatus.NotAnAdmin();
         };
     }
 

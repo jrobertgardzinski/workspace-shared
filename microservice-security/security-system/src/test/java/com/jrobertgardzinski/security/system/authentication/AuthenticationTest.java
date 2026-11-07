@@ -147,7 +147,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, CredentialsStatus.PASSED));
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, new CredentialsStatus.Passed()));
         Mockito.when(generateSession.create(GIVEN.email)).thenReturn(sessionTokens);
 
         Authentication.Result result = authentication.execute(GIVEN.request);
@@ -174,7 +174,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(null, CredentialsStatus.WRONG_PASSWORD));
+                .thenReturn(new VerifyPassword.Result(null, new CredentialsStatus.WrongPassword()));
 
         Authentication.Result result = authentication.execute(GIVEN.request);
 
@@ -194,7 +194,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, CredentialsStatus.PASSED));
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, new CredentialsStatus.Passed()));
         Mockito.when(requireVerifiedEmail.isVerified(GIVEN.email)).thenReturn(false);
 
         Authentication.Result result = authentication.execute(GIVEN.request);
@@ -213,7 +213,7 @@ class AuthenticationTest {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, CredentialsStatus.PASSED));
+                .thenReturn(new VerifyPassword.Result(GIVEN.user, new CredentialsStatus.Passed()));
         Mockito.when(userRepository.isPendingDeletion(GIVEN.email)).thenReturn(true);
 
         Authentication.Result result = authentication.execute(GIVEN.request);

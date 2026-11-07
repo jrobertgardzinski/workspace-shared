@@ -991,10 +991,29 @@ jak w `273f693`.
       `PresentProof.Result(chain, ProofStatus status, chainCompleted)` zamiast listy `errors`.
       ŚWIADOME ODSTĘPSTWA: trzy (`Register`, `ContinueAuthentication#writeDownWrongProof`,
       `Optional`/`boolean`), opisane szczegółowo w następnym punkcie.
-      KOSZT: instrukcja `switch` po enumie nie jest sprawdzana przez kompilator na komplet ramion;
-      nowy stan w enumie przeszedłby po cichu do ścieżki sukcesu i złapie go dopiero test.
+      KOSZT (zdjęty 2026-11-07, niżej): instrukcja `switch` po enumie nie jest sprawdzana przez
+      kompilator na komplet ramion; nowy stan w enumie przeszedłby po cichu do ścieżki sukcesu i
+      złapie go dopiero test.
       Drut bez zmian. Regresja z Dockerem: email 22, password 28, security 19 + 42 + 122 + 36 +
       343, pominięty 1 (niżej). E2E UI nie puszczane.
+- [x] STATUSY SĘDZIÓW JAKO SEALED, 2026-11-07 (dekret Roberta: „D, definitywnie"). Instrukcja
+      `switch` po enumie nie jest sprawdzana na komplet ramion (zgodność wsteczna), po typie sealed
+      JEST: kompilator wymusza wszystkie podtypy, a przepływ po `switch`-u zostaje. Rozważone drogi:
+      (A) `default -> throw` — odrzucona („A odpada definitywnie", łapie dopiero runtime);
+      (B) `return switch` — nie pasuje, bo wymaga metody kontynuacji, a w `StepUp` `switch` siedzi
+      w `if`; (C) przypisanie do `Optional<Result>` + `if` — brzydkie; (D) sealed — wybrana.
+      `CredentialsStatus`, `ProofStatus`, `RoleStatus` (security-domain), `EmailStatus`
+      (email-domain), `PasswordStatus` (password-domain) to teraz `sealed interface` z pustymi
+      rekordami jeden do jednego ze stałymi (`Passed`, `UserNotFound`, …). Ramiona:
+      `case CredentialsStatus.UserNotFound _, CredentialsStatus.WrongPassword _ -> { return … }`,
+      `case CredentialsStatus.Passed _ -> {}`. `Register` pyta `instanceof EmailStatus.Rejected`.
+      Kod drutu `NOT_AN_ADMIN` przeniósł się z `RoleStatus.name()` do `RoleGuard` (wyrażenie
+      `switch`, wyczerpujące). Testy: `isInstanceOf(X.Passed.class)` zamiast `isEqualTo(X.PASSED)`.
+      ZOSTAŁ ENUMEM: `SessionStatus` (`ACTIVE`/`ROTATED`) — to stan utrwalany w bazie
+      (`name()`/`valueOf` w `JdbcSessionRepository`), nie werdykt sędziego; `switch` w
+      `RefreshSession` po nim nadal nie jest sprawdzany. Do decyzji, czy też go przerobić.
+      NIE ZROBIONE (osobna decyzja): dane w wariantach, np. `Passed(User)` zamiast `user == null`
+      w `VerifyPassword.Result`.
 - [x] ODSTĘPSTWA OD WZORCA, zdjęte 2026-11-07 według rekomendacji z opisu poniżej („Rób całość"):
       (1c) `Register` pyta o `status()`, nie o listę; `if` zostaje, bo decyduje alternatywa dwóch
       sędziów. (2c) `_UpdateBruteForceRecords.execute(PendingAuthentication)` obsługuje `Optional`,
@@ -1064,7 +1083,7 @@ jak w `273f693`.
 
           ```java
           if (
-                  admitEmailResult.status() == EmailStatus.REJECTED ||
+                  admitEmailResult.status() == EmailStatus.REJECTED ||   // od 2026-11-07: instanceof EmailStatus.Rejected
                   createPasswordHashResult.status() == PasswordStatus.REJECTED
           ) {
           ```

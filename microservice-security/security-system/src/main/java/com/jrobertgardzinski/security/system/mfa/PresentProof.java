@@ -41,7 +41,7 @@ public class PresentProof {
                 pendingAuthentication.get().isExpired(clock)
         ) {
             chainTickets.close(ticket);
-            return new Result(null, ProofStatus.INVALID_TICKET, false);
+            return new Result(null, new ProofStatus.InvalidTicket(), false);
         }
 
         PendingAuthentication chain = pendingAuthentication.get();
@@ -61,10 +61,10 @@ public class PresentProof {
                     afterWrongProof.get().attemptsLeft() <= 0
             ) {
                 chainTickets.close(ticket);
-                return new Result(chain, ProofStatus.TOO_MANY_ATTEMPTS, false);
+                return new Result(chain, new ProofStatus.TooManyAttempts(), false);
             }
 
-            return new Result(afterWrongProof.get(), ProofStatus.WRONG_PROOF, false);
+            return new Result(afterWrongProof.get(), new ProofStatus.WrongProof(), false);
         }
 
         List<EnrolledFactor> tail = chain.tail();
@@ -73,12 +73,12 @@ public class PresentProof {
                 tail.isEmpty()
         ) {
             chainTickets.close(ticket);
-            return new Result(chain, ProofStatus.PASSED, true);
+            return new Result(chain, new ProofStatus.Passed(), true);
         }
 
         PendingAuthentication advanced = mfaChain.advanceTo(chain, tail);
         chainTickets.replace(ticket, advanced);
 
-        return new Result(advanced, ProofStatus.PASSED, false);
+        return new Result(advanced, new ProofStatus.Passed(), false);
     }
 }

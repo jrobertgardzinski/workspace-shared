@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
+import com.jrobertgardzinski.password.domain.PasswordStatus;
 
 /**
  * Completes a password reset: the new password must meet the policy, the token must match a pending
@@ -93,12 +94,12 @@ public class ResetPassword {
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
 
         switch (createPasswordHashResult.status()) {
-            case REJECTED -> {
+            case PasswordStatus.Rejected _ -> {
                 return new Result.Rejected(
                         createPasswordHashResult.errors(),
                         createPasswordHashResult.policy());
             }
-            case PASSED -> {}
+            case PasswordStatus.Passed _ -> {}
         }
 
         Optional<PasswordResetRepository.PendingReset> pendingReset = passwordResetRepository.consumeReset(token);

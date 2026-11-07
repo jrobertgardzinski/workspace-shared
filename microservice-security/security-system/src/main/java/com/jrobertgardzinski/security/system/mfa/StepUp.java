@@ -13,6 +13,7 @@ import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
 import java.util.function.Supplier;
+import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 
 /**
  * Re-proves a caller for a sensitive action. The requirement per action comes from the
@@ -114,8 +115,8 @@ public class StepUp {
             VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordCandidate);
 
             switch (verifyPasswordResult.status()) {
-                case USER_NOT_FOUND, WRONG_PASSWORD -> { return new Result.WrongPassword(); }
-                case PASSED -> {}
+                case CredentialsStatus.UserNotFound _, CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
+                case CredentialsStatus.Passed _ -> {}
             }
         }
 

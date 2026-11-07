@@ -58,7 +58,7 @@ class PresentProofTest {
     void an_unknown_ticket_is_invalid() {
         PresentProof.Result result = presentProof.present("a-ticket-nobody-opened", "000000");
 
-        assertThat(result.status()).isEqualTo(ProofStatus.INVALID_TICKET);
+        assertThat(result.status()).isInstanceOf(ProofStatus.InvalidTicket.class);
         assertThat(result.chain()).isNull();
     }
 
@@ -70,7 +70,7 @@ class PresentProofTest {
 
         PresentProof.Result result = new PresentProof(mfaChain, store, later).present(ticket, mailbox.lastCode);
 
-        assertThat(result.status()).isEqualTo(ProofStatus.INVALID_TICKET);
+        assertThat(result.status()).isInstanceOf(ProofStatus.InvalidTicket.class);
         assertThat(store.find(ticket)).isEmpty();
     }
 
@@ -81,7 +81,7 @@ class PresentProofTest {
 
         PresentProof.Result result = presentProof.present(ticket, "000000");
 
-        assertThat(result.status()).isEqualTo(ProofStatus.WRONG_PROOF);
+        assertThat(result.status()).isInstanceOf(ProofStatus.WrongProof.class);
         assertThat(result.chain().attemptsLeft()).isEqualTo(CONFIG.maxAttempts().value() - 1);
         assertThat(store.find(ticket)).isPresent();
     }
@@ -96,13 +96,13 @@ class PresentProofTest {
             result = presentProof.present(ticket, "000000");
         }
 
-        assertThat(result.status()).isEqualTo(ProofStatus.TOO_MANY_ATTEMPTS);
+        assertThat(result.status()).isInstanceOf(ProofStatus.TooManyAttempts.class);
         assertThat(result.chain())
                 .as("the chain still comes back, so a sign-in knows whom to charge the miss to")
                 .isNotNull();
         assertThat(store.find(ticket)).isEmpty();
         assertThat(presentProof.present(ticket, mailbox.lastCode).status())
-                .isEqualTo(ProofStatus.INVALID_TICKET);
+                .isInstanceOf(ProofStatus.InvalidTicket.class);
     }
 
     @Test
@@ -112,7 +112,7 @@ class PresentProofTest {
 
         PresentProof.Result result = presentProof.present(ticket, mailbox.lastCode);
 
-        assertThat(result.status()).isEqualTo(ProofStatus.PASSED);
+        assertThat(result.status()).isInstanceOf(ProofStatus.Passed.class);
         assertThat(result.chainCompleted()).isTrue();
         assertThat(store.find(ticket)).isEmpty();
     }
@@ -124,7 +124,7 @@ class PresentProofTest {
 
         PresentProof.Result result = presentProof.present(ticket, mailbox.lastCode);
 
-        assertThat(result.status()).isEqualTo(ProofStatus.PASSED);
+        assertThat(result.status()).isInstanceOf(ProofStatus.Passed.class);
         assertThat(result.chainCompleted()).isFalse();
         assertThat(result.chain().currentType()).isEqualTo(FactorType.SMS_CODE);
         assertThat(result.chain().attemptsLeft())

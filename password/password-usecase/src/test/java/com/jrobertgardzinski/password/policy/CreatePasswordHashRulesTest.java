@@ -59,7 +59,7 @@ class CreatePasswordHashRulesTest {
         CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of("Str0ng!pass"));
 
         assertThat(result).isEqualTo(new CreatePasswordHash.Result(new HashedPassword("hash:Str0ng!pass"), List.of(), DEFAULTS));
-        assertThat(result.status()).isEqualTo(PasswordStatus.PASSED);
+        assertThat(result.status()).isInstanceOf(PasswordStatus.Passed.class);
     }
 
     @Example
@@ -94,7 +94,7 @@ class CreatePasswordHashRulesTest {
         CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of("   "));
 
         assertThat(result).isEqualTo(new CreatePasswordHash.Result(null, List.of(PasswordError.PASSWORD_BLANK), DEFAULTS));
-        assertThat(result.status()).isEqualTo(PasswordStatus.REJECTED);
+        assertThat(result.status()).isInstanceOf(PasswordStatus.Rejected.class);
     }
 
     @Example

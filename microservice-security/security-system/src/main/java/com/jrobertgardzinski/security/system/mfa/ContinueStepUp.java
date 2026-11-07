@@ -3,6 +3,7 @@ package com.jrobertgardzinski.security.system.mfa;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 
 import java.util.Optional;
+import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 
 /**
  * The second half of a step-up: a factor proof presented against the ticket {@link StepUp} opened.
@@ -52,13 +53,13 @@ public class ContinueStepUp {
         }
 
         switch (presentProofResult.status()) {
-            case INVALID_TICKET -> { return new Result.InvalidTicket(); }
-            case TOO_MANY_ATTEMPTS -> { return new Result.TooManyAttempts(); }
-            case WRONG_PROOF -> {
+            case ProofStatus.InvalidTicket _ -> { return new Result.InvalidTicket(); }
+            case ProofStatus.TooManyAttempts _ -> { return new Result.TooManyAttempts(); }
+            case ProofStatus.WrongProof _ -> {
                 return new Result.WrongProof(
                         presentProofResult.chain().attemptsLeft());
             }
-            case PASSED -> {}
+            case ProofStatus.Passed _ -> {}
         }
 
         if (

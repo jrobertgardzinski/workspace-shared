@@ -29,10 +29,16 @@ public final class RoleGuard {
     public Optional<HttpResponse<Map<String, Object>>> require(HttpRequest<?> request, Role role) {
         RoleStatus status = requireRole.check(Caller.of(request), role);
         return switch (status) {
-            case PASSED -> Optional.empty();
-            case NOT_A_USER, NOT_A_MODERATOR, NOT_AN_ADMIN -> Optional.of(
-                    HttpResponse.<Map<String, Object>>status(HttpStatus.FORBIDDEN)
-                            .body(Map.of("status", status.name())));
+            case RoleStatus.Passed _ -> Optional.empty();
+            case RoleStatus.NotAUser _ -> forbidden("NOT_A_USER");
+            case RoleStatus.NotAModerator _ -> forbidden("NOT_A_MODERATOR");
+            case RoleStatus.NotAnAdmin _ -> forbidden("NOT_AN_ADMIN");
         };
+    }
+
+    private static Optional<HttpResponse<Map<String, Object>>> forbidden(String code) {
+        return Optional.of(
+                HttpResponse.<Map<String, Object>>status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("status", code)));
     }
 }

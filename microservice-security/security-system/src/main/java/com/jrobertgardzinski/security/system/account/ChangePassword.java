@@ -11,6 +11,8 @@ import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
 import java.util.function.Supplier;
+import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
+import com.jrobertgardzinski.password.domain.PasswordStatus;
 
 /**
  * Changes a signed-in user's password: the current password must match, and the new password must
@@ -71,20 +73,20 @@ public class ChangePassword {
         VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, currentPasswordCandidate);
 
         switch (verifyPasswordResult.status()) {
-            case USER_NOT_FOUND -> { return new Result.UserNotFound(); }
-            case WRONG_PASSWORD -> { return new Result.WrongPassword(); }
-            case PASSED -> {}
+            case CredentialsStatus.UserNotFound _ -> { return new Result.UserNotFound(); }
+            case CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
+            case CredentialsStatus.Passed _ -> {}
         }
 
         CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
 
         switch (createPasswordHashResult.status()) {
-            case REJECTED -> {
+            case PasswordStatus.Rejected _ -> {
                 return new Result.Rejected(
                         createPasswordHashResult.errors(),
                         createPasswordHashResult.policy());
             }
-            case PASSED -> {}
+            case PasswordStatus.Passed _ -> {}
         }
 
         userRepository.updatePassword(

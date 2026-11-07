@@ -19,6 +19,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 @Epic("Use case")
 @Feature("Verify password")
@@ -53,7 +54,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertEquals(USER, result.user()),
-                () -> assertEquals(CredentialsStatus.PASSED, result.status())
+                () -> assertInstanceOf(CredentialsStatus.Passed.class, result.status())
         );
     }
 
@@ -67,7 +68,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertNull(result.user()),
-                () -> assertEquals(CredentialsStatus.WRONG_PASSWORD, result.status())
+                () -> assertInstanceOf(CredentialsStatus.WrongPassword.class, result.status())
         );
     }
 
@@ -80,7 +81,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertNull(result.user()),
-                () -> assertEquals(CredentialsStatus.USER_NOT_FOUND, result.status()),
+                () -> assertInstanceOf(CredentialsStatus.UserNotFound.class, result.status()),
                 // skipping the hash for an unknown address answers in a millisecond where a known
                 // one costs the full Argon2, and that difference enumerates accounts on endpoints
                 // that refuse to enumerate them in words
@@ -96,7 +97,7 @@ class VerifyPasswordTest {
 
         VerifyPassword.Result result = verifyPassword.verify(EMAIL, PASSWORD);
 
-        assertEquals(CredentialsStatus.USER_NOT_FOUND, result.status());
+        assertInstanceOf(CredentialsStatus.UserNotFound.class, result.status());
     }
 
     @Example
@@ -106,7 +107,7 @@ class VerifyPasswordTest {
 
         assertAll(
                 () -> assertNull(result.user()),
-                () -> assertEquals(CredentialsStatus.WRONG_PASSWORD, result.status())
+                () -> assertInstanceOf(CredentialsStatus.WrongPassword.class, result.status())
         );
     }
 }

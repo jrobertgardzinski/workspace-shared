@@ -47,9 +47,9 @@ public class AdmitEmail {
         /** Read off the errors, so the two cannot disagree. */
         public EmailStatus status() {
             if (errors.isEmpty()) {
-                return EmailStatus.PASSED;
+                return new EmailStatus.Passed();
             }
-            return EmailStatus.REJECTED;
+            return new EmailStatus.Rejected();
         }
     }
 

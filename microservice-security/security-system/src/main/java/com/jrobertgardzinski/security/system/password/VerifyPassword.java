@@ -38,7 +38,7 @@ public class VerifyPassword {
     }
 
     /**
-     * The account, present only when the password {@code PASSED} ({@code null} otherwise), and
+     * The account, present only when the password {@link CredentialsStatus.Passed passed} ({@code null} otherwise), and
      * which of the three it was.
      */
     public record Result(User user, CredentialsStatus status) {}
@@ -50,7 +50,7 @@ public class VerifyPassword {
         try {
             plaintextPassword = passwordCandidate.get();
         } catch (IllegalArgumentException blank) {
-            return new Result(null, CredentialsStatus.WRONG_PASSWORD);
+            return new Result(null, new CredentialsStatus.WrongPassword());
         }
 
         return verify(email, plaintextPassword);
@@ -73,15 +73,15 @@ public class VerifyPassword {
         if (
                 user.isEmpty()
         ) {
-            return new Result(null, CredentialsStatus.USER_NOT_FOUND);
+            return new Result(null, new CredentialsStatus.UserNotFound());
         }
 
         if (
                 !passwordMatches
         ) {
-            return new Result(null, CredentialsStatus.WRONG_PASSWORD);
+            return new Result(null, new CredentialsStatus.WrongPassword());
         }
 
-        return new Result(user.get(), CredentialsStatus.PASSED);
+        return new Result(user.get(), new CredentialsStatus.Passed());
     }
 }

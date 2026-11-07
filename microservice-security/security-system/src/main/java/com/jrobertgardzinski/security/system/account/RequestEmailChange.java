@@ -11,6 +11,7 @@ import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 
 import java.util.List;
+import com.jrobertgardzinski.email.domain.EmailStatus;
 
 
 /**
@@ -68,11 +69,11 @@ public class RequestEmailChange {
         AdmitEmail.Result admitEmailResult = admitEmail.evaluate(newEmail);
 
         switch (admitEmailResult.status()) {
-            case REJECTED -> {
+            case EmailStatus.Rejected _ -> {
                 return new Result.Rejected(
                         admitEmailResult.errors());
             }
-            case PASSED -> {}
+            case EmailStatus.Passed _ -> {}
         }
 
         if (

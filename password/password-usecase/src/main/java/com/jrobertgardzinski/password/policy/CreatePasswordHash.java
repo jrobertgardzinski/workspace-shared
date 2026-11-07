@@ -14,7 +14,7 @@ import java.util.regex.Pattern;
 /**
  * Judges a plaintext password against the policy in force and, if it passes, hashes it. There is
  * no way to obtain the hash of a password that failed: a refused one comes back
- * {@link PasswordStatus#REJECTED} with every broken rule at once, in policy order, so a form can
+ * {@link PasswordStatus.Rejected} with every broken rule at once, in policy order, so a form can
  * show all of them in one round. A candidate that does not construct (blank) is refused as
  * {@link PasswordError#PASSWORD_BLANK} with the policy skipped. The policy is asked once per
  * attempt, so a refusal names the policy it was judged against.
@@ -46,9 +46,9 @@ public class CreatePasswordHash {
         /** Read off the errors, so the two cannot disagree. */
         public PasswordStatus status() {
             if (errors.isEmpty()) {
-                return PasswordStatus.PASSED;
+                return new PasswordStatus.Passed();
             }
-            return PasswordStatus.REJECTED;
+            return new PasswordStatus.Rejected();
         }
     }
 
