@@ -12,6 +12,7 @@ import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
+import java.util.function.Supplier;
 
 /**
  * Re-proves a caller for a sensitive action. The requirement per action comes from the
@@ -74,7 +75,7 @@ public class StepUp {
         record NothingToProveWith() implements Result {}
     }
 
-    public Result execute(Email email, StepUpAction action, String accessToken, PlaintextPassword passwordAttempt) {
+    public Result execute(Email email, StepUpAction action, String accessToken, Supplier<PlaintextPassword> passwordCandidate) {
 
         StepUpRequirement requirement = policy.requirementFor(action);
 
@@ -108,17 +109,9 @@ public class StepUp {
                 mustProvePassword &&
                 !passwordlessAccountRepository.isPasswordless(email)
         ) {
-            // Null is "no password offered" — the caller sent none, or sent a blank the boundary
-            // reads as none — and it answers like a wrong one. The attempt arrives as a
-            // PlaintextPassword because building the domain type out of what came over the wire is
-            // the adapter's job, not this use case's.
-            if (
-                    passwordAttempt == null
-            ) {
-                return new Result.WrongPassword();
-            }
-
-            VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordAttempt);
+            // No password offered, or a blank one, does not construct, and it answers like a wrong
+            // one: VerifyPassword says so.
+            VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordCandidate);
 
             switch (verifyPasswordResult.status()) {
                 case USER_NOT_FOUND, WRONG_PASSWORD -> { return new Result.WrongPassword(); }

@@ -63,12 +63,11 @@ final class StepUpController {
         }
         // a BLANK password is no password: it used to reach the value object and answer 500 with
         // its rule, where an absent one has always answered "wrong password" — one situation, one
-        // answer, and the use case already knows what to do with nothing. Past that check the text
-        // can only build, so the domain type is made HERE, where the wire is read
-        PlaintextPassword password = JsonBody.missing(body, "password")
-                ? null
-                : PlaintextPassword.of(body.get("password"));
-        return respond(stepUp.execute(email, action.get(), token, password), request);
+        // answer. Handed over as a candidate, so the use case decides what one that does not
+        // construct means
+        return respond(
+                stepUp.execute(email, action.get(), token, () -> PlaintextPassword.of(body.get("password"))),
+                request);
     }
 
     @Post(value = "/factor", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
