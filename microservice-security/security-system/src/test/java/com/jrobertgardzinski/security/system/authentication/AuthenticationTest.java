@@ -164,7 +164,7 @@ class AuthenticationTest {
                 () -> Mockito.verify(cleanBruteForceRecords).execute(
                         new LockoutSubject(GIVEN.ipAddress, AttemptedAccount.of(GIVEN.email))),
                 () -> Mockito.verify(generateSession).create(GIVEN.email),
-                () -> Mockito.verify(updateBruteForceRecords, Mockito.never()).execute(Mockito.any())
+                () -> Mockito.verify(updateBruteForceRecords, Mockito.never()).execute(Mockito.any(LockoutSubject.class))
         );
     }
 
@@ -203,7 +203,7 @@ class AuthenticationTest {
         assertAll(
                 () -> Mockito.verify(generateSession, Mockito.never()).create(Mockito.any()),
                 () -> Mockito.verify(cleanBruteForceRecords, Mockito.never()).execute(Mockito.any()),
-                () -> Mockito.verify(updateBruteForceRecords, Mockito.never()).execute(Mockito.any())
+                () -> Mockito.verify(updateBruteForceRecords, Mockito.never()).execute(Mockito.any(LockoutSubject.class))
         );
     }
 

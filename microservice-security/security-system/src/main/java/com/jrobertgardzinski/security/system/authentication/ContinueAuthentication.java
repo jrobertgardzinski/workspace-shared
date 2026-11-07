@@ -2,11 +2,8 @@ package com.jrobertgardzinski.security.system.authentication;
 
 import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
-import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
 import com.jrobertgardzinski.security.system.mfa.PendingAuthentication;
 import com.jrobertgardzinski.security.system.mfa.PresentProof;
-
-import java.util.Optional;
 
 /**
  * Drives a sign-in that is past link #1 through its remaining factors, one proof at a time. Lives
@@ -61,11 +58,11 @@ public class ContinueAuthentication {
         switch (presentProofResult.status()) {
             case INVALID_TICKET -> { return new Result.InvalidTicket(); }
             case TOO_MANY_ATTEMPTS -> {
-                writeDownWrongProof(chain);
+                updateBruteForceRecords.execute(chain);
                 return new Result.TooManyAttempts();
             }
             case WRONG_PROOF -> {
-                writeDownWrongProof(chain);
+                updateBruteForceRecords.execute(chain);
                 return new Result.WrongProof(
                         chain.attemptsLeft());
             }
@@ -91,23 +88,5 @@ public class ContinueAuthentication {
         return new Result.NextFactor(
                 chain.currentType(),
                 chain.challengeData());
-    }
-
-    /**
-     * A wrong proof is a wrong guess at this account from this address, so it is written down like
-     * a wrong password. Five-per-ticket was never a limit on the person: link #1 is a password they
-     * already hold, so a new ticket costs one request and the codes could be walked at whatever
-     * rate tickets could be minted.
-     */
-    private void writeDownWrongProof(PendingAuthentication chain) {
-
-        Optional<LockoutSubject> lockoutSubject = chain.lockoutSubject();
-
-        if (
-                lockoutSubject.isPresent()
-        ) {
-            updateBruteForceRecords.execute(
-                    lockoutSubject.get());
-        }
     }
 }
