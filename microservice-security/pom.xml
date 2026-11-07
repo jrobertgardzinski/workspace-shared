@@ -10,7 +10,7 @@
 
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
-        <micronaut.version>5.1.0</micronaut.version>
+        <micronaut.version>5.2.4</micronaut.version>
         <!-- the Maven plugin is versioned apart from the platform; 5.1.0 of it does not exist -->
         <micronaut-maven-plugin.version>5.0.2</micronaut-maven-plugin.version>
         <!-- Micronaut 5's platform BOM stopped managing testcontainers, the same change Spring Boot 4
