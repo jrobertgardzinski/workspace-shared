@@ -1014,6 +1014,13 @@ jak w `273f693`.
       `RefreshSession` po nim nadal nie jest sprawdzany. Do decyzji, czy też go przerobić.
       NIE ZROBIONE (osobna decyzja): dane w wariantach, np. `Passed(User)` zamiast `user == null`
       w `VerifyPassword.Result`.
+- [ ] ZOSTAWIONE ŚWIADOMIE PO SEALED (2026-11-07, decyzja Roberta: „wrócimy do tego"):
+      (1) `SessionStatus` (`ACTIVE`/`ROTATED`) został enumem, bo to stan utrwalany w bazie przez
+      `name()`/`valueOf` (`JdbcSessionRepository`), nie werdykt sędziego. Jego `switch` w
+      `RefreshSession` nadal nie jest sprawdzany przez kompilator.
+      (2) Dane w wariantach: np. `Passed(User)` zamiast `user == null` w `VerifyPassword.Result`;
+      analogicznie `PresentProof.Result.chain` (`null` przy `InvalidTicket`) i
+      `CreatePasswordHash.Result.hashedPassword` (`null` przy `Rejected`).
 - [x] ODSTĘPSTWA OD WZORCA, zdjęte 2026-11-07 według rekomendacji z opisu poniżej („Rób całość"):
       (1c) `Register` pyta o `status()`, nie o listę; `if` zostaje, bo decyduje alternatywa dwóch
       sędziów. (2c) `_UpdateBruteForceRecords.execute(PendingAuthentication)` obsługuje `Optional`,
