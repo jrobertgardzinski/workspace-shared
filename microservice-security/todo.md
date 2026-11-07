@@ -1014,6 +1014,13 @@ jak w `273f693`.
       `RefreshSession` po nim nadal nie jest sprawdzany. Do decyzji, czy też go przerobić.
       NIE ZROBIONE (osobna decyzja): dane w wariantach, np. `Passed(User)` zamiast `user == null`
       w `VerifyPassword.Result`.
+- [x] CENA DEKRETU „PRZEPŁYW W JEDNEJ METODZIE" (2026-11-07, spisane na prośbę Roberta): jest
+      jedna i jest nią powtórzenie. `switch` po `CredentialsStatus` wygląda prawie tak samo w
+      `Authentication`, `ChangePassword` i `StepUp`. To świadomy zakup: trzy podobne linie zamiast
+      jednej abstrakcji (Observer, metoda kontynuacji, szablon), która ukrywa przepływ. Zysk:
+      czytelnik otwiera `execute` i w kilkudziesięciu liniach widzi całą politykę use case'u, bez
+      skakania po klasach i zgadywania, kto nasłuchuje i w jakiej kolejności. Dopóki use case'ów
+      jest kilkanaście, ten zakup się opłaca; gdyby ich przybyło kilkadziesiąt, wrócić tu.
 - [ ] ZOSTAWIONE ŚWIADOMIE PO SEALED (2026-11-07, decyzja Roberta: „wrócimy do tego"):
       (1) `SessionStatus` (`ACTIVE`/`ROTATED`) został enumem, bo to stan utrwalany w bazie przez
       `name()`/`valueOf` (`JdbcSessionRepository`), nie werdykt sędziego. Jego `switch` w
