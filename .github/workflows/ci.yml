@@ -33,6 +33,36 @@ jobs:
       - name: Build and test the shared kernel
         run: ./mvnw -B --no-transfer-progress clean install
 
+      # A verification or a Testcontainers suite that was SKIPPED reports green, so the run says out
+      # loud that they executed. Both witnesses came up from microservice-security's own workflow
+      # on 2026-11-07. The pacts of the portal's consumers are witnessed in workspace-portal's CI,
+      # the only place they are checked out. SilentlySkippedPactTest says the same from inside the
+      # JVM; these steps are the outside witness.
+      - name: Prove the pact verifications and the database-backed suites actually ran
+        if: always()
+        run: |
+          reports=microservice-security/security-infrastructure/target/surefire-reports
+          for test in JwksPactProviderTest MailRequestsPactProviderTest \
+                      security.infrastructure.persistence.JdbcAdaptersTest \
+                      security.infrastructure.persistence.SessionLineageRaceTest \
+                      security.infrastructure.persistence.BruteForceRaceTest \
+                      persistence.AccountDeletionSagaLatchTest \
+                      persistence.RetentionReapersTest; do
+            file="$reports/TEST-com.jrobertgardzinski.$test.xml"
+            if [ ! -f "$file" ]; then
+              echo "::error::$test produced no surefire report — it never ran."
+              ls -1 "$reports" || true
+              exit 1
+            fi
+            cases=$(grep -c '<testcase' "$file" || true)
+            skips=$(grep -c '<skipped' "$file" || true)
+            if [ "$cases" -eq 0 ] || [ "$cases" -eq "$skips" ]; then
+              echo "::error::$test executed nothing ($cases case(s), $skips skipped)."
+              exit 1
+            fi
+            echo "$test: $cases case(s), $skips skipped."
+          done
+
   # The same Gherkin specs, driven through a real browser (cucumber-js + Playwright) against
   # the security service and its React UI. Only the modules the security jar needs are built
   # (-am closure), tests skipped — the reactor job owns those.
@@ -91,6 +121,11 @@ jobs:
       # Cheap and first: the error model is pure decision-making ("what does this status mean to a
       # person?") and every one of its rules used to be an unwritten else that told users their
       # password was wrong when the database was down. No browser, no stack — seconds.
+      # security-ui is NOT a Maven module, so this is the only thing that compiles it: tsc, so
+      # type-level breakage in a bump is caught here.
+      - name: Compile the UI (security-ui)
+        run: npm run build
+        working-directory: microservice-security/security-ui
       - name: Unit-test the UI's error model (security-ui)
         run: npm test
         working-directory: microservice-security/security-ui

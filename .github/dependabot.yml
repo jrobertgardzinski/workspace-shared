@@ -10,7 +10,7 @@ version: 2
 #
 # Weekly, patches grouped into one pull request, minor and major left to a person. Limit 10.
 updates:
-  # This repository's own workflows (the aggregator CI and its nightly reactor).
+  # This repository's own workflows.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -44,3 +44,156 @@ updates:
       timezone: Europe/Warsaw
     open-pull-requests-limit: 10
     labels: ["dependencies"]
+
+  # The sub-projects. GitHub reads this file and nothing below it, so what each repository's own
+  # dependabot.yml used to say lives here with the directory as a prefix (moved 2026-11-07). No
+  # github-actions entries among them: the only workflows left are this repository's, covered above.
+  # No pip entries for idp, push and sms either: stdlib only, no manifest to read.
+
+  # infrastructure-spring-outbox
+  # pins Spring Framework directly, despite being a small adapter
+  - package-ecosystem: maven
+    directory: "/infrastructure-spring-outbox"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    groups:
+      patches:
+        patterns: ["*"]
+        update-types: ["patch"]
+    ignore:
+      # The framework's own MAJOR line is a migration you plan, not a Monday pull request — and
+      # leaving it un-ignored costs more than the noise. Dependabot always targets the LATEST
+      # version, so while 4.x exists it offers 3.5.3 -> 4.1.0 and NEVER 3.5.3 -> 3.5.16: the
+      # thirteen patch releases of the supported line, the ones carrying the security fixes, would
+      # simply never be proposed. Ignoring the major is what makes the patch line visible at all.
+      # (Found the hard way on 2026-07-29, from Dependabot's first run against this very file.)
+      - dependency-name: "org.springframework:*"
+        update-types: ["version-update:semver-major"]
+
+  # microservice-email
+  # Quarkus and the mail stack
+  - package-ecosystem: maven
+    directory: "/microservice-email"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    groups:
+      patches:
+        patterns: ["*"]
+        update-types: ["patch"]
+    ignore:
+      - dependency-name: "io.quarkus.platform:*"
+        update-types: ["version-update:semver-major"]
+
+  # Base images in this repository's Dockerfile. Added 2026-07-30: image tags were watched by nothing,
+  # so they kept whatever was current when the line was written.
+  - package-ecosystem: docker
+    directory: "/microservice-email"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+
+  # microservice-idp
+  - package-ecosystem: docker
+    directory: "/microservice-idp"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+
+  # microservice-push
+  - package-ecosystem: docker
+    directory: "/microservice-push"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+
+  # microservice-security
+  # Micronaut and everything the auth service runs on
+  - package-ecosystem: maven
+    directory: "/microservice-security"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    groups:
+      patches:
+        patterns: ["*"]
+        update-types: ["patch"]
+    ignore:
+      - dependency-name: "io.micronaut.platform:micronaut-platform"
+        update-types: ["version-update:semver-major"]
+
+  # the sign-in UI's dependency tree
+  - package-ecosystem: npm
+    directory: "/microservice-security/security-ui"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    groups:
+      patches:
+        patterns: ["*"]
+        update-types: ["patch"]
+
+  - package-ecosystem: docker
+    directory: "/microservice-security/security-infrastructure"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+
+  # microservice-sms
+  - package-ecosystem: docker
+    directory: "/microservice-sms"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+
+  # transactional-outbox
+  - package-ecosystem: maven
+    directory: "/transactional-outbox"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Warsaw
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    groups:
+      patches:
+        patterns: ["*"]
+        update-types: ["patch"]
