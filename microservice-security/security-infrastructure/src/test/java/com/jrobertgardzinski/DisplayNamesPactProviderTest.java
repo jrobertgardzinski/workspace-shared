@@ -29,16 +29,16 @@ import java.util.Set;
 /**
  * Verifies the author-directory library's committed pact — the consumer of {@code GET /users?ids=}
  * on behalf of every content service — against the real controller. Skipped, not failed, when the
- * library repo is not checked out next to this one.
+ * portal workspace is not checked out next to this one.
  */
 @Provider("microservice-security")
-@PactFolder("../../author-directory/pacts")
+@PactFolder("../../../portal/portal-libs/author-directory/pacts")
 @EnabledIf(value = "consumerPactsCheckedOut",
-        disabledReason = "author-directory is not checked out next to this repo")
+        disabledReason = "the portal workspace is not checked out next to this one")
 class DisplayNamesPactProviderTest {
 
     static boolean consumerPactsCheckedOut() {
-        return Files.isDirectory(Path.of("../../author-directory/pacts"));
+        return Files.isDirectory(Path.of("../../../portal/portal-libs/author-directory/pacts"));
     }
 
     private static EmbeddedServer server;
