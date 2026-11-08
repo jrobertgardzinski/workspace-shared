@@ -3,7 +3,7 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
-import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment;
@@ -63,8 +63,8 @@ final class FactorsController {
 
     @Get(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> list(HttpRequest<?> request) {
-        Email caller = caller(request);
-        List<Map<String, String>> have = enrolledFactors.findByUser(caller).stream()
+        Caller caller = caller(request);
+        List<Map<String, String>> have = enrolledFactors.findByUser(caller.email()).stream()
                 .map(f -> Map.of("type", f.type().value(), "label", f.label()))
                 .toList();
         List<String> offered = registry.offered().stream().map(FactorType::value).sorted().toList();
@@ -76,7 +76,7 @@ final class FactorsController {
                                             @Nullable @Body Map<String, String> body) {
         // the path is read BEFORE the guard, because the guard SPENDS a one-shot elevation: a typo
         // in the factor type used to cost the whole step-up chain and answer 400 afterwards
-        Email caller = caller(request);
+        Caller caller = caller(request);
         FactorType factorType = FactorType.of(type);
         // enrolling a factor rewrites the sign-in chain, so a merely-live (possibly stolen) session
         // must step up first — otherwise a thief adds an attacker-held factor and locks the owner out.
@@ -89,7 +89,7 @@ final class FactorsController {
         // the e-mail factor's code always goes to the caller's OWN already-verified address — never a
         // target from the body, or a thief would point the codes at their own inbox
         String target = "EMAIL_CODE".equals(factorType.value()) || body == null || body.get("target") == null
-                ? caller.value() : body.get("target");
+                ? caller.email().value() : body.get("target");
         return respond(transactionBoundary.execute(
                 () -> enrolFactor.execute(caller, factorType, target)));
     }
@@ -97,7 +97,7 @@ final class FactorsController {
     @Post(value = "/{type}/enroll/confirm", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> confirm(HttpRequest<?> request, @PathVariable String type,
                                               @Body Map<String, String> body) {
-        Email caller = caller(request);
+        Caller caller = caller(request);
         return respond(transactionBoundary.execute(
                 () -> confirmEnrolment.execute(caller, FactorType.of(type), body.get("code"))));
     }
@@ -106,14 +106,14 @@ final class FactorsController {
     HttpResponse<Map<String, Object>> remove(HttpRequest<?> request, @PathVariable String type) {
         // read the path first: the guard below spends a one-shot elevation, and a factor type that
         // does not exist must not cost it (HTTP-10)
-        Email caller = caller(request);
+        Caller caller = caller(request);
         FactorType factorType = FactorType.of(type);
-        java.util.Set<com.jrobertgardzinski.security.domain.vo.Role> roles = users.findBy(caller)
+        java.util.Set<com.jrobertgardzinski.security.domain.vo.Role> roles = users.findBy(caller.email())
                 .map(u -> u.roles()).orElse(java.util.Set.of(com.jrobertgardzinski.security.domain.vo.Role.USER));
         // the floor is answered BEFORE the step-up as well as inside it: "you cannot do this at
         // all" is a better answer than "prove yourself again, and then you still cannot" — and it
         // costs no elevation to say
-        if (compliance.removalWouldBreakFloor(caller, roles)) {
+        if (compliance.removalWouldBreakFloor(caller.email(), roles)) {
             return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.CONFLICT)
                     .body(Map.of("status", "WOULD_BREAK_MFA_FLOOR"));
         }
@@ -129,11 +129,11 @@ final class FactorsController {
         // still both read the old count under READ COMMITTED — closing that needs the account's own
         // lock, as the brute-force guard takes one: the same shape of race, far less reachable.)
         return transactionBoundary.execute(() -> {
-            if (compliance.removalWouldBreakFloor(caller, roles)) {
+            if (compliance.removalWouldBreakFloor(caller.email(), roles)) {
                 return HttpResponse.<Map<String, Object>>status(io.micronaut.http.HttpStatus.CONFLICT)
                         .body(Map.of("status", "WOULD_BREAK_MFA_FLOOR"));
             }
-            enrolledFactors.remove(caller, factorType);
+            enrolledFactors.remove(caller.email(), factorType);
             return HttpResponse.ok(Map.of("status", "REMOVED"));
         });
     }
@@ -164,7 +164,7 @@ final class FactorsController {
         };
     }
 
-    private static Email caller(HttpRequest<?> request) {
-        return RequestCaller.of(request).email();
+    private static Caller caller(HttpRequest<?> request) {
+        return RequestCaller.of(request);
     }
 }

@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
@@ -65,8 +66,8 @@ class ChainPositionsTest {
 
     private static void enrolFully(EnrolFactor enrolFactor, ConfirmEnrolment confirmEnrolment,
                                    FactorType type, String target, RememberedCodes channel) {
-        enrolFactor.execute(USER, type, target);
-        ConfirmEnrolment.Result confirmed = confirmEnrolment.execute(USER, type, channel.lastCode);
+        enrolFactor.execute(new Caller(USER), type, target);
+        ConfirmEnrolment.Result confirmed = confirmEnrolment.execute(new Caller(USER), type, channel.lastCode);
         assertThat(confirmed).isInstanceOf(ConfirmEnrolment.Result.Enrolled.class);
     }
 

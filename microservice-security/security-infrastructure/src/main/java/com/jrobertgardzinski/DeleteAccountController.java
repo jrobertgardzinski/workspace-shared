@@ -1,6 +1,7 @@
 package com.jrobertgardzinski;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.email.domain.InvalidEmailException;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
@@ -88,18 +89,18 @@ final class DeleteAccountController {
             return HttpResponse.<Map<String, Object>>status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("status", "INVALID_EMAIL"));
         }
-        Email caller = RequestCaller.of(request).email();
+        Caller caller = RequestCaller.of(request);
         // the same account, by the same rule registration uses to decide two addresses are one
         // person: a caller whose token spells their address differently from the path is still
         // closing their OWN account, and must not be sent down the administrator's road
-        boolean ownAccount = NormalizedEmail.of(target).equals(NormalizedEmail.of(caller));
+        boolean ownAccount = NormalizedEmail.of(target).equals(NormalizedEmail.of(caller.email()));
         // on the own-account road the CALLER's address is what travels, never the path's: the
         // comparison above accepts a different spelling of the same account, and everything
         // downstream — the lock, the saga row, the fact's key — addresses the user by the exact
         // string the account is stored under, which is the one the token carries
         return ownAccount
-                ? closeOwnAccount(request, caller)
-                : closeSomebodyElses(request, caller, target, body);
+                ? closeOwnAccount(request, caller.email())
+                : closeSomebodyElses(request, caller.email(), target, body);
     }
 
     /**

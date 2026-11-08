@@ -4,6 +4,7 @@ import com.jrobertgardzinski.security.domain.repository.FakeEmailVerificationRep
 import com.jrobertgardzinski.security.domain.repository.FakeSessionRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.application.feature.support.FakeHashAlgorithm;
@@ -76,8 +77,8 @@ public class FederatedSignInSteps {
 
     @io.cucumber.java.en.Given("the ACCOUNT {string} has enrolled an e-mail FACTOR")
     public void hasEnrolledFactor(String email) {
-        enrolFactor.execute(Email.of(email), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE, email);
-        confirmEnrolment.execute(Email.of(email), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE,
+        enrolFactor.execute(new Caller(Email.of(email)), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE, email);
+        confirmEnrolment.execute(new Caller(Email.of(email)), com.jrobertgardzinski.security.domain.vo.FactorType.EMAIL_CODE,
                 emailChannel.lastCodeFor(email));
     }
 

@@ -3,7 +3,7 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
-import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
 import com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes;
 import io.micronaut.http.HttpRequest;
@@ -52,17 +52,17 @@ final class RecoveryCodesController {
         if (stepUp.isPresent()) {
             return stepUp.get();
         }
-        Email caller = caller(request);
+        Caller caller = caller(request);
         List<String> plainCodes = transactionBoundary.execute(() -> generateRecoveryCodes.execute(caller));
         return HttpResponse.ok(Map.of("status", "GENERATED", "codes", plainCodes));
     }
 
     @Get(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> remaining(HttpRequest<?> request) {
-        return HttpResponse.ok(Map.of("unused", recoveryCodes.unusedCount(caller(request))));
+        return HttpResponse.ok(Map.of("unused", recoveryCodes.unusedCount(caller(request).email())));
     }
 
-    private static Email caller(HttpRequest<?> request) {
-        return RequestCaller.of(request).email();
+    private static Caller caller(HttpRequest<?> request) {
+        return RequestCaller.of(request);
     }
 }

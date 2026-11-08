@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 
 import java.util.Optional;
@@ -32,7 +33,9 @@ public class EnrolFactor {
         record UnsupportedFactor() implements Result {}
     }
 
-    public Result execute(Email user, FactorType type, String target) {
+    public Result execute(Caller caller, FactorType type, String target) {
+
+        Email user = caller.email();
 
         Optional<AuthenticationFactor> factor = registry.forType(type);
 

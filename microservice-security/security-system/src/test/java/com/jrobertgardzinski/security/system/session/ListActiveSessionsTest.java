@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.session;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.vo.ActiveSession;
 import com.jrobertgardzinski.security.domain.vo.SessionFamily;
@@ -40,6 +41,6 @@ class ListActiveSessionsTest {
                 new ActiveSession(SessionFamily.start(), new RefreshTokenExpiration(LocalDateTime.now().plusHours(2))));
         Mockito.when(sessionRepository.listActiveSessions(EMAIL)).thenReturn(sessions);
 
-        assertEquals(sessions, listActiveSessions.execute(EMAIL));
+        assertEquals(sessions, listActiveSessions.execute(new Caller(EMAIL)));
     }
 }

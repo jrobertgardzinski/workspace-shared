@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig;
 import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
 
@@ -37,7 +38,9 @@ public class GenerateRecoveryCodes {
     }
 
     /** The plain codes, shown once; the repository keeps only their normalised hashes. */
-    public List<String> execute(Email userEmail) {
+    public List<String> execute(Caller caller) {
+
+        Email userEmail = caller.email();
 
         List<String> plain = new ArrayList<>(config.count().value());
         for (int i = 0; i < config.count().value(); i++) {

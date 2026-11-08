@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.roles;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.vo.Role;
 import com.jrobertgardzinski.security.domain.vo.RoleStatus;
 import io.qameta.allure.Allure;
@@ -38,7 +39,7 @@ class RequireRoleRulesTest {
     @Label("a role the store granted satisfies the requirement")
     void grantedRoleSatisfies() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of(ADMIN, Set.of(Role.USER, Role.ADMIN))));
-        assertThat(require.check(ADMIN, Role.ADMIN)).isInstanceOf(RoleStatus.Passed.class);
+        assertThat(require.check(new Caller(ADMIN), Role.ADMIN)).isInstanceOf(RoleStatus.Passed.class);
         assertThat(require.rolesInForce(ADMIN)).containsExactlyInAnyOrder(Role.USER, Role.ADMIN);
     }
 
@@ -46,7 +47,7 @@ class RequireRoleRulesTest {
     @Label("a bootstrap admin is ADMIN before any grant exists")
     void bootstrapAdminIsAdmin() {
         RequireRole require = new RequireRole(BootstrapAdmins.of(List.of(" Admin@Example.com ")), store(Map.of()));
-        assertThat(require.check(ADMIN, Role.ADMIN)).isInstanceOf(RoleStatus.Passed.class);
+        assertThat(require.check(new Caller(ADMIN), Role.ADMIN)).isInstanceOf(RoleStatus.Passed.class);
         assertThat(require.rolesInForce(ADMIN)).contains(Role.ADMIN);
     }
 
@@ -54,7 +55,7 @@ class RequireRoleRulesTest {
     @Label("a USER without the role is refused with NOT_AN_ADMIN")
     void memberIsRefused() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of(MEMBER, Set.of(Role.USER))));
-        assertThat(require.check(MEMBER, Role.ADMIN)).isInstanceOf(RoleStatus.NotAnAdmin.class);
+        assertThat(require.check(new Caller(MEMBER), Role.ADMIN)).isInstanceOf(RoleStatus.NotAnAdmin.class);
     }
 
     @Example
@@ -62,7 +63,7 @@ class RequireRoleRulesTest {
     void strangerHasNoRoles() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of()));
         assertThat(require.rolesInForce(STRANGER)).isEmpty();
-        assertThat(require.check(STRANGER, Role.USER)).isInstanceOf(RoleStatus.NotAUser.class);
+        assertThat(require.check(new Caller(STRANGER), Role.USER)).isInstanceOf(RoleStatus.NotAUser.class);
     }
 
     @Property
@@ -75,7 +76,7 @@ class RequireRoleRulesTest {
             case MODERATOR -> RoleStatus.NotAModerator.class;
             case ADMIN -> RoleStatus.NotAnAdmin.class;
         };
-        assertThat(require.check(STRANGER, required)).isInstanceOf(refusal);
+        assertThat(require.check(new Caller(STRANGER), required)).isInstanceOf(refusal);
     }
 
     @Provide

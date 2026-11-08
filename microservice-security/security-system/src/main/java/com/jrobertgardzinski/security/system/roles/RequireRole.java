@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.roles;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.vo.Role;
 import com.jrobertgardzinski.security.domain.vo.RoleStatus;
 
@@ -18,8 +19,8 @@ public final class RequireRole {
     }
 
     /** {@link RoleStatus.Passed} when the caller holds the role; otherwise the one refusal that names it. */
-    public RoleStatus check(Email caller, Role required) {
-        if (rolesInForce(caller).contains(required)) {
+    public RoleStatus check(Caller caller, Role required) {
+        if (rolesInForce(caller.email()).contains(required)) {
             return new RoleStatus.Passed();
         }
         return switch (required) {

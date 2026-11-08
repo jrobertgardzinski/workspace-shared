@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
@@ -62,7 +63,9 @@ public class RequestEmailChange {
         record Rejected(List<EmailError> emailErrors) implements Result {}
     }
 
-    public Result execute(Email currentEmail, Email newEmail) {
+    public Result execute(Caller caller, Email newEmail) {
+
+        Email currentEmail = caller.email();
 
         // the same question Register asks of a new address, asked again of the one an account wants
         // to move to: a closed shop that only checks at registration is not closed

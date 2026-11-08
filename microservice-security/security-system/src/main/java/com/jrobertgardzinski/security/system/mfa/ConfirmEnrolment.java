@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
@@ -36,7 +37,9 @@ public class ConfirmEnrolment {
         record NoPendingEnrolment() implements Result {}
     }
 
-    public Result execute(Email user, FactorType type, String proof) {
+    public Result execute(Caller caller, FactorType type, String proof) {
+
+        Email user = caller.email();
 
         Optional<AuthenticationFactor> factor = registry.forType(type);
         Optional<EnrolmentChallengeStore.PendingEnrolment> enrolment = pending.get(user, type);

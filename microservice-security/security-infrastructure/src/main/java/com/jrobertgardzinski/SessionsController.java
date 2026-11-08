@@ -1,7 +1,7 @@
 package com.jrobertgardzinski;
 
 
-import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.vo.ActiveSession;
 import com.jrobertgardzinski.security.system.session.ListActiveSessions;
 import com.jrobertgardzinski.security.system.session.RevokeAllSessions;
@@ -41,8 +41,8 @@ final class SessionsController {
 
     @Get(produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> list(HttpRequest<?> request) {
-        Email email = RequestCaller.of(request).email();
-        List<Map<String, Object>> sessions = listActiveSessions.execute(email).stream()
+        Caller caller = RequestCaller.of(request);
+        List<Map<String, Object>> sessions = listActiveSessions.execute(caller).stream()
                 .map(SessionsController::toJson)
                 .toList();
         return HttpResponse.ok(Map.of("sessions", sessions));
@@ -50,9 +50,9 @@ final class SessionsController {
 
     @Post(value = "/revoke-all", consumes = MediaType.ALL, produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> revokeAll(HttpRequest<?> request) {
-        String email = RequestCaller.of(request).email().value();
+        Caller caller = RequestCaller.of(request);
         transactionBoundary.execute(() -> {
-            revokeAllSessions.execute(Email.of(email));
+            revokeAllSessions.execute(caller);
             return null;
         });
         return HttpResponse.ok(Map.of("status", "ALL_SESSIONS_REVOKED"));

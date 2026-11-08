@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.mfa;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
@@ -43,15 +44,15 @@ class EnrolmentAttemptsTest {
         EnrolFactor enrolFactor = new EnrolFactor(registry, pending);
         ConfirmEnrolment confirmEnrolment = new ConfirmEnrolment(registry, new FactorStore(), pending);
 
-        enrolFactor.execute(USER, FactorType.EMAIL_CODE, USER.value());
+        enrolFactor.execute(new Caller(USER), FactorType.EMAIL_CODE, USER.value());
 
         for (int attempt = 1; attempt <= EnrolmentChallengeStore.PendingEnrolment.ATTEMPTS; attempt++) {
-            assertThat(confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, "000000"))
+            assertThat(confirmEnrolment.execute(new Caller(USER), FactorType.EMAIL_CODE, "000000"))
                     .as("attempt %d is simply wrong, and the enrolment is still open", attempt)
                     .isInstanceOf(ConfirmEnrolment.Result.WrongProof.class);
         }
 
-        assertThat(confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, channel.lastCode))
+        assertThat(confirmEnrolment.execute(new Caller(USER), FactorType.EMAIL_CODE, channel.lastCode))
                 .as("the attempts are spent, so even the RIGHT code finds nothing pending — a"
                         + " guesser has to start a new enrolment, which is itself guarded and"
                         + " throttled")
@@ -68,10 +69,10 @@ class EnrolmentAttemptsTest {
         EnrolFactor enrolFactor = new EnrolFactor(registry, pending);
         ConfirmEnrolment confirmEnrolment = new ConfirmEnrolment(registry, new FactorStore(), pending);
 
-        enrolFactor.execute(USER, FactorType.EMAIL_CODE, USER.value());
-        confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, "000000");
+        enrolFactor.execute(new Caller(USER), FactorType.EMAIL_CODE, USER.value());
+        confirmEnrolment.execute(new Caller(USER), FactorType.EMAIL_CODE, "000000");
 
-        assertThat(confirmEnrolment.execute(USER, FactorType.EMAIL_CODE, channel.lastCode))
+        assertThat(confirmEnrolment.execute(new Caller(USER), FactorType.EMAIL_CODE, channel.lastCode))
                 .as("people mistype; the cap is for the machine that does not")
                 .isInstanceOf(ConfirmEnrolment.Result.Enrolled.class);
     }

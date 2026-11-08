@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.session;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.vo.ActiveSession;
 
@@ -18,7 +19,7 @@ public class ListActiveSessions {
         this.sessionRepository = sessionRepository;
     }
 
-    public List<ActiveSession> execute(Email email) {
-        return sessionRepository.listActiveSessions(email);
+    public List<ActiveSession> execute(Caller caller) {
+        return sessionRepository.listActiveSessions(caller.email());
     }
 }

@@ -4,6 +4,7 @@ import com.jrobertgardzinski.email.config.BlockedDomains;
 import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
@@ -25,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 @Feature("Change email")
 class RequestEmailChangeTest {
 
-    private static final Email CURRENT = Email.of("user@example.com");
+    private static final Caller CURRENT = new Caller(Email.of("user@example.com"));
     private static final Email NEW = Email.of("new@example.com");
     private static final Email BLOCKED = Email.of("user@blocked.example");
     /** The deployment's policy for every example here: one blocked domain, no other rule. */

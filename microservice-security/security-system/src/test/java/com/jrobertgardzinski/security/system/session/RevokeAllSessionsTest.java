@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.session;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -27,7 +28,7 @@ class RevokeAllSessionsTest {
     @Example
     @Label("Revoking all sessions revokes every session of the user")
     void revokes_every_session_of_the_user() {
-        revokeAllSessions.execute(EMAIL);
+        revokeAllSessions.execute(new Caller(EMAIL));
 
         Mockito.verify(sessionRepository).revokeAllSessions(EMAIL);
     }

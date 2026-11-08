@@ -5,6 +5,7 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.system.account.RequestEmailChange;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -55,7 +56,7 @@ final class EmailChangeController {
         // still needs the token mailed to that new address.
         // the body is read BEFORE the guard, which SPENDS a one-shot elevation: a typo in the new
         // address used to cost the whole step-up chain and then answer 400 (HTTP-10)
-        Email currentEmail = RequestCaller.of(request).email();
+        Caller caller = RequestCaller.of(request);
         Email newEmail;
         try {
             newEmail = Email.of(JsonBody.text(body, "newEmail"));
@@ -68,7 +69,7 @@ final class EmailChangeController {
             return stepUp.get();
         }
         RequestEmailChange.Result result = transactionBoundary.execute(
-                () -> requestEmailChange.execute(currentEmail, newEmail));
+                () -> requestEmailChange.execute(caller, newEmail));
         return switch (result) {
             case RequestEmailChange.Result.Requested ignored ->
                     HttpResponse.accepted().body(Map.of("status", "EMAIL_CHANGE_LINK_SENT"));

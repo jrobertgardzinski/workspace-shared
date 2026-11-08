@@ -10,6 +10,7 @@ import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
 import com.jrobertgardzinski.security.system.mfa.FakeEnrolmentChallengeStore;
 import com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore;
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.application.feature.support.FakeHashAlgorithm;
@@ -109,9 +110,9 @@ public class MfaSteps {
 
     @Given("the USER has enrolled the e-mail FACTOR")
     public void enrolledEmailFactor() {
-        enrolFactor.execute(Email.of(email), FactorType.EMAIL_CODE, email);
+        enrolFactor.execute(new Caller(Email.of(email)), FactorType.EMAIL_CODE, email);
         com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment.Result result =
-                confirmEnrolment.execute(Email.of(email), FactorType.EMAIL_CODE, mailedCode());
+                confirmEnrolment.execute(new Caller(Email.of(email)), FactorType.EMAIL_CODE, mailedCode());
         assertInstanceOf(com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment.Result.Enrolled.class, result,
                 "failed to seed the e-mail factor");
     }
@@ -140,7 +141,7 @@ public class MfaSteps {
 
     @Given("the USER has GENERATED RECOVERY CODES")
     public void generatedRecoveryCodes() {
-        generatedRecoveryCodes = generateRecoveryCodes.execute(Email.of(email));
+        generatedRecoveryCodes = generateRecoveryCodes.execute(new Caller(Email.of(email)));
     }
 
     @When("the USER submits a RECOVERY CODE instead of the mailed CODE")

@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.session;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 
 /**
@@ -16,7 +17,7 @@ public class RevokeAllSessions {
         this.sessionRepository = sessionRepository;
     }
 
-    public void execute(Email email) {
-        sessionRepository.revokeAllSessions(email);
+    public void execute(Caller caller) {
+        sessionRepository.revokeAllSessions(caller.email());
     }
 }
