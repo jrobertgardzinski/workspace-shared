@@ -1,5 +1,11 @@
 # Plan: stan dzwoniącego w typie wejściowym use case'u (2026-11-08)
 
+**ZROBIONE 2026-11-08**, commity `34ab9a38` (faza 1), `ddeac1b7` (przykład o skasowanym koncie
+oznaczony `@http-only`, bo przeglądarka nie potrafi skasować wiersza spod żywej sesji), `74d7faf5`
+(faza 2). Decyzje DO DECYZJI przyjęte wg rekomendacji: `401 ACCOUNT_GONE`; faza 2 zrobiona.
+Odstępstwo: `AccountClosure.requestedByOwner(Email)` zostało — to VO buduje też saga i jej testy.
+UI: panel step-upu na `ACCOUNT_GONE` wylogowuje zamiast mówić „Wrong password."
+
 Plik samowystarczalny: nowa sesja ma z niego zrobić całość bez dopytywania. Decyzje Roberta są
 zapisane jako decyzje; miejsca, gdzie Robert ma jeszcze wybrać, są oznaczone **DO DECYZJI** i mają
 rekomendację, którą należy przyjąć, jeśli nie powie inaczej.

@@ -1228,6 +1228,15 @@ jak w `273f693`.
       drucie nikt nie jedzie).
 - [ ] Repo `jrobertgardzinski/libs` na GitHubie: werdykt to KASACJA, warunek spełniony (patrz
       `todo.md` workspace'u).
+- [x] Stan dzwoniącego w typie wejścia (2026-11-08, plan i decyzje:
+      `PLAN-STAN-DZWONIACEGO-2026-11-08.md`): domenowy `Caller(Email)` — osoba, którą nazywa żywy
+      token; `ChangePassword` i `StepUp` biorą go zamiast `Email`, a brak konta pod nim to
+      `AccountGone` → `401 ACCOUNT_GONE` (UI wylogowuje). `Authentication` bez zmian (obcy,
+      zlanie w `Rejected`). Pomocnik brzegu `Caller` → `RequestCaller`. Faza 2: `RequestEmailChange`,
+      `EnrolFactor`, `ConfirmEnrolment`, `RequireRole`, `GenerateRecoveryCodes`,
+      `ListActiveSessions`, `RevokeAllSessions` też biorą `Caller`; `AccountClosure.requestedByOwner`
+      zostało przy `Email`, bo to samo VO buduje też saga i jej testy, a podstawę prawną (SELF) niesie
+      już ono. Commity `34ab9a38`, `ddeac1b7`, `74d7faf5`.
 
 ## Otwarte — nazwy pól po wprowadzeniu portu odczytu (2026-09-02, drobne)
 
