@@ -10,6 +10,7 @@ import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.system.password.VerifyPassword;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -31,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 class ChangePasswordTest {
 
     private static final Email EMAIL = Email.of("user@example.com");
+    private static final Caller CALLER = new Caller(EMAIL);
     private static final Supplier<PlaintextPassword> CURRENT = () -> PlaintextPassword.of("OldPassword1!");
     private static final Supplier<PlaintextPassword> NEW_STRONG = () -> PlaintextPassword.of("NewPassword1!");
     private static final Supplier<PlaintextPassword> NEW_WEAK = () -> PlaintextPassword.of("weak");
@@ -69,7 +71,7 @@ class ChangePasswordTest {
     @Example
     @Label("Correct current password and a strong new one change the password")
     void changes_the_password() {
-        assertInstanceOf(ChangePassword.Result.Changed.class, changePassword.execute(EMAIL, CURRENT, NEW_STRONG));
+        assertInstanceOf(ChangePassword.Result.Changed.class, changePassword.execute(CALLER, CURRENT, NEW_STRONG));
 
         Mockito.verify(userRepository).updatePassword(EMAIL, new HashedPassword("hash:NewPassword1!"));
     }
@@ -81,18 +83,18 @@ class ChangePasswordTest {
         // account. Sessions are rows unrelated to the password hash, so replacing the hash alone
         // left the thief's stolen token authorizing — and rotating itself on /refresh — for the
         // whole refresh window.
-        assertInstanceOf(ChangePassword.Result.Changed.class, changePassword.execute(EMAIL, CURRENT, NEW_STRONG));
+        assertInstanceOf(ChangePassword.Result.Changed.class, changePassword.execute(CALLER, CURRENT, NEW_STRONG));
 
         Mockito.verify(sessions).revokeAllSessions(EMAIL);
     }
 
     @Example
-    @Label("An address with no account answers UserNotFound and nothing changes")
-    void no_account_is_user_not_found() {
+    @Label("A caller whose account has gone from under the session answers AccountGone and nothing changes")
+    void a_deleted_account_is_account_gone() {
         Mockito.when(userRepository.findBy(EMAIL)).thenReturn(Optional.empty());
 
-        assertInstanceOf(ChangePassword.Result.UserNotFound.class,
-                changePassword.execute(EMAIL, CURRENT, NEW_STRONG));
+        assertInstanceOf(ChangePassword.Result.AccountGone.class,
+                changePassword.execute(CALLER, CURRENT, NEW_STRONG));
 
         Mockito.verify(userRepository, Mockito.never()).updatePassword(Mockito.any(), Mockito.any());
         Mockito.verify(sessions, Mockito.never()).revokeAllSessions(Mockito.any());
@@ -104,7 +106,7 @@ class ChangePasswordTest {
         Supplier<PlaintextPassword> wrong = () -> PlaintextPassword.of("WrongPassword1!");
 
         assertInstanceOf(ChangePassword.Result.WrongPassword.class,
-                changePassword.execute(EMAIL, wrong, NEW_STRONG));
+                changePassword.execute(CALLER, wrong, NEW_STRONG));
 
         Mockito.verify(userRepository, Mockito.never()).updatePassword(Mockito.any(), Mockito.any());
         Mockito.verify(sessions, Mockito.never()).revokeAllSessions(Mockito.any());
@@ -116,13 +118,13 @@ class ChangePasswordTest {
         Supplier<PlaintextPassword> wrong = () -> PlaintextPassword.of("WrongPassword1!");
 
         assertInstanceOf(ChangePassword.Result.WrongPassword.class,
-                changePassword.execute(EMAIL, wrong, NEW_WEAK));
+                changePassword.execute(CALLER, wrong, NEW_WEAK));
     }
 
     @Example
     @Label("A new password that breaks the policy is rejected, each rule by its code, naming the policy in force, and nothing changes")
     void weak_new_password_is_rejected() {
-        ChangePassword.Result result = changePassword.execute(EMAIL, CURRENT, NEW_WEAK);
+        ChangePassword.Result result = changePassword.execute(CALLER, CURRENT, NEW_WEAK);
 
         ChangePassword.Result.Rejected rejected = assertInstanceOf(ChangePassword.Result.Rejected.class, result);
         assertAll(
@@ -138,7 +140,7 @@ class ChangePasswordTest {
     @Example
     @Label("A blank new password is a code of its own, not an exception, and nothing changes")
     void blank_new_password_is_a_code() {
-        ChangePassword.Result result = changePassword.execute(EMAIL, CURRENT, NEW_BLANK);
+        ChangePassword.Result result = changePassword.execute(CALLER, CURRENT, NEW_BLANK);
 
         ChangePassword.Result.Rejected rejected = assertInstanceOf(ChangePassword.Result.Rejected.class, result);
         assertAll(

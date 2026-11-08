@@ -42,7 +42,7 @@ final class MetricsAccessFilter {
     @RequestFilter
     @Nullable
     HttpResponse<?> guard(HttpRequest<?> request) {
-        String presented = Caller.bearerToken(request);
+        String presented = RequestCaller.bearerToken(request);
         if (presented == null
                 // constant time: this is a fixed secret compared on every scrape, so a timing
                 // difference here is measurable in a way a per-user one is not

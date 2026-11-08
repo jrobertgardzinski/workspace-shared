@@ -3,6 +3,7 @@ package com.jrobertgardzinski.security.system.mfa;
 import com.jrobertgardzinski.security.domain.vo.StepUpRequirement;
 import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.config.mfa.StepUpPolicy;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
@@ -69,6 +70,14 @@ public class StepUp {
         record WrongPassword() implements Result {}
 
         /**
+         * A live token, and no account under its address: deleted while the session still worked.
+         * Used to be folded into {@code WrongPassword}; a caller is not a stranger guessing an
+         * address, so the two are told apart here and the wire can say "sign out" instead of
+         * "try again". A federated account has a user row too, so it never lands here.
+         */
+        record AccountGone() implements Result {}
+
+        /**
          * The caller has nothing this action can be proved with: a federated account with no
          * password and no enrolled factor. Not a refusal of the person — a statement that the door
          * cannot be opened until they have a key.
@@ -76,7 +85,9 @@ public class StepUp {
         record NothingToProveWith() implements Result {}
     }
 
-    public Result execute(Email email, StepUpAction action, String accessToken, Supplier<PlaintextPassword> passwordCandidate) {
+    public Result execute(Caller caller, StepUpAction action, String accessToken, Supplier<PlaintextPassword> passwordCandidate) {
+
+        Email email = caller.email();
 
         StepUpRequirement requirement = policy.requirementFor(action);
 
@@ -115,7 +126,8 @@ public class StepUp {
             VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordCandidate);
 
             switch (verifyPasswordResult.status()) {
-                case CredentialsStatus.UserNotFound _, CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
+                case CredentialsStatus.UserNotFound _ -> { return new Result.AccountGone(); }
+                case CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
                 case CredentialsStatus.Passed _ -> {}
             }
         }

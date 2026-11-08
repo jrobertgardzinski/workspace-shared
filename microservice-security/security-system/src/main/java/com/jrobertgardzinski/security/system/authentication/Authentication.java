@@ -96,7 +96,9 @@ public class Authentication {
 
         switch (verifyPasswordResult.status()) {
             case CredentialsStatus.UserNotFound _, CredentialsStatus.WrongPassword _ -> {
-                // a miss is written down, whichever half was wrong
+                // a miss is written down, whichever half was wrong — and a stranger's address came from
+                // a form, so they are not told whether the account exists; ChangePassword and StepUp
+                // take a Caller instead, and there a missing account is AccountGone
                 updateBruteForceRecords.execute(subject);
                 return new Result.Rejected();
             }

@@ -55,7 +55,7 @@ final class EmailChangeController {
         // still needs the token mailed to that new address.
         // the body is read BEFORE the guard, which SPENDS a one-shot elevation: a typo in the new
         // address used to cost the whole step-up chain and then answer 400 (HTTP-10)
-        Email currentEmail = Caller.of(request);
+        Email currentEmail = RequestCaller.of(request).email();
         Email newEmail;
         try {
             newEmail = Email.of(JsonBody.text(body, "newEmail"));

@@ -1,6 +1,8 @@
 package com.jrobertgardzinski.security.infrastructure.feature.account;
 
 import com.jrobertgardzinski.CapturingEmailVerificationNotifier;
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import io.cucumber.java.After;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
@@ -63,6 +65,13 @@ public class HttpChangePasswordSteps {
         accessToken = accessTokenFor("OldPassword1!");
     }
 
+    @Given("the USER's account has been deleted meanwhile")
+    public void theAccountHasBeenDeletedMeanwhile() {
+        // the session row stays, the user row goes: what a deletion finishing under a live token
+        // leaves behind
+        server.getApplicationContext().getBean(UserRepository.class).deleteByEmail(Email.of(email));
+    }
+
     @When("the USER CHANGES the password from {string} to {string}")
     public void theUserChangesThePassword(String currentPassword, String newPassword) {
         changeResponse = exchange(HttpRequest.POST("/account/password",
@@ -85,6 +94,14 @@ public class HttpChangePasswordSteps {
         assertEquals(HttpStatus.BAD_REQUEST, changeResponse.getStatus());
         // one answer whether the account is gone or the password is wrong: the wire never says which
         assertEquals("FAILED_AUTHENTICATION_ATTEMPT", changeResponse.getBody(Map.class).orElseThrow().get("status"));
+    }
+
+    @Then("the password CHANGE answers ACCOUNT_GONE")
+    public void thePasswordChangeAnswersAccountGone() {
+        // a 401, so the UI signs out; the code says why — a caller holding a live token is not
+        // enumerating accounts, so there is nothing to hide from them
+        assertEquals(HttpStatus.UNAUTHORIZED, changeResponse.getStatus());
+        assertEquals("ACCOUNT_GONE", changeResponse.getBody(Map.class).orElseThrow().get("status"));
     }
 
     @Then("the new password is flagged as invalid")

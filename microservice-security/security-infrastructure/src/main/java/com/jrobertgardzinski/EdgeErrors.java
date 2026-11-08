@@ -47,7 +47,7 @@ final class EdgeErrors {
         }
     }
 
-    /** A protected resource reached without an authenticated caller — see {@link Caller#of}. */
+    /** A protected resource reached without an authenticated caller — see {@link RequestCaller#of}. */
     @Singleton
     @Requires(classes = {NotAuthenticatedException.class, ExceptionHandler.class})
     @Produces

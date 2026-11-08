@@ -12,7 +12,7 @@ import io.micronaut.http.annotation.ServerFilter;
 /**
  * Guards protected resources. Reads the {@code Authorization: Bearer <accessToken>} header, runs the
  * {@link Authorize} use case, and either lets the request through (publishing the authenticated
- * email under {@link Caller#ATTRIBUTE} for the resource to read) or rejects it with 401 — for a missing,
+ * email under {@link RequestCaller#ATTRIBUTE} for the resource to read) or rejects it with 401 — for a missing,
  * malformed, unknown or expired token alike.
  *
  * <p>It also enforces the MFA role floor: a caller whose roles demand more factors than they have
@@ -40,14 +40,14 @@ final class AuthorizationFilter {
     @RequestFilter
     @Nullable
     HttpResponse<?> authorize(HttpRequest<?> request) {
-        String token = Caller.bearerToken(request);
+        String token = RequestCaller.bearerToken(request);
         if (token == null) {
             return HttpResponse.unauthorized().body(Refusal.of("NOT_AUTHENTICATED"));
         }
         if (!(authorize.execute(new AccessToken(token)) instanceof Authorize.Result.Authorized authorized)) {
             return HttpResponse.unauthorized().body(Refusal.of("NOT_AUTHENTICATED"));
         }
-        request.setAttribute(Caller.ATTRIBUTE, authorized.email().value());
+        request.setAttribute(RequestCaller.ATTRIBUTE, authorized.email().value());
         if (!enrolmentExempt(request.getPath()) && !isCompliant(authorized.email())) {
             return HttpResponse.status(io.micronaut.http.HttpStatus.FORBIDDEN)
                     .body(Refusal.alsoAsError("MFA_ENROLMENT_REQUIRED"));

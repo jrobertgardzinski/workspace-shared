@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
@@ -16,7 +17,8 @@ import com.jrobertgardzinski.password.domain.PasswordStatus;
 
 /**
  * Changes a signed-in user's password: the current password must match, and the new password must
- * meet the policy. The caller's identity comes from their access token, so only the email is needed.
+ * meet the policy. The caller's identity comes from their access token: a {@link Caller}, not an
+ * address typed into a form.
  *
  * <p><b>Every session goes with the old password, including the caller's own.</b> Sessions are rows
  * unrelated to the password hash, so replacing the hash used to leave every one of them
@@ -49,7 +51,13 @@ public class ChangePassword {
 
         record Changed() implements Result {}
 
-        record UserNotFound() implements Result {}
+        /**
+         * A live token, and no account under its address in the {@code UserRepository}: the account
+         * has gone from under the session, deleted while the token still worked. Used to be
+         * {@code UserNotFound}, a copy of the sign-in's vocabulary, where the same status means a
+         * stranger guessed an address; here nobody guessed anything, so the name says what happened.
+         */
+        record AccountGone() implements Result {}
 
         record WrongPassword() implements Result {}
 
@@ -66,14 +74,16 @@ public class ChangePassword {
     }
 
     public Result execute(
-                    Email email,
+                    Caller caller,
                     Supplier<PlaintextPassword> currentPasswordCandidate,
                     Supplier<PlaintextPassword> newPasswordCandidate) {
+
+        Email email = caller.email();
 
         VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, currentPasswordCandidate);
 
         switch (verifyPasswordResult.status()) {
-            case CredentialsStatus.UserNotFound _ -> { return new Result.UserNotFound(); }
+            case CredentialsStatus.UserNotFound _ -> { return new Result.AccountGone(); }
             case CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
             case CredentialsStatus.Passed _ -> {}
         }

@@ -41,7 +41,7 @@ final class SessionsController {
 
     @Get(produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> list(HttpRequest<?> request) {
-        Email email = Caller.of(request);
+        Email email = RequestCaller.of(request).email();
         List<Map<String, Object>> sessions = listActiveSessions.execute(email).stream()
                 .map(SessionsController::toJson)
                 .toList();
@@ -50,7 +50,7 @@ final class SessionsController {
 
     @Post(value = "/revoke-all", consumes = MediaType.ALL, produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> revokeAll(HttpRequest<?> request) {
-        String email = Caller.of(request).value();
+        String email = RequestCaller.of(request).email().value();
         transactionBoundary.execute(() -> {
             revokeAllSessions.execute(Email.of(email));
             return null;

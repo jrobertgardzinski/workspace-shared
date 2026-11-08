@@ -63,6 +63,6 @@ final class RecoveryCodesController {
     }
 
     private static Email caller(HttpRequest<?> request) {
-        return Caller.of(request);
+        return RequestCaller.of(request).email();
     }
 }

@@ -3,7 +3,7 @@ package com.jrobertgardzinski;
 import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
-import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.system.mfa.ContinueStepUp;
@@ -53,7 +53,7 @@ final class StepUpController {
         if (throttled != null) {
             return throttled;
         }
-        Email email = Caller.of(request);
+        Caller caller = RequestCaller.of(request);
         String token = StepUpGuard.bearerToken(request);
         // the action must be one of the catalogue: an unknown name is a client error, not an
         // elevation minted for something nobody would ever consume
@@ -66,7 +66,7 @@ final class StepUpController {
         // answer. Handed over as a candidate, so the use case decides what one that does not
         // construct means
         return respond(
-                stepUp.execute(email, action.get(), token, () -> PlaintextPassword.of(body.get("password"))),
+                stepUp.execute(caller, action.get(), token, () -> PlaintextPassword.of(body.get("password"))),
                 request);
     }
 
@@ -102,7 +102,7 @@ final class StepUpController {
      */
     private String subjectOf(HttpRequest<?> request) {
         try {
-            return "caller:" + Caller.of(request).value();
+            return "caller:" + RequestCaller.of(request).email().value();
         } catch (RuntimeException noPublishedCaller) {
             return "source:" + clientIpResolver.resolve(request).value();
         }
@@ -123,6 +123,11 @@ final class StepUpController {
             case StepUp.Result.WrongPassword wrong ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "WRONG_PASSWORD"));
+            // the account was deleted while this token still worked: nothing to re-prove for,
+            // and the 401 is what makes the UI sign out — the code says it is not a wrong password
+            case StepUp.Result.AccountGone gone ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
+                            .body(Map.of("status", "ACCOUNT_GONE"));
             // 409, not 401: nothing the caller can type would help. They are who they say they
             // are; the account simply carries nothing to re-prove with, and the way out is to
             // enrol a factor — which is a SECOND_FACTORS action and therefore still reachable.

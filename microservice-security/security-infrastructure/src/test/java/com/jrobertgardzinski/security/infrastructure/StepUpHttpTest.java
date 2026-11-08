@@ -2,6 +2,8 @@ package com.jrobertgardzinski.security.infrastructure;
 
 import com.jrobertgardzinski.CapturingEmailCodeChannel;
 import com.jrobertgardzinski.CapturingEmailVerificationNotifier;
+import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import io.micronaut.context.ApplicationContext;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -155,6 +157,22 @@ class StepUpHttpTest {
                 .header("Authorization", "Bearer " + token));
         assertEquals(HttpStatus.UNAUTHORIZED, late.getStatus());
         assertEquals("INVALID_TICKET", late.getBody(Map.class).orElseThrow().get("status"));
+    }
+
+    @Test
+    @DisplayName("an account deleted from under a live session answers ACCOUNT_GONE, not WRONG_PASSWORD")
+    void a_deleted_account_is_told_so() {
+        String email = "vanished@example.com";
+        String token = onboard(email);
+
+        // the session row stays, the user row goes: a deletion finishing under a live token
+        server.getApplicationContext().getBean(UserRepository.class).deleteByEmail(Email.of(email));
+
+        HttpResponse<Map> gone = exchange(HttpRequest.POST("/account/step-up",
+                        Map.of("action", "delete-account", "password", PASSWORD))
+                .header("Authorization", "Bearer " + token));
+        assertEquals(HttpStatus.UNAUTHORIZED, gone.getStatus());
+        assertEquals("ACCOUNT_GONE", gone.getBody(Map.class).orElseThrow().get("status"));
     }
 
     // --- Helpers --------------------------------------------------------------

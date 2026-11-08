@@ -88,7 +88,7 @@ final class DeleteAccountController {
             return HttpResponse.<Map<String, Object>>status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("status", "INVALID_EMAIL"));
         }
-        Email caller = Caller.of(request);
+        Email caller = RequestCaller.of(request).email();
         // the same account, by the same rule registration uses to decide two addresses are one
         // person: a caller whose token spells their address differently from the path is still
         // closing their OWN account, and must not be sent down the administrator's road

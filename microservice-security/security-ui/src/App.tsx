@@ -510,6 +510,11 @@ export function App() {
       setEnrolStepUpTicket(body.stepUpTicket ?? '');
       setEnrolStepUpFactor(body.nextFactor ?? '');
       setEnrolStepUpChallenge(body.challengeData ?? '');
+    } else if (r.status === 401 && body.status === 'ACCOUNT_GONE') {
+      // the account was deleted while this token still worked: no password is right any more,
+      // and "Wrong password." would send the person back to retype one
+      signOut();
+      setNotice('This account no longer exists.');
     } else if (r.status === 401 || r.status === 403) {
       setNotice('Wrong password.');
     } else {

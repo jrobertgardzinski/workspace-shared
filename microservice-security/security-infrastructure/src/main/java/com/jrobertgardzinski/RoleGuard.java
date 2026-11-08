@@ -27,7 +27,7 @@ public final class RoleGuard {
 
     /** A 403 response if the caller lacks the role, otherwise empty (proceed). */
     public Optional<HttpResponse<Map<String, Object>>> require(HttpRequest<?> request, Role role) {
-        RoleStatus status = requireRole.check(Caller.of(request), role);
+        RoleStatus status = requireRole.check(RequestCaller.of(request).email(), role);
         return switch (status) {
             case RoleStatus.Passed _ -> Optional.empty();
             case RoleStatus.NotAUser _ -> forbidden("NOT_A_USER");

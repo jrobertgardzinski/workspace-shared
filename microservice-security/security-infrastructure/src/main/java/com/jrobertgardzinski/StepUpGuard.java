@@ -26,7 +26,7 @@ public final class StepUpGuard {
 
     /** A 403 response if the caller has not stepped up, otherwise empty (proceed). */
     public Optional<HttpResponse<Map<String, Object>>> requireElevation(HttpRequest<?> request, StepUpAction action) {
-        String token = Caller.bearerToken(request);
+        String token = RequestCaller.bearerToken(request);
         if (token != null && elevation.consume(token, action)) {
             return Optional.empty();
         }
@@ -35,6 +35,6 @@ public final class StepUpGuard {
     }
 
     public static String bearerToken(HttpRequest<?> request) {
-        return Caller.bearerToken(request);
+        return RequestCaller.bearerToken(request);
     }
 }

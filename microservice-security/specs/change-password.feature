@@ -23,6 +23,14 @@ Feature: Changing the password
       When the USER CHANGES the password from "WrongPassword1!" to "NewPassword1!"
       Then the password CHANGE is rejected
 
+  Rule: An account deleted from under a live session is told so, not "wrong password"
+
+    Example:
+      Given the USER has AUTHENTICATED
+      And the USER's account has been deleted meanwhile
+      When the USER CHANGES the password from "OldPassword1!" to "NewPassword1!"
+      Then the password CHANGE answers ACCOUNT_GONE
+
   Rule: A new password that breaks the PASSWORD POLICY is rejected, saying which rules it broke
 
     Example:

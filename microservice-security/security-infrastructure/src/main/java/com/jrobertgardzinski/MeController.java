@@ -40,7 +40,7 @@ final class MeController {
 
     @Get(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> me(HttpRequest<?> request) {
-        Email email = Caller.of(request);
+        Email email = RequestCaller.of(request).email();
         // rolesInForce, not the persisted grants: a BOOTSTRAP ADMIN holds ADMIN by configuration and
         // has no row saying so. Reading the row alone told such an administrator they were a plain
         // USER — here and in the JWT — while /admin/** let them in, so every consumer that gates on

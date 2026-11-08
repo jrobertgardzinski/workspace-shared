@@ -1,7 +1,7 @@
 package com.jrobertgardzinski;
 
 
-import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.system.account.ChangePassword;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
@@ -29,9 +29,11 @@ import java.util.Map;
  * owner's included. Hence a per-source window of its own, the same shape the anonymous endpoints
  * and the step-up already use.
  *
- * <p>The use case says plainly why the proof failed, {@code UserNotFound} or {@code WrongPassword};
- * the wire does not. Both answer one {@code FAILED_AUTHENTICATION_ATTEMPT}, so a guess learns
- * nothing about which half it got wrong.
+ * <p>A wrong current password answers {@code 400 FAILED_AUTHENTICATION_ATTEMPT}. An account that
+ * has gone from under the live session ({@code AccountGone}: deleted while the token still worked)
+ * answers {@code 401 ACCOUNT_GONE}: there is nothing left to change, and a 401 is what makes the
+ * UI sign out. The two used to share one 400, copied from the sign-in, where hiding which half
+ * was wrong protects against enumeration; a caller holding a live token is not enumerating.
  *
  * <p>A new password the policy refuses answers 422 with {@code {"passwordErrors": [{"CODE":
  * parameter}]}}, the password half of what {@code /register} answers: one code per broken rule,
@@ -66,16 +68,18 @@ final class ChangePasswordController {
         if (JsonBody.missing(body, "currentPassword") || JsonBody.missing(body, "newPassword")) {
             return HttpResponse.badRequest(Map.of("status", "BAD_REQUEST"));
         }
-        Email email = Caller.of(request);
+        Caller caller = RequestCaller.of(request);
         String current = JsonBody.text(body, "currentPassword");
         String next = JsonBody.text(body, "newPassword");
         ChangePassword.Result result = transactionBoundary.execute(() -> changePassword.execute(
-                email, () -> PlaintextPassword.of(current), () -> PlaintextPassword.of(next)));
+                caller, () -> PlaintextPassword.of(current), () -> PlaintextPassword.of(next)));
         return switch (result) {
             case ChangePassword.Result.Changed ignored ->
                     HttpResponse.ok(Map.of("status", "PASSWORD_CHANGED"));
-            case ChangePassword.Result.UserNotFound _, ChangePassword.Result.WrongPassword _ ->
+            case ChangePassword.Result.WrongPassword _ ->
                     HttpResponse.badRequest().body(Map.of("status", "FAILED_AUTHENTICATION_ATTEMPT"));
+            case ChangePassword.Result.AccountGone _ ->
+                    HttpResponse.unauthorized().body(Map.of("status", "ACCOUNT_GONE"));
             case ChangePassword.Result.Rejected rejected ->
                     HttpResponse.unprocessableEntity().body(Map.of(
                             "passwordErrors",
