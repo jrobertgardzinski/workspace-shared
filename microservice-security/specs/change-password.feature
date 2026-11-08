@@ -25,6 +25,9 @@ Feature: Changing the password
 
   Rule: An account deleted from under a live session is told so, not "wrong password"
 
+    # the deletion happens behind the session's back — a row removed under a live token — which
+    # only the JVM glue can stage; the UI's answer to ACCOUNT_GONE (sign out) is unit-tested
+    @http-only
     Example:
       Given the USER has AUTHENTICATED
       And the USER's account has been deleted meanwhile
