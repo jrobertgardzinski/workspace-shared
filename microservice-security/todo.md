@@ -1021,6 +1021,9 @@ jak w `273f693`.
       czytelnik otwiera `execute` i w kilkudziesięciu liniach widzi całą politykę use case'u, bez
       skakania po klasach i zgadywania, kto nasłuchuje i w jakiej kolejności. Dopóki use case'ów
       jest kilkanaście, ten zakup się opłaca; gdyby ich przybyło kilkadziesiąt, wrócić tu.
+- [ ] STAN DZWONIĄCEGO W TYPIE WEJŚCIOWYM (2026-11-08): `Caller` zamiast `Email` tam, gdzie adres
+      pochodzi z tokena; `UserNotFound` w `ChangePassword`/`StepUp` → `AccountGone`. Plan do
+      wykonania w nowej sesji: `PLAN-STAN-DZWONIACEGO-2026-11-08.md` (obok tego pliku).
 - [ ] ZOSTAWIONE ŚWIADOMIE PO SEALED (2026-11-07, decyzja Roberta: „wrócimy do tego"):
       (1) `SessionStatus` (`ACTIVE`/`ROTATED`) został enumem, bo to stan utrwalany w bazie przez
       `name()`/`valueOf` (`JdbcSessionRepository`), nie werdykt sędziego. Jego `switch` w
