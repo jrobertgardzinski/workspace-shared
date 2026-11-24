@@ -11,7 +11,6 @@ import com.jrobertgardzinski.security.application.BrokenRule;
 import com.jrobertgardzinski.security.application.PassThroughTransactionBoundary;
 import com.jrobertgardzinski.security.application.feature.support.FakeHashAlgorithm;
 import com.jrobertgardzinski.security.domain.entity.User;
-import com.jrobertgardzinski.security.domain.repository.FakeEmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
 import com.jrobertgardzinski.security.system.registration.Register;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
@@ -39,8 +38,7 @@ class RegistrationServiceTest {
     private static final String STRONG_PASSWORD = "StrongPassword1!";
 
     private final AdjustableClock clock = new AdjustableClock(Instant.parse("2026-06-15T10:00:00Z"), ZoneOffset.UTC);
-    private final FakeUserRepository users = new FakeUserRepository();
-    private final FakeEmailVerificationRepository verifications = new FakeEmailVerificationRepository(clock);
+    private final FakeUserRepository users = new FakeUserRepository(clock);
     private final List<String> verificationLinks = new ArrayList<>();
     private final List<String> alreadyRegisteredNotices = new ArrayList<>();
 
@@ -53,9 +51,9 @@ class RegistrationServiceTest {
                         new AdmitEmail(new EmailPolicy()),
                         new CreatePasswordHash(new FakeHashAlgorithm(), PasswordPolicy::withDefaults)),
                 new RequestEmailVerification(
-                        verifications,
+                        users,
                         (email, token) -> verificationLinks.add(email.value())),
-                verifications,
+                users,
                 email -> alreadyRegisteredNotices.add(email.value()),
                 new EmailPolicy(),
                 new SourceThrottle(maxPerWindow, Duration.ofMinutes(15), clock),
@@ -76,7 +74,7 @@ class RegistrationServiceTest {
     void a_taken_and_verified_address_gets_the_notice_and_no_link() {
         Email taken = Email.of("user@example.com");
         users.save(new User(taken, new HashedPassword("seed-hash")));
-        verifications.markVerified(taken);
+        users.markVerified(taken);
 
         RegistrationService.Outcome outcome = service.register("user@example.com", STRONG_PASSWORD, SOURCE);
 

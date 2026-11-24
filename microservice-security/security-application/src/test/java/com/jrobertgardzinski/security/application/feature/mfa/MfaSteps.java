@@ -2,7 +2,6 @@ package com.jrobertgardzinski.security.application.feature.mfa;
 
 import com.jrobertgardzinski.security.domain.port.CapturingCodeChannel;
 import com.jrobertgardzinski.security.domain.repository.FakeAuthenticationBlockRepository;
-import com.jrobertgardzinski.security.domain.repository.FakeEmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeRejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeSessionRepository;
@@ -59,7 +58,6 @@ public class MfaSteps {
     private final Clock clock = Clock.fixed(Instant.parse("2026-07-05T10:00:00Z"), ZoneOffset.UTC);
     private final FakeHashAlgorithm hashAlgorithm = new FakeHashAlgorithm();
     private final FakeUserRepository users = new FakeUserRepository();
-    private final FakeEmailVerificationRepository verifications = new FakeEmailVerificationRepository(java.time.Clock.systemUTC());
     private final FakeSessionRepository sessions = new FakeSessionRepository(clock);
     private final FakeRejectedAuthenticationRepository rejections = new FakeRejectedAuthenticationRepository();
     private final FakeAuthenticationBlockRepository blocks = new FakeAuthenticationBlockRepository();
@@ -67,8 +65,6 @@ public class MfaSteps {
     private final FakePendingAuthenticationStore pendingStore = new FakePendingAuthenticationStore();
     private final FakeEnrolmentChallengeStore enrolmentStore = new FakeEnrolmentChallengeStore();
     private final CapturingCodeChannel emailChannel = new CapturingCodeChannel(FactorType.EMAIL_CODE);
-    private final com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository
-            recoveryCodes = new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository();
 
     private final FactorRegistry registry = new FactorRegistry(List.of(
             new CodeFactor(emailChannel, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), clock)));
@@ -77,14 +73,14 @@ public class MfaSteps {
             new com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment(registry, enrolledFactors, enrolmentStore);
     private final com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain =
             new com.jrobertgardzinski.security.system.mfa.MfaChain(registry, ChallengeCodeConfig.withDefaults(),
-                    recoveryCodes, raw -> "hash:" + raw, clock, 10);
+                    enrolledFactors, raw -> "hash:" + raw, clock, 10);
     private final com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes generateRecoveryCodes =
             new com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes(
-                    recoveryCodes, raw -> "hash:" + raw,
+                    enrolledFactors, raw -> "hash:" + raw,
                     com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig.withDefaults());
 
     private final AuthenticationFactory.AuthenticationUseCases useCases = AuthenticationFactory.assemble(
-            users, verifications, rejections, blocks, sessions,
+            users, rejections, blocks, sessions,
             new com.jrobertgardzinski.security.system.password.VerifyPassword(users, hashAlgorithm),
             BruteForceConfig.builder().build(), SESSION_TOKENS_CONFIG, clock,
             () -> 5, AccessTokenMint.RANDOM,
@@ -105,7 +101,7 @@ public class MfaSteps {
     public void aVerifiedUser(String email, String password) {
         this.email = email;
         users.save(new User(Email.of(email), hashAlgorithm.hash(PlaintextPassword.of(password))));
-        verifications.markVerified(Email.of(email));
+        users.markVerified(Email.of(email));
     }
 
     @Given("the USER has enrolled the e-mail FACTOR")

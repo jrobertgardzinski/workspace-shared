@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.security.system.verification;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -31,12 +31,12 @@ class VerifyEmailTest {
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 12, 12, 0);
     private static final Clock CLOCK = Clock.fixed(NOW.toInstant(ZoneOffset.UTC), ZoneOffset.UTC);
 
-    private EmailVerificationRepository repository;
+    private UserRepository repository;
     private VerifyEmail verifyEmail;
 
     @BeforeTry
     void init() {
-        repository = Mockito.mock(EmailVerificationRepository.class);
+        repository = Mockito.mock(UserRepository.class);
         verifyEmail = new VerifyEmail(repository, TTL, CLOCK);
     }
 
@@ -69,8 +69,8 @@ class VerifyEmailTest {
         assertInstanceOf(VerifyEmail.Result.Verified.class, verifyEmail.execute(TOKEN));
     }
 
-    private static Optional<EmailVerificationRepository.PendingVerification> pending(LocalDateTime requestedAt) {
-        return Optional.of(new EmailVerificationRepository.PendingVerification(EMAIL, requestedAt));
+    private static Optional<UserRepository.PendingVerification> pending(LocalDateTime requestedAt) {
+        return Optional.of(new UserRepository.PendingVerification(EMAIL, requestedAt));
     }
 
     @Example

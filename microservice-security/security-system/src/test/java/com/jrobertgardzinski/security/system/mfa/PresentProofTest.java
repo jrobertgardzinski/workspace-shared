@@ -4,7 +4,7 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -44,7 +44,7 @@ class PresentProofTest {
             new FactorRegistry(List.of(
                     new CodeFactor(mailbox, raw -> "hash:" + raw, CONFIG, CLOCK),
                     new CodeFactor(phone, raw -> "hash:" + raw, CONFIG, CLOCK))),
-            CONFIG, Mockito.mock(RecoveryCodeRepository.class), raw -> "hash:" + raw, CLOCK, TICKET_TTL_MINUTES);
+            CONFIG, Mockito.mock(EnrolledFactorRepository.class), raw -> "hash:" + raw, CLOCK, TICKET_TTL_MINUTES);
     private final FakePendingAuthenticationStore store = new FakePendingAuthenticationStore();
     private final PresentProof presentProof = new PresentProof(mfaChain, store, CLOCK);
 

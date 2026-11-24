@@ -43,9 +43,7 @@ import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
 import com.jrobertgardzinski.security.domain.port.PasswordResetNotifier;
 import com.jrobertgardzinski.security.domain.repository.AuthenticationBlockRepository;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AccessTokenValidityInHours;
@@ -257,13 +255,13 @@ public class BeanFactory {
     com.jrobertgardzinski.security.application.registration.RegistrationService registrationService(
             Register register,
             RequestEmailVerification requestEmailVerification,
-            EmailVerificationRepository emailVerificationRepository,
+            UserRepository userRepository,
             com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier registrationNoticeNotifier,
             EmailPolicy emailPolicy,
             @Named("registration") SourceThrottle throttle,
             com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
         return new com.jrobertgardzinski.security.application.registration.RegistrationService(
-                register, requestEmailVerification, emailVerificationRepository, registrationNoticeNotifier,
+                register, requestEmailVerification, userRepository, registrationNoticeNotifier,
                 emailPolicy, throttle, transactionBoundary);
     }
 
@@ -538,12 +536,12 @@ public class BeanFactory {
     com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain(
             com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
             com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig challengeCodeConfig,
-            com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository recoveryCodeRepository,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
             com.jrobertgardzinski.security.system.mfa.RecoveryCodeHasher recoveryCodeHasher,
             Clock clock,
             @io.micronaut.context.annotation.Value("${security.mfa.ticket-ttl-minutes:10}") int ticketTtlMinutes) {
         return new com.jrobertgardzinski.security.system.mfa.MfaChain(
-                factorRegistry, challengeCodeConfig, recoveryCodeRepository, recoveryCodeHasher, clock,
+                factorRegistry, challengeCodeConfig, enrolledFactorRepository, recoveryCodeHasher, clock,
                 ticketTtlMinutes);
     }
 
@@ -556,18 +554,17 @@ public class BeanFactory {
 
     @Singleton
     com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes generateRecoveryCodes(
-            com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository recoveryCodeRepository,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
             com.jrobertgardzinski.security.system.mfa.RecoveryCodeHasher recoveryCodeHasher,
             com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig recoveryCodeConfig) {
         return new com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes(
-                recoveryCodeRepository, recoveryCodeHasher, recoveryCodeConfig);
+                enrolledFactorRepository, recoveryCodeHasher, recoveryCodeConfig);
     }
 
     /** Start and continue: assembled together so a sign-in begun by one is completed by the other. */
     @Singleton
     AuthenticationFactory.AuthenticationUseCases authenticationUseCases(
             UserRepository userRepository,
-            EmailVerificationRepository emailVerificationRepository,
             RejectedAuthenticationRepository rejectedAuthenticationRepository,
             AuthenticationBlockRepository authenticationBlockRepository,
             SessionRepository sessionRepository,
@@ -582,7 +579,7 @@ public class BeanFactory {
             com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore pendingAuthenticationStore,
             com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain) {
         return AuthenticationFactory.assemble(
-                userRepository, emailVerificationRepository, rejectedAuthenticationRepository,
+                userRepository, rejectedAuthenticationRepository,
                 authenticationBlockRepository, sessionRepository, verifyPassword,
                 bruteForceConfig, sessionTokensConfig, clock, blockDurationPolicy, accessTokenMint,
                 enrolledFactorRepository, mfaChain, pendingAuthenticationStore, openMfaChain);
@@ -646,12 +643,12 @@ public class BeanFactory {
 
     @Singleton
     RequestEmailVerification requestEmailVerification(
-            EmailVerificationRepository emailVerificationRepository, EmailVerificationNotifier notifier) {
-        return new RequestEmailVerification(emailVerificationRepository, notifier);
+            UserRepository userRepository, EmailVerificationNotifier notifier) {
+        return new RequestEmailVerification(userRepository, notifier);
     }
 
     @Singleton
-    VerifyEmail verifyEmail(EmailVerificationRepository emailVerificationRepository,
+    VerifyEmail verifyEmail(UserRepository userRepository,
                             @io.micronaut.context.annotation.Value(
                                     "${security.verification.ttl-hours:48}") int verificationTtlHours,
                             Clock clock) {
@@ -659,28 +656,27 @@ public class BeanFactory {
         // link read on Monday morning is dead, longer and an address somebody mistyped stays
         // claimable for a week. The password reset (1 h) and the e-mail change (24 h) are shorter
         // because what they open is bigger.
-        return new VerifyEmail(emailVerificationRepository,
+        return new VerifyEmail(userRepository,
                 java.time.Duration.ofHours(verificationTtlHours), clock);
     }
 
     @Singleton
     RequestPasswordReset requestPasswordReset(
-            PasswordResetRepository passwordResetRepository,
+            MailedLinkRepository mailedLinkRepository,
             com.jrobertgardzinski.security.domain.repository.UserRepository users,
             PasswordResetNotifier notifier) {
-        return new RequestPasswordReset(passwordResetRepository, users, notifier);
+        return new RequestPasswordReset(mailedLinkRepository, users, notifier);
     }
 
     @Singleton
-    ResetPassword resetPassword(PasswordResetRepository passwordResetRepository, UserRepository userRepository,
+    ResetPassword resetPassword(MailedLinkRepository mailedLinkRepository, UserRepository userRepository,
                                 CreatePasswordHash createPasswordHash,
-                                com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
                                 SessionRepository sessions,
                                 @io.micronaut.context.annotation.Value("${security.password-reset.ttl-minutes:60}")
                                 int resetTtlMinutes,
                                 Clock clock) {
-        return new ResetPassword(passwordResetRepository, userRepository,
-                createPasswordHash, passwordless,
+        return new ResetPassword(mailedLinkRepository, userRepository,
+                createPasswordHash,
                 sessions, java.time.Duration.ofMinutes(resetTtlMinutes), clock);
     }
 
@@ -711,13 +707,13 @@ public class BeanFactory {
     com.jrobertgardzinski.security.system.mfa.StepUp stepUp(
             com.jrobertgardzinski.security.config.mfa.StepUpPolicy stepUpPolicy,
             com.jrobertgardzinski.security.system.password.VerifyPassword verifyPassword,
-            com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
+            UserRepository userRepository,
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
             com.jrobertgardzinski.security.system.mfa.MfaChain mfaChain,
             com.jrobertgardzinski.security.system.mfa.StepUpStore stepUpStore,
             com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation) {
         return new com.jrobertgardzinski.security.system.mfa.StepUp(
-                stepUpPolicy, verifyPassword, passwordless, enrolledFactors,
+                stepUpPolicy, verifyPassword, userRepository, enrolledFactors,
                 mfaChain, stepUpStore, sessionElevation);
     }
 
@@ -735,11 +731,11 @@ public class BeanFactory {
     @Singleton
     com.jrobertgardzinski.security.system.mfa.MfaCompliance mfaCompliance(
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
-            com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
+            UserRepository userRepository,
             com.jrobertgardzinski.security.config.mfa.MfaPolicy mfaPolicy,
             @io.micronaut.context.annotation.Value("${security.bootstrap-admins:}") java.util.List<String> bootstrapAdmins) {
         return new com.jrobertgardzinski.security.system.mfa.MfaCompliance(
-                enrolledFactors, passwordless, mfaPolicy, java.util.Set.copyOf(bootstrapAdmins));
+                enrolledFactors, userRepository, mfaPolicy, java.util.Set.copyOf(bootstrapAdmins));
     }
 
     /**
@@ -772,68 +768,49 @@ public class BeanFactory {
 
     @Singleton
     RequestEmailChange requestEmailChange(UserRepository userRepository,
-                                          EmailChangeRepository emailChangeRepository,
+                                          MailedLinkRepository mailedLinkRepository,
                                           EmailVerificationNotifier notifier, AdmitEmail admitEmail) {
         // the same judge Register is given: one deployment, one answer to "may this address hold
         // an account here"
-        return new RequestEmailChange(userRepository, emailChangeRepository, notifier, admitEmail);
+        return new RequestEmailChange(userRepository, mailedLinkRepository, notifier, admitEmail);
     }
 
     @Singleton
-    ConfirmEmailChange confirmEmailChange(EmailChangeRepository emailChangeRepository, UserRepository userRepository,
-                                          EmailVerificationRepository emailVerificationRepository,
-                                          com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository
-                                                  federatedIdentityRepository,
+    ConfirmEmailChange confirmEmailChange(MailedLinkRepository mailedLinkRepository, UserRepository userRepository,
                                           com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository
                                                   enrolledFactorRepository,
-                                          com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository
-                                                  recoveryCodeRepository,
-                                          com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository
-                                                  passwordlessAccountRepository,
-                                          PasswordResetRepository passwordResetRepository,
                                           SessionRepository sessionRepository,
                                           @io.micronaut.context.annotation.Value(
                                                   "${security.email-change.ttl-minutes:1440}")
                                           int changeTtlMinutes,
                                           Clock clock) {
-        return new ConfirmEmailChange(emailChangeRepository, userRepository, emailVerificationRepository,
-                federatedIdentityRepository, enrolledFactorRepository, recoveryCodeRepository,
-                passwordlessAccountRepository, passwordResetRepository, sessionRepository,
+        return new ConfirmEmailChange(mailedLinkRepository, userRepository,
+                enrolledFactorRepository, sessionRepository,
                 java.time.Duration.ofMinutes(changeTtlMinutes), clock);
     }
 
     @Singleton
     DeleteAccount deleteAccount(UserRepository userRepository, SessionRepository sessionRepository,
                                 com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
-                                com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository recoveryCodeRepository,
-                                com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository federatedIdentityRepository,
-                                EmailVerificationRepository emailVerificationRepository,
-                                PasswordResetRepository passwordResetRepository,
-                                EmailChangeRepository emailChangeRepository,
-                                com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordlessAccountRepository) {
+                                MailedLinkRepository mailedLinkRepository) {
         return new DeleteAccount(userRepository, sessionRepository,
-                enrolledFactorRepository, recoveryCodeRepository, federatedIdentityRepository,
-                emailVerificationRepository, passwordResetRepository, emailChangeRepository,
-                passwordlessAccountRepository);
+                enrolledFactorRepository, mailedLinkRepository);
     }
 
     @Singleton
     com.jrobertgardzinski.security.system.federation.FederatedSignIn federatedSignIn(
-            com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository federatedIdentities,
             UserRepository userRepository,
-            EmailVerificationRepository emailVerificationRepository,
             SessionRepository sessionRepository,
             HashAlgorithmPort hashAlgorithm,
             SessionTokensConfig sessionTokensConfig,
             Clock clock,
             AccessTokenMint accessTokenMint,
-            com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository passwordless,
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactors,
             com.jrobertgardzinski.security.system.mfa.OpenMfaChain openMfaChain) {
         return new com.jrobertgardzinski.security.system.federation.FederatedSignIn(
-                federatedIdentities, userRepository, emailVerificationRepository,
+                userRepository,
                 sessionRepository, hashAlgorithm, sessionTokensConfig, clock, accessTokenMint,
-                passwordless, enrolledFactors, openMfaChain);
+                enrolledFactors, openMfaChain);
     }
 
     @Singleton

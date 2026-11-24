@@ -27,11 +27,14 @@ import java.util.List;
 final class JdbcEnrolledFactorRepository implements EnrolledFactorRepository {
 
     private final EnrolledFactorJdbcRepository repository;
+    private final RecoveryCodeJdbcRepository recoveryCodes;
     private final com.jrobertgardzinski.TotpSecretCipher cipher;
 
     JdbcEnrolledFactorRepository(EnrolledFactorJdbcRepository repository,
+                                 RecoveryCodeJdbcRepository recoveryCodes,
                                  com.jrobertgardzinski.TotpSecretCipher cipher) {
         this.repository = repository;
+        this.recoveryCodes = recoveryCodes;
         this.cipher = cipher;
     }
 
@@ -92,5 +95,43 @@ final class JdbcEnrolledFactorRepository implements EnrolledFactorRepository {
                         e.label(), e.factorOrder(),
                         fromEmail.value().equals(e.secretMaterial()) ? toEmail.value() : e.secretMaterial()))
                 .toList());
+
+        // the recovery codes' key is the flattened email|hash, so they move the same way. The spent
+        // flag moves with the row — the "N of 10 left" count must not reset itself because the
+        // owner changed their address.
+        List<RecoveryCodeEntity> movingCodes = recoveryCodes.findByUserEmail(fromEmail.value());
+        recoveryCodes.deleteByUserEmail(fromEmail.value());
+        recoveryCodes.saveAll(movingCodes.stream()
+                .map(e -> new RecoveryCodeEntity(
+                        RecoveryCodeEntity.keyOf(toEmail.value(), e.codeHash()),
+                        toEmail.value(), e.codeHash(), e.used()))
+                .toList());
+    }
+
+    @Override
+    public void replaceRecoveryCodes(Email userEmail, List<String> codeHashes) {
+        recoveryCodes.deleteByUserEmail(userEmail.value());
+        recoveryCodes.saveAll(codeHashes.stream()
+                .map(hash -> new RecoveryCodeEntity(
+                        RecoveryCodeEntity.keyOf(userEmail.value(), hash),
+                        userEmail.value(), hash, false))
+                .toList());
+    }
+
+    /** A single conditional UPDATE, so a code can never be spent twice, whatever the concurrency. */
+    @Override
+    public boolean consumeRecoveryCode(Email userEmail, String codeHash) {
+        return recoveryCodes.spend(RecoveryCodeEntity.keyOf(userEmail.value(), codeHash)) == 1;
+    }
+
+    @Override
+    public int unusedRecoveryCodes(Email userEmail) {
+        return (int) recoveryCodes.countByUserEmailAndUsedFalse(userEmail.value());
+    }
+
+    @Override
+    public void purge(Email userEmail) {
+        removeAll(userEmail);
+        recoveryCodes.deleteByUserEmail(userEmail.value());
     }
 }

@@ -8,7 +8,7 @@ import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.config.mfa.StepUpPolicy;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
@@ -37,7 +37,7 @@ public class StepUp {
 
     private final StepUpPolicy policy;
     private final VerifyPassword verifyPassword;
-    private final PasswordlessAccountRepository passwordlessAccountRepository;
+    private final UserRepository userRepository;
     private final EnrolledFactorRepository enrolledFactorRepository;
     private final MfaChain chain;
     private final StepUpStore store;
@@ -46,14 +46,14 @@ public class StepUp {
     public StepUp(
                     StepUpPolicy policy,
                     VerifyPassword verifyPassword,
-                    PasswordlessAccountRepository passwordlessAccountRepository,
+                    UserRepository userRepository,
                     EnrolledFactorRepository enrolledFactorRepository,
                     MfaChain chain,
                     StepUpStore store,
                     SessionElevation elevation) {
         this.policy = policy;
         this.verifyPassword = verifyPassword;
-        this.passwordlessAccountRepository = passwordlessAccountRepository;
+        this.userRepository = userRepository;
         this.enrolledFactorRepository = enrolledFactorRepository;
         this.chain = chain;
         this.store = store;
@@ -102,7 +102,7 @@ public class StepUp {
         if (
                 requirement == StepUpRequirement.FULL_CHAIN &&
                 enrolled.isEmpty() &&
-                passwordlessAccountRepository.isPasswordless(email)
+                userRepository.isPasswordless(email)
         ) {
             return new Result.NothingToProveWith();
         }
@@ -118,7 +118,7 @@ public class StepUp {
 
         if (
                 mustProvePassword &&
-                !passwordlessAccountRepository.isPasswordless(email)
+                !userRepository.isPasswordless(email)
         ) {
             // No password offered, or a blank one, does not construct, and it answers like a wrong
             // one: VerifyPassword says so.

@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.security.system.verification;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 
 import java.time.Clock;
@@ -19,15 +19,15 @@ import java.util.Optional;
  */
 public class VerifyEmail {
 
-    private final EmailVerificationRepository emailVerificationRepository;
+    private final UserRepository userRepository;
     private final Duration tokenTtl;
     private final Clock clock;
 
     public VerifyEmail(
-                    EmailVerificationRepository emailVerificationRepository,
+                    UserRepository userRepository,
                     Duration tokenTtl,
                     Clock clock) {
-        this.emailVerificationRepository = emailVerificationRepository;
+        this.userRepository = userRepository;
         this.tokenTtl = tokenTtl;
         this.clock = clock;
     }
@@ -43,8 +43,8 @@ public class VerifyEmail {
 
     public Result execute(VerificationToken token) {
 
-        Optional<EmailVerificationRepository.PendingVerification> pendingVerification =
-                emailVerificationRepository.completeVerification(token);
+        Optional<UserRepository.PendingVerification> pendingVerification =
+                userRepository.completeVerification(token);
 
         if (
                 pendingVerification.isEmpty()

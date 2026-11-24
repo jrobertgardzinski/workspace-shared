@@ -6,7 +6,7 @@ import com.jrobertgardzinski.email.domain.EmailError;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
-import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
@@ -29,17 +29,17 @@ import java.util.List;
 public class RequestEmailChange {
 
     private final UserRepository userRepository;
-    private final EmailChangeRepository emailChangeRepository;
+    private final MailedLinkRepository mailedLinkRepository;
     private final EmailVerificationNotifier notifier;
     private final AdmitEmail admitEmail;
 
     public RequestEmailChange(
                     UserRepository userRepository,
-                    EmailChangeRepository emailChangeRepository,
+                    MailedLinkRepository mailedLinkRepository,
                     EmailVerificationNotifier notifier,
                     AdmitEmail admitEmail) {
         this.userRepository = userRepository;
-        this.emailChangeRepository = emailChangeRepository;
+        this.mailedLinkRepository = mailedLinkRepository;
         this.notifier = notifier;
         this.admitEmail = admitEmail;
     }
@@ -83,7 +83,7 @@ public class RequestEmailChange {
         }
 
         VerificationToken token = VerificationToken.random();
-        emailChangeRepository.startChange(
+        mailedLinkRepository.startChange(
                 new EmailChange(currentEmail, newEmail),
                 token);
         notifier.sendVerificationLink(newEmail, token);

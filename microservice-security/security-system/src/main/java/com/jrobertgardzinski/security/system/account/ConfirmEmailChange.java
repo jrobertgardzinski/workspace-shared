@@ -2,15 +2,10 @@ package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
-import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException;
-import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
+import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 
@@ -63,38 +58,23 @@ import java.util.Optional;
  */
 public class ConfirmEmailChange {
 
-    private final EmailChangeRepository emailChangeRepository;
+    private final MailedLinkRepository mailedLinkRepository;
     private final UserRepository userRepository;
-    private final EmailVerificationRepository emailVerificationRepository;
-    private final FederatedIdentityRepository federatedIdentityRepository;
     private final EnrolledFactorRepository enrolledFactorRepository;
-    private final RecoveryCodeRepository recoveryCodeRepository;
-    private final PasswordlessAccountRepository passwordlessAccountRepository;
-    private final PasswordResetRepository passwordResetRepository;
     private final SessionRepository sessionRepository;
     private final Duration tokenTtl;
     private final Clock clock;
 
     public ConfirmEmailChange(
-                    EmailChangeRepository emailChangeRepository,
+                    MailedLinkRepository mailedLinkRepository,
                     UserRepository userRepository,
-                    EmailVerificationRepository emailVerificationRepository,
-                    FederatedIdentityRepository federatedIdentityRepository,
                     EnrolledFactorRepository enrolledFactorRepository,
-                    RecoveryCodeRepository recoveryCodeRepository,
-                    PasswordlessAccountRepository passwordlessAccountRepository,
-                    PasswordResetRepository passwordResetRepository,
                     SessionRepository sessionRepository,
                     Duration tokenTtl,
                     Clock clock) {
-        this.emailChangeRepository = emailChangeRepository;
+        this.mailedLinkRepository = mailedLinkRepository;
         this.userRepository = userRepository;
-        this.emailVerificationRepository = emailVerificationRepository;
-        this.federatedIdentityRepository = federatedIdentityRepository;
         this.enrolledFactorRepository = enrolledFactorRepository;
-        this.recoveryCodeRepository = recoveryCodeRepository;
-        this.passwordlessAccountRepository = passwordlessAccountRepository;
-        this.passwordResetRepository = passwordResetRepository;
         this.sessionRepository = sessionRepository;
         this.tokenTtl = tokenTtl;
         this.clock = clock;
@@ -134,8 +114,8 @@ public class ConfirmEmailChange {
 
     public Result execute(VerificationToken token) {
 
-        Optional<EmailChangeRepository.PendingEmailChange> pendingEmailChange =
-                emailChangeRepository.confirmChange(token);
+        Optional<MailedLinkRepository.PendingEmailChange> pendingEmailChange =
+                mailedLinkRepository.confirmChange(token);
 
         if (
                 pendingEmailChange.isEmpty()
@@ -168,14 +148,9 @@ public class ConfirmEmailChange {
             return new Result.EmailTaken();
         }
 
-        federatedIdentityRepository.relinkAll(currentEmail, newEmail);
-        enrolledFactorRepository.reassign(currentEmail, newEmail);
-        recoveryCodeRepository.reassign(currentEmail, newEmail);
-        passwordlessAccountRepository.reassign(currentEmail, newEmail);
-        passwordResetRepository.purge(currentEmail);
-        emailChangeRepository.purge(currentEmail);
-        emailVerificationRepository.purge(currentEmail);
-
+        // the account moves first, and takes with it what its repository holds under the address:
+        // the passwordless mark and the federated links follow, the old address's verification is
+        // forgotten. Nothing else is touched until this is known to be possible
         try {
             userRepository.updateEmail(currentEmail, newEmail);
         } catch (EmailAlreadyTakenException takenSinceWeLooked) {
@@ -184,8 +159,14 @@ public class ConfirmEmailChange {
             return new Result.EmailTaken();
         }
 
+        // what belongs to the account follows it
+        enrolledFactorRepository.reassign(currentEmail, newEmail);
+
+        // what was e-mailed to the old address is dropped
+        mailedLinkRepository.purge(currentEmail);
+
         sessionRepository.revokeAllSessions(currentEmail);
-        emailVerificationRepository.markVerified(newEmail);
+        userRepository.markVerified(newEmail);
 
         return new Result.EmailChanged(
                 currentEmail,

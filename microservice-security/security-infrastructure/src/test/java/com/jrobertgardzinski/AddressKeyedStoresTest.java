@@ -4,7 +4,7 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.entity.User;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.domain.vo.SessionFamily;
@@ -53,7 +53,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * </ol>
  *
  * <p>A new address-keyed table joins the law by joining {@link #storesOf}; forgetting it there is the
- * one remaining failure mode, which is why the list sits next to nothing else.
+ * one remaining failure mode, which is why the list sits next to nothing else. The list stays one
+ * entry per TABLE although the repositories are fewer than the tables (since 2026-11-24 one
+ * repository per entity holds several of them): a repository's single {@code deleteByEmail},
+ * {@code purge} or {@code reassign} now stands for several stores, and this is where each of them
+ * is checked on its own.
  *
  * <p>{@code sessions} joined the registry in the 2026-09-08 review (AUTH-3): they are the one store
  * that CANNOT follow the account, because a session remembers only the address it was minted for.
@@ -97,18 +101,11 @@ class AddressKeyedStoresTest {
         final InMemorySessionRepository sessions =
                 new InMemorySessionRepository(Clock.systemUTC());
         final InMemoryEnrolledFactorRepository factors = new InMemoryEnrolledFactorRepository();
-        final InMemoryRecoveryCodeRepository codes = new InMemoryRecoveryCodeRepository();
-        final InMemoryFederatedIdentityRepository federated = new InMemoryFederatedIdentityRepository();
-        final InMemoryPasswordlessAccountRepository passwordless = new InMemoryPasswordlessAccountRepository();
-        final InMemoryEmailVerificationRepository verifications = new InMemoryEmailVerificationRepository(Clock.systemUTC());
-        final InMemoryPasswordResetRepository resets = new InMemoryPasswordResetRepository(Clock.systemUTC());
-        final InMemoryEmailChangeRepository changes = new InMemoryEmailChangeRepository(Clock.systemUTC());
+        final InMemoryMailedLinkRepository links = new InMemoryMailedLinkRepository(Clock.systemUTC());
 
-        final ConfirmEmailChange confirmEmailChange = new ConfirmEmailChange(changes, users, verifications,
-                federated, factors, codes, passwordless, resets, sessions,
+        final ConfirmEmailChange confirmEmailChange = new ConfirmEmailChange(links, users, factors, sessions,
                 java.time.Duration.ofMinutes(1440), Clock.systemUTC());
-        final DeleteAccount deleteAccount = new DeleteAccount(users, sessions, factors, codes, federated,
-                verifications, resets, changes, passwordless);
+        final DeleteAccount deleteAccount = new DeleteAccount(users, sessions, factors, links);
 
         Fixture() {
             users.save(new User(OLD, new HashedPassword("hash")));   // the account every store belongs to
@@ -125,28 +122,28 @@ class AddressKeyedStoresTest {
                                 "e-mail code", 2, address.value())),
                         () -> heldWhere(address -> !f.factors.findByUser(address).isEmpty())),
                 Store.follows("recovery_codes",
-                        address -> f.codes.replaceAll(address, List.of("code-hash")),
-                        () -> heldWhere(address -> f.codes.unusedCount(address) > 0)),
+                        address -> f.factors.replaceRecoveryCodes(address, List.of("code-hash")),
+                        () -> heldWhere(address -> f.factors.unusedRecoveryCodes(address) > 0)),
                 Store.follows("passwordless_accounts",
-                        address -> f.passwordless.setPasswordless(address, true),
-                        () -> heldWhere(f.passwordless::isPasswordless)),
+                        address -> f.users.setPasswordless(address, true),
+                        () -> heldWhere(f.users::isPasswordless)),
                 Store.follows("federated_identities",
-                        address -> f.federated.link("google", "durable-subject", address),
-                        () -> f.federated.findUserBy("google", "durable-subject").stream().toList()),
+                        address -> f.users.linkFederatedIdentity("google", "durable-subject", address),
+                        () -> f.users.findEmailByFederatedIdentity("google", "durable-subject").stream().toList()),
                 // the move VERIFIES the new address (its own token was delivered there), so this row
                 // is expected under the new address as well — hence "follows"
                 Store.follows("email_verifications",
-                        f.verifications::markVerified,
-                        () -> heldWhere(f.verifications::isVerified)),
+                        f.users::markVerified,
+                        () -> heldWhere(f.users::isVerified)),
                 // no find-by-address on these two ports by design (a token store is queried by token),
                 // so the probe consumes the seeded token once and reports whose address came back
                 Store.dropped("password_resets", "was e-mailed to the old address",
-                        address -> f.resets.startReset(address, RESET_TOKEN),
-                        () -> f.resets.consumeReset(RESET_TOKEN)
-                                .map(PasswordResetRepository.PendingReset::email).stream().toList()),
+                        address -> f.links.startReset(address, RESET_TOKEN),
+                        () -> f.links.consumeReset(RESET_TOKEN)
+                                .map(MailedLinkRepository.PendingReset::email).stream().toList()),
                 Store.dropped("email_changes", "was e-mailed to the old address",
-                        address -> f.changes.startChange(new EmailChange(address, THIRD), OTHER_CHANGE_TOKEN),
-                        () -> f.changes.confirmChange(OTHER_CHANGE_TOKEN)
+                        address -> f.links.startChange(new EmailChange(address, THIRD), OTHER_CHANGE_TOKEN),
+                        () -> f.links.confirmChange(OTHER_CHANGE_TOKEN)
                                 .map(pending -> pending.change().currentEmail()).stream().toList()),
                 // a session carries the address and nothing else, so it cannot be re-pointed: one
                 // left alive would keep authorizing as the old address — and as its next owner
@@ -173,7 +170,7 @@ class AddressKeyedStoresTest {
                     Store store = storesOf(f).stream()
                             .filter(s -> s.table().equals(table)).findFirst().orElseThrow();
                     store.seed().accept(OLD);
-                    f.changes.startChange(new EmailChange(OLD, NEW), CHANGE_TOKEN);
+                    f.links.startChange(new EmailChange(OLD, NEW), CHANGE_TOKEN);
 
                     f.confirmEmailChange.execute(CHANGE_TOKEN);
 
@@ -206,12 +203,12 @@ class AddressKeyedStoresTest {
     Stream<DynamicTest> a_reset_pending_when_the_account_closes_cannot_be_redeemed_afterwards() {
         return Stream.of(DynamicTest.dynamicTest("the successor of a freed address keeps their password", () -> {
             Fixture f = new Fixture();
-            f.resets.startReset(OLD, RESET_TOKEN);
+            f.links.startReset(OLD, RESET_TOKEN);
 
             f.deleteAccount.execute(OLD);
             f.users.save(new User(OLD, new HashedPassword("the-successor-hash")));   // someone else registers it
 
-            Optional<PasswordResetRepository.PendingReset> redeemed = f.resets.consumeReset(RESET_TOKEN);
+            Optional<MailedLinkRepository.PendingReset> redeemed = f.links.consumeReset(RESET_TOKEN);
 
             assertEquals(Optional.empty(), redeemed,
                     "the old owner's reset link still resolves to the address — it would set the successor's password");

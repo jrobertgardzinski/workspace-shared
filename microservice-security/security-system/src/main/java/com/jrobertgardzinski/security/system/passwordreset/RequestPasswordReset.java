@@ -3,7 +3,7 @@ package com.jrobertgardzinski.security.system.passwordreset;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.security.domain.port.PasswordResetNotifier;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
 
@@ -20,15 +20,15 @@ import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
  */
 public class RequestPasswordReset {
 
-    private final PasswordResetRepository passwordResetRepository;
+    private final MailedLinkRepository mailedLinkRepository;
     private final UserRepository userRepository;
     private final PasswordResetNotifier notifier;
 
     public RequestPasswordReset(
-                    PasswordResetRepository passwordResetRepository,
+                    MailedLinkRepository mailedLinkRepository,
                     UserRepository userRepository,
                     PasswordResetNotifier notifier) {
-        this.passwordResetRepository = passwordResetRepository;
+        this.mailedLinkRepository = mailedLinkRepository;
         this.userRepository = userRepository;
         this.notifier = notifier;
     }
@@ -51,7 +51,7 @@ public class RequestPasswordReset {
         }
 
         PasswordResetToken token = PasswordResetToken.random();
-        passwordResetRepository.startReset(email, token);
+        mailedLinkRepository.startReset(email, token);
         notifier.sendResetLink(email, token);
 
         return new Result.LinkSent();

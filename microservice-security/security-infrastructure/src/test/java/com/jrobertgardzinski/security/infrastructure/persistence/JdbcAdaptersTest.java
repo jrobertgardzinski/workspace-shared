@@ -12,12 +12,8 @@ import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.AuthenticationBlockRepository;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.EmailAlreadyTakenException;
-import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
 import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AccessGrant;
@@ -252,18 +248,17 @@ class JdbcAdaptersTest {
     @Test
     void address_keyed_rows_move_with_the_account_under_recomputed_ids() {
         EnrolledFactorRepository factors = context.getBean(EnrolledFactorRepository.class);
-        RecoveryCodeRepository codes = context.getBean(RecoveryCodeRepository.class);
-        PasswordlessAccountRepository passwordless = context.getBean(PasswordlessAccountRepository.class);
+        UserRepository users = context.getBean(UserRepository.class);
         Email before = Email.of("jdbc-move-old@example.com");
         Email after = Email.of("jdbc-move-new@example.com");
 
         factors.enrol(new EnrolledFactor(before, FactorType.EMAIL_CODE, "e-mail code", 2, before.value()));
-        codes.replaceAll(before, List.of("move-hash-1", "move-hash-2"));
-        passwordless.setPasswordless(before, true);
+        factors.replaceRecoveryCodes(before, List.of("move-hash-1", "move-hash-2"));
+        users.setPasswordless(before, true);
 
+        // one call per repository moves everything it holds under the address
         factors.reassign(before, after);
-        codes.reassign(before, after);
-        passwordless.reassign(before, after);
+        users.updateEmail(before, after);
 
         assertThat(factors.findByUser(before)).isEmpty();
         assertThat(factors.findByUser(after)).singleElement().satisfies(factor -> {
@@ -272,12 +267,12 @@ class JdbcAdaptersTest {
             // the code target followed too: secret_material is where the NEXT code is sent
             assertThat(factor.secretMaterial()).isEqualTo(after.value());
         });
-        assertThat(codes.unusedCount(before)).isZero();
-        assertThat(codes.unusedCount(after)).isEqualTo(2);
+        assertThat(factors.unusedRecoveryCodes(before)).isZero();
+        assertThat(factors.unusedRecoveryCodes(after)).isEqualTo(2);
         // the id was recomputed, not just the address column: spending by the new key must find the row
-        assertThat(codes.consume(after, "move-hash-1")).isTrue();
-        assertThat(passwordless.isPasswordless(before)).isFalse();
-        assertThat(passwordless.isPasswordless(after)).isTrue();
+        assertThat(factors.consumeRecoveryCode(after, "move-hash-1")).isTrue();
+        assertThat(users.isPasswordless(before)).isFalse();
+        assertThat(users.isPasswordless(after)).isTrue();
     }
 
     /**
@@ -286,7 +281,7 @@ class JdbcAdaptersTest {
      */
     @Test
     void a_pending_reset_carries_its_age_and_can_be_purged() {
-        PasswordResetRepository resets = context.getBean(PasswordResetRepository.class);
+        MailedLinkRepository resets = context.getBean(MailedLinkRepository.class);
         Email email = Email.of("jdbc-reset@example.com");
         // the application's clock, not the wall clock: it is UTC, and the TTL check compares against
         // that same clock — reading the local time here would just measure the machine's offset
@@ -314,9 +309,9 @@ class JdbcAdaptersTest {
      */
     @Test
     void a_mailed_token_works_exactly_once() {
-        PasswordResetRepository resets = context.getBean(PasswordResetRepository.class);
-        EmailChangeRepository changes = context.getBean(EmailChangeRepository.class);
-        EmailVerificationRepository verifications = context.getBean(EmailVerificationRepository.class);
+        MailedLinkRepository resets = context.getBean(MailedLinkRepository.class);
+        MailedLinkRepository changes = context.getBean(MailedLinkRepository.class);
+        UserRepository verifications = context.getBean(UserRepository.class);
 
         Email resetting = Email.of("jdbc-once-reset@example.com");
         resets.startReset(resetting, new PasswordResetToken("jdbc-once-reset-token"));
@@ -336,7 +331,7 @@ class JdbcAdaptersTest {
         Email verifying = Email.of("jdbc-once-verify@example.com");
         verifications.startVerification(verifying, new VerificationToken("jdbc-once-verify-token"));
         assertThat(verifications.completeVerification(new VerificationToken("jdbc-once-verify-token")))
-                .get().extracting(EmailVerificationRepository.PendingVerification::email)
+                .get().extracting(UserRepository.PendingVerification::email)
                 .isEqualTo(verifying);
         assertThat(verifications.completeVerification(new VerificationToken("jdbc-once-verify-token")))
                 .as("the hash is cleared by the first use, so the second finds nothing")
@@ -349,8 +344,8 @@ class JdbcAdaptersTest {
     /** Both pending-token tables forget an address on request, {@code email_changes} at either end. */
     @Test
     void pending_tokens_are_purged_by_address() {
-        EmailChangeRepository changes = context.getBean(EmailChangeRepository.class);
-        EmailVerificationRepository verifications = context.getBean(EmailVerificationRepository.class);
+        MailedLinkRepository changes = context.getBean(MailedLinkRepository.class);
+        UserRepository verifications = context.getBean(UserRepository.class);
         Email leaving = Email.of("jdbc-purge-leaving@example.com");
         Email arriving = Email.of("jdbc-purge-arriving@example.com");
 
@@ -362,7 +357,7 @@ class JdbcAdaptersTest {
 
         changes.purge(leaving);
         changes.purge(arriving);
-        verifications.purge(leaving);
+        verifications.deleteByEmail(leaving);
 
         assertThat(changes.confirmChange(new VerificationToken("jdbc-change-as-source"))).isEmpty();
         assertThat(changes.confirmChange(new VerificationToken("jdbc-change-as-target"))).isEmpty();

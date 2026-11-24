@@ -1096,6 +1096,40 @@ jak w `273f693`.
       `RegistrationServiceTest`, `AuthenticationServiceTest`), infrastruktura 345, zero pominiętych.
       STOP wg planu: Robert ogląda kształt dwóch serwisów, zanim pójdą kroki 3–6 (22 kontrolery).
       Glue Cucumbera nadal woła use case'y wprost, nieprzepinane.
+- [x] JEDNO REPOZYTORIUM PER ENCJA (2026-11-24; werdykt Roberta: „jedno repo per encja wystarczy.
+      Teraz jest jedno repo per usecase i wygląda chujowo", plan zatwierdzony „w 100%"). Było 11
+      portów (po jednym na TABELĘ, dopisywane od czerwca do września z każdą funkcją), jest 6;
+      adapterów było 33 (JDBC + in-memory + fake), jest 18. Schemat bazy BEZ ZMIAN: adapter JDBC
+      obsługuje kilka tabel.
+      - `UserRepository` wchłonął `PasswordlessAccountRepository` (`isPasswordless`,
+        `setPasswordless`), `FederatedIdentityRepository` (`findEmailByFederatedIdentity`,
+        `linkFederatedIdentity`) i CAŁY `EmailVerificationRepository` (`startVerification`,
+        `completeVerification`, `markVerified`, `isVerified`, rekord `PendingVerification`).
+      - `MailedLinkRepository` (nowy) = `PasswordResetRepository` + `EmailChangeRepository`.
+      - `EnrolledFactorRepository` wchłonął `RecoveryCodeRepository` (`replaceRecoveryCodes`,
+        `consumeRecoveryCode`, `unusedRecoveryCodes`).
+      - Bez zmian: `SessionRepository`, `RejectedAuthenticationRepository`,
+        `AuthenticationBlockRepository`.
+      ODSTĘPSTWO OD ZATWIERDZONEJ TABELI: link weryfikacyjny NIE poszedł do `MailedLinkRepository`,
+      tylko razem z flagą do `UserRepository`. Flaga i token to jeden wiersz
+      (`email_verifications`), a `completeVerification` zużywa token i ustawia flagę jednym
+      `UPDATE` („the UPDATE decides"); rozcięcie na dwa repozytoria rozerwałoby tę atomowość.
+      SŁOWNIK SPRZĄTANIA, jeden na wszystkie: jedno wywołanie na repozytorium zapomina/przenosi
+      wszystko, co ono trzyma pod adresem. `userRepository.deleteByEmail`/`updateEmail` (konto,
+      weryfikacja, znacznik passwordless, linki federacyjne), `enrolledFactorRepository.purge`/
+      `reassign` (czynniki + kody), `mailedLinkRepository.purge` (reset + zmiany). `removeAll`
+      w czynnikach ZOSTAŁ osobno: to reset administratora i kodów nie rusza, jak dotąd.
+      `DeleteAccount`: konstruktor 9 → 4, cztery linie w `execute`. `ConfirmEmailChange`: 9 → 4
+      repozytoriów. ZMIANA ZACHOWANIA w `ConfirmEmailChange`: konto przenosi się PIERWSZE, a
+      czynniki, linki i sesje dopiero po udanym `updateEmail`; wcześniej czynniki szły przed nim,
+      wbrew javadocowi („touched only once the move is known to be possible").
+      CENA: lista „co musi zniknąć z kontem" siedzi teraz w trzech adapterach `UserRepository`
+      zamiast w jednym use casie. Pilnują jej testy na stanie, nie na liczbie wywołań:
+      `AddressKeyedStoresTest` (nadal jeden wpis na TABELĘ, in-memory), `JdbcAdaptersTest`,
+      `DeleteAccountTest`/`ConfirmEmailChangeTest` na fejkach. `UserRepository` ma 20 metod.
+      Przy okazji: `security-system` dostał test-jar domeny, dwie prywatne kopie `FactorStore`
+      w testach zastąpione wspólnym `FakeEnrolledFactorRepository`.
+      Zielone: pełne `verify` security, 19 + 42 + 123 + 51 + 345, zero pominiętych.
 - [ ] ZOSTAWIONE ŚWIADOMIE PO SEALED (2026-11-07, decyzja Roberta: „wrócimy do tego"):
       (1) `SessionStatus` (`ACTIVE`/`ROTATED`) został enumem, bo to stan utrwalany w bazie przez
       `name()`/`valueOf` (`JdbcSessionRepository`), nie werdykt sędziego. Jego `switch` w

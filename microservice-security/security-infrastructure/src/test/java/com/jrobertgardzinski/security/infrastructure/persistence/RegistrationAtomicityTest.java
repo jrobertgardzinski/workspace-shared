@@ -4,7 +4,6 @@ import com.jrobertgardzinski.CapturingEmailVerificationNotifier;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 import io.micronaut.context.ApplicationContext;
@@ -90,8 +89,7 @@ class RegistrationAtomicityTest {
                         .isEqualTo(500));
 
         UserRepository users = server.getApplicationContext().getBean(UserRepository.class);
-        EmailVerificationRepository verifications =
-                server.getApplicationContext().getBean(EmailVerificationRepository.class);
+        UserRepository verifications = users;
 
         assertThat(users.findBy(Email.of(ADDRESS)))
                 .as("an account with no verification mail is an account its owner can never sign"

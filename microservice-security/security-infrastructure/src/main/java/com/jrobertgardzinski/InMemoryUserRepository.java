@@ -1,5 +1,9 @@
 package com.jrobertgardzinski;
 
+import java.time.LocalDateTime;
+import java.time.Clock;
+import jakarta.inject.Inject;
+import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.identity.UserId;
@@ -28,6 +32,24 @@ public final class InMemoryUserRepository implements UserRepository {
     private final java.util.Set<String> pendingDeletion = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Map<String, User> byEmail = new ConcurrentHashMap<>();
     private final Map<String, User> byNormalizedEmail = new ConcurrentHashMap<>();
+
+    private record Verification(String pendingTokenHash, boolean verified, LocalDateTime requestedAt) {}
+
+    private final Map<String, Verification> verificationByEmail = new ConcurrentHashMap<>();
+    private final java.util.Set<String> passwordless = ConcurrentHashMap.newKeySet();
+    /** provider|subject -> the account's address */
+    private final Map<String, String> emailByFederatedIdentity = new ConcurrentHashMap<>();
+    private final Clock clock;
+
+    @Inject
+    public InMemoryUserRepository(Clock clock) {
+        this.clock = clock;
+    }
+
+    /** For tests that build the adapter by hand and do not look at dates. */
+    public InMemoryUserRepository() {
+        this(Clock.systemUTC());
+    }
 
     @Override
     public java.util.List<User> findAllBy(java.util.Collection<UserId> ids) {
@@ -107,10 +129,19 @@ public final class InMemoryUserRepository implements UserRepository {
             byEmail.put(newEmail.value(), moved);
             byNormalizedEmail.put(moved.normalizedEmail().value(), moved);
         }
+        if (passwordless.remove(currentEmail.value())) {
+            passwordless.add(newEmail.value());
+        }
+        emailByFederatedIdentity.replaceAll(
+                (key, email) -> currentEmail.value().equals(email) ? newEmail.value() : email);
+        verificationByEmail.remove(currentEmail.value());
     }
 
     @Override
     public void deleteByEmail(Email email) {
+        passwordless.remove(email.value());
+        emailByFederatedIdentity.values().removeIf(email.value()::equals);
+        verificationByEmail.remove(email.value());
         User removed = byEmail.remove(email.value());
         if (removed != null) {
             byNormalizedEmail.remove(removed.normalizedEmail().value());
@@ -131,5 +162,59 @@ public final class InMemoryUserRepository implements UserRepository {
     @Override
     public boolean isPendingDeletion(Email email) {
         return pendingDeletion.contains(email.value());
+    }
+
+    @Override
+    public void startVerification(Email email, VerificationToken token) {
+        verificationByEmail.put(email.value(),
+                new Verification(TokenHashing.hash(token), false, LocalDateTime.now(clock)));
+    }
+
+    @Override
+    public Optional<PendingVerification> completeVerification(VerificationToken token) {
+        String hash = TokenHashing.hash(token);
+        return verificationByEmail.entrySet().stream()
+                .filter(e -> hash.equals(e.getValue().pendingTokenHash()))
+                .findFirst()
+                .map(e -> {
+                    LocalDateTime requestedAt = e.getValue().requestedAt();
+                    verificationByEmail.put(e.getKey(), new Verification(null, true, requestedAt));
+                    return new PendingVerification(Email.of(e.getKey()), requestedAt);
+                });
+    }
+
+    @Override
+    public void markVerified(Email email) {
+        verificationByEmail.put(email.value(), new Verification(null, true, LocalDateTime.now(clock)));
+    }
+
+    @Override
+    public boolean isVerified(Email email) {
+        Verification verification = verificationByEmail.get(email.value());
+        return verification != null && verification.verified();
+    }
+
+    @Override
+    public boolean isPasswordless(Email email) {
+        return passwordless.contains(email.value());
+    }
+
+    @Override
+    public void setPasswordless(Email email, boolean value) {
+        if (value) {
+            passwordless.add(email.value());
+        } else {
+            passwordless.remove(email.value());
+        }
+    }
+
+    @Override
+    public Optional<Email> findEmailByFederatedIdentity(String provider, String subject) {
+        return Optional.ofNullable(emailByFederatedIdentity.get(provider + "|" + subject)).map(Email::of);
+    }
+
+    @Override
+    public void linkFederatedIdentity(String provider, String subject, Email userEmail) {
+        emailByFederatedIdentity.put(provider + "|" + subject, userEmail.value());
     }
 }

@@ -1,7 +1,6 @@
 package com.jrobertgardzinski.security.application.feature.authentication;
 
 import com.jrobertgardzinski.security.domain.repository.FakeAuthenticationBlockRepository;
-import com.jrobertgardzinski.security.domain.repository.FakeEmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeRejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeSessionRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
@@ -51,7 +50,6 @@ public class AuthenticationSteps {
     private static final Pattern INTEGER = Pattern.compile("\\d+");
 
     private final FakeUserRepository users = new FakeUserRepository();
-    private final FakeEmailVerificationRepository verifications = new FakeEmailVerificationRepository(java.time.Clock.systemUTC());
     private final FakeRejectedAuthenticationRepository rejections = new FakeRejectedAuthenticationRepository();
     private final FakeAuthenticationBlockRepository blocks = new FakeAuthenticationBlockRepository();
     private final AdjustableClock clock = new AdjustableClock(Instant.parse("2026-06-15T10:00:00Z"), ZoneOffset.UTC);
@@ -73,7 +71,7 @@ public class AuthenticationSteps {
     public void aRegisteredUser(String email, String password) {
         // "registered" implies a completed onboarding: the address has been verified
         aRegisteredButUnverifiedUser(email, password);
-        verifications.markVerified(registeredEmail);
+        users.markVerified(registeredEmail);
     }
 
     @Given("a registered USER {string} with password {string} whose EMAIL is not verified yet")
@@ -186,11 +184,11 @@ public class AuthenticationSteps {
             var mfaChain = new com.jrobertgardzinski.security.system.mfa.MfaChain(
                     new com.jrobertgardzinski.security.system.mfa.FactorRegistry(java.util.List.of()),
                     com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
-                    new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository(),
+                    new com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository(),
                     raw -> "hash:" + raw, clock, 10);
             var pendingStore = new com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore();
             authentication = AuthenticationFactory.assemble(
-                    users, verifications, rejections, blocks, sessions,
+                    users, rejections, blocks, sessions,
                     new com.jrobertgardzinski.security.system.password.VerifyPassword(users, hashAlgorithm),
                     config, SESSION_TOKENS_CONFIG, clock, blockDuration,
                     com.jrobertgardzinski.security.domain.port.AccessTokenMint.RANDOM,

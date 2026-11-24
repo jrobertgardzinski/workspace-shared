@@ -1,14 +1,9 @@
 package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.repository.SessionRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
+import com.jrobertgardzinski.security.domain.repository.SessionRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 
 /**
@@ -24,50 +19,34 @@ import com.jrobertgardzinski.security.domain.repository.UserRepository;
  * reset link e-mailed before the account closed would otherwise still be redeemable and, matched by
  * address alone, would set the password of the address's NEXT owner. So is the passwordless mark: it
  * would tell a step-up that the successor's account has no password to check.
+ *
+ * <p>One call per repository, each forgetting everything it holds under the address: the sessions,
+ * the second factors with their recovery codes, the mailed links still pending, and last the
+ * account itself together with its verification, its passwordless mark and its federated links.
  */
 public class DeleteAccount {
 
     private final UserRepository userRepository;
     private final SessionRepository sessionRepository;
     private final EnrolledFactorRepository enrolledFactorRepository;
-    private final RecoveryCodeRepository recoveryCodeRepository;
-    private final FederatedIdentityRepository federatedIdentityRepository;
-    private final EmailVerificationRepository emailVerificationRepository;
-    private final PasswordResetRepository passwordResetRepository;
-    private final EmailChangeRepository emailChangeRepository;
-    private final PasswordlessAccountRepository passwordlessAccountRepository;
+    private final MailedLinkRepository mailedLinkRepository;
 
     public DeleteAccount(
                     UserRepository userRepository,
                     SessionRepository sessionRepository,
                     EnrolledFactorRepository enrolledFactorRepository,
-                    RecoveryCodeRepository recoveryCodeRepository,
-                    FederatedIdentityRepository federatedIdentityRepository,
-                    EmailVerificationRepository emailVerificationRepository,
-                    PasswordResetRepository passwordResetRepository,
-                    EmailChangeRepository emailChangeRepository,
-                    PasswordlessAccountRepository passwordlessAccountRepository) {
+                    MailedLinkRepository mailedLinkRepository) {
         this.userRepository = userRepository;
         this.sessionRepository = sessionRepository;
         this.enrolledFactorRepository = enrolledFactorRepository;
-        this.recoveryCodeRepository = recoveryCodeRepository;
-        this.federatedIdentityRepository = federatedIdentityRepository;
-        this.emailVerificationRepository = emailVerificationRepository;
-        this.passwordResetRepository = passwordResetRepository;
-        this.emailChangeRepository = emailChangeRepository;
-        this.passwordlessAccountRepository = passwordlessAccountRepository;
+        this.mailedLinkRepository = mailedLinkRepository;
     }
 
     public void execute(Email email) {
 
         sessionRepository.revokeAllSessions(email);
-        enrolledFactorRepository.removeAll(email);
-        recoveryCodeRepository.removeAll(email);
-        federatedIdentityRepository.unlinkAll(email);
-        passwordResetRepository.purge(email);
-        emailChangeRepository.purge(email);
-        emailVerificationRepository.purge(email);
-        passwordlessAccountRepository.purge(email);
+        enrolledFactorRepository.purge(email);
+        mailedLinkRepository.purge(email);
         userRepository.deleteByEmail(email);
     }
 }

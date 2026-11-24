@@ -3,7 +3,7 @@ package com.jrobertgardzinski.security.system.mfa;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -25,17 +25,17 @@ public class MfaChain {
 
     private final FactorRegistry registry;
     private final ChallengeCodeConfig config;
-    private final RecoveryCodeRepository recoveryCodeRepository;
+    private final EnrolledFactorRepository enrolledFactorRepository;
     private final RecoveryCodeHasher recoveryCodeHasher;
     private final Clock clock;
     private final int ticketTtlMinutes;
 
     public MfaChain(FactorRegistry registry, ChallengeCodeConfig config,
-                    RecoveryCodeRepository recoveryCodeRepository, RecoveryCodeHasher recoveryCodeHasher,
+                    EnrolledFactorRepository enrolledFactorRepository, RecoveryCodeHasher recoveryCodeHasher,
                     Clock clock, int ticketTtlMinutes) {
         this.registry = registry;
         this.config = config;
-        this.recoveryCodeRepository = recoveryCodeRepository;
+        this.enrolledFactorRepository = enrolledFactorRepository;
         this.recoveryCodeHasher = recoveryCodeHasher;
         this.clock = clock;
         this.ticketTtlMinutes = ticketTtlMinutes;
@@ -69,7 +69,7 @@ public class MfaChain {
             return true;
         }
         // not the factor's proof — maybe a recovery code standing in for this link (spent if so)
-        return proof != null && !proof.isBlank() && recoveryCodeRepository.consume(pending.email(),
+        return proof != null && !proof.isBlank() && enrolledFactorRepository.consumeRecoveryCode(pending.email(),
                 recoveryCodeHasher.hash(GenerateRecoveryCodes.normalise(proof)));
     }
 }

@@ -9,10 +9,7 @@ import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
-import com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.domain.vo.ProviderIdentity;
@@ -49,39 +46,30 @@ public class FederatedSignIn {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    private final FederatedIdentityRepository federatedIdentityRepository;
     private final UserRepository userRepository;
-    private final EmailVerificationRepository emailVerificationRepository;
     private final SessionRepository sessionRepository;
     private final HashAlgorithmPort hashAlgorithm;
     private final SessionTokensConfig config;
     private final Clock clock;
     private final AccessTokenMint accessTokenMint;
-    private final PasswordlessAccountRepository passwordlessAccountRepository;
     private final EnrolledFactorRepository enrolledFactorRepository;
     private final OpenMfaChain openMfaChain;
 
     public FederatedSignIn(
-                    FederatedIdentityRepository federatedIdentityRepository,
                     UserRepository userRepository,
-                    EmailVerificationRepository emailVerificationRepository,
                     SessionRepository sessionRepository,
                     HashAlgorithmPort hashAlgorithm,
                     SessionTokensConfig config,
                     Clock clock,
                     AccessTokenMint accessTokenMint,
-                    PasswordlessAccountRepository passwordlessAccountRepository,
                     EnrolledFactorRepository enrolledFactorRepository,
                     OpenMfaChain openMfaChain) {
-        this.federatedIdentityRepository = federatedIdentityRepository;
         this.userRepository = userRepository;
-        this.emailVerificationRepository = emailVerificationRepository;
         this.sessionRepository = sessionRepository;
         this.hashAlgorithm = hashAlgorithm;
         this.config = config;
         this.clock = clock;
         this.accessTokenMint = accessTokenMint;
-        this.passwordlessAccountRepository = passwordlessAccountRepository;
         this.enrolledFactorRepository = enrolledFactorRepository;
         this.openMfaChain = openMfaChain;
     }
@@ -112,7 +100,7 @@ public class FederatedSignIn {
             return new Result.EmailNotVouched();
         }
 
-        Optional<Email> linkedEmail = federatedIdentityRepository.findUserBy(
+        Optional<Email> linkedEmail = userRepository.findEmailByFederatedIdentity(
                 identity.provider(),
                 identity.subject());
 
@@ -187,24 +175,24 @@ public class FederatedSignIn {
                     new User(
                             email,
                             unusablePassword()));
-            emailVerificationRepository.markVerified(email);
+            userRepository.markVerified(email);
             // born through the provider, no password of its own
-            passwordlessAccountRepository.setPasswordless(email, true);
+            userRepository.setPasswordless(email, true);
         } else if (
-                !emailVerificationRepository.isVerified(email)
+                !userRepository.isVerified(email)
         ) {
             // the squatter case: the provider's proof of the inbox beats the unproven password
             userRepository.updatePassword(
                     email,
                     unusablePassword());
             sessionRepository.revokeAllSessions(email);
-            emailVerificationRepository.markVerified(email);
+            userRepository.markVerified(email);
             // the wiped password no longer counts
-            passwordlessAccountRepository.setPasswordless(email, true);
+            userRepository.setPasswordless(email, true);
         }
 
         // the auto-link case (existing, verified) keeps its password — it stays a password account
-        federatedIdentityRepository.link(
+        userRepository.linkFederatedIdentity(
                 identity.provider(),
                 identity.subject(),
                 email);

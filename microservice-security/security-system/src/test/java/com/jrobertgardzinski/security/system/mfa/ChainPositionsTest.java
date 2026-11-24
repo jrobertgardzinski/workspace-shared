@@ -5,7 +5,7 @@ import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
-import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
+import com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -44,7 +44,7 @@ class ChainPositionsTest {
         FactorRegistry registry = new FactorRegistry(List.of(
                 new CodeFactor(email, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC()),
                 new CodeFactor(sms, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC())));
-        FactorStore factors = new FactorStore();
+        FakeEnrolledFactorRepository factors = new FakeEnrolledFactorRepository();
         FakeEnrolmentChallengeStore pending = new FakeEnrolmentChallengeStore();
         EnrolFactor enrolFactor = new EnrolFactor(registry, pending);
         ConfirmEnrolment confirmEnrolment = new ConfirmEnrolment(registry, factors, pending);
@@ -89,44 +89,6 @@ class ChainPositionsTest {
         @Override
         public void sendCode(String target, String code) {
             this.lastCode = code;
-        }
-    }
-
-    /** The smallest store that answers the two questions enrolment asks, in chain order. */
-    private static final class FactorStore implements EnrolledFactorRepository {
-
-        private final List<EnrolledFactor> rows = new ArrayList<>();
-
-        @Override
-        public List<EnrolledFactor> findByUser(Email userEmail) {
-            return rows.stream()
-                    .filter(row -> row.userEmail().equals(userEmail))
-                    .sorted(Comparator.comparingInt(EnrolledFactor::order))
-                    .toList();
-        }
-
-        @Override
-        public void enrol(EnrolledFactor factor) {
-            rows.removeIf(row -> row.userEmail().equals(factor.userEmail()) && row.type().equals(factor.type()));
-            rows.add(factor);
-        }
-
-        @Override
-        public void remove(Email userEmail, FactorType type) {
-            rows.removeIf(row -> row.userEmail().equals(userEmail) && row.type().equals(type));
-        }
-
-        @Override
-        public void removeAll(Email userEmail) {
-            rows.removeIf(row -> row.userEmail().equals(userEmail));
-        }
-
-        @Override
-        public void reassign(Email fromEmail, Email toEmail) {
-            List<EnrolledFactor> moving = findByUser(fromEmail);
-            rows.removeAll(moving);
-            moving.forEach(row -> rows.add(new EnrolledFactor(
-                    toEmail, row.type(), row.label(), row.order(), row.secretMaterial())));
         }
     }
 }

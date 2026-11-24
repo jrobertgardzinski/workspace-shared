@@ -1,7 +1,7 @@
 package com.jrobertgardzinski.security.system.authentication;
 
 import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 
 /**
  * Gate applied after the credentials check out: only a verified e-mail address may sign in. Keeps
@@ -9,13 +9,13 @@ import com.jrobertgardzinski.security.domain.repository.EmailVerificationReposit
  */
 class _RequireVerifiedEmail {
 
-    private final EmailVerificationRepository emailVerificationRepository;
+    private final UserRepository userRepository;
 
-    _RequireVerifiedEmail(EmailVerificationRepository emailVerificationRepository) {
-        this.emailVerificationRepository = emailVerificationRepository;
+    _RequireVerifiedEmail(UserRepository userRepository) {
+        this.userRepository = userRepository;
     }
 
     boolean isVerified(Email email) {
-        return emailVerificationRepository.isVerified(email);
+        return userRepository.isVerified(email);
     }
 }

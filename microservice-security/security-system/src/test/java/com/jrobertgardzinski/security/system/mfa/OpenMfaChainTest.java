@@ -4,7 +4,7 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.domain.vo.Source;
@@ -51,7 +51,7 @@ class OpenMfaChainTest {
                 new FactorRegistry(List.of(new CodeFactor(
                         mailbox, raw -> "hash:" + raw, ChallengeCodeConfig.withDefaults(), Clock.systemUTC()))),
                 ChallengeCodeConfig.withDefaults(),
-                Mockito.mock(RecoveryCodeRepository.class),
+                Mockito.mock(EnrolledFactorRepository.class),
                 raw -> "hash:" + raw, Clock.systemUTC(), 10);
         FakePendingAuthenticationStore store = new FakePendingAuthenticationStore();
         EnrolledFactor emailFactor = new EnrolledFactor(

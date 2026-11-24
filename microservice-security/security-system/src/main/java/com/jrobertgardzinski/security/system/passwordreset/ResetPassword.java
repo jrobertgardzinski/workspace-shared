@@ -7,8 +7,7 @@ import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
 
@@ -42,26 +41,23 @@ import java.util.function.Supplier;
  */
 public class ResetPassword {
 
-    private final PasswordResetRepository passwordResetRepository;
+    private final MailedLinkRepository mailedLinkRepository;
     private final UserRepository userRepository;
     private final CreatePasswordHash createPasswordHash;
-    private final PasswordlessAccountRepository passwordlessAccountRepository;
     private final SessionRepository sessionRepository;
     private final Duration tokenTtl;
     private final Clock clock;
 
     public ResetPassword(
-                    PasswordResetRepository passwordResetRepository,
+                    MailedLinkRepository mailedLinkRepository,
                     UserRepository userRepository,
                     CreatePasswordHash createPasswordHash,
-                    PasswordlessAccountRepository passwordlessAccountRepository,
                     SessionRepository sessionRepository,
                     Duration tokenTtl,
                     Clock clock) {
-        this.passwordResetRepository = passwordResetRepository;
+        this.mailedLinkRepository = mailedLinkRepository;
         this.userRepository = userRepository;
         this.createPasswordHash = createPasswordHash;
-        this.passwordlessAccountRepository = passwordlessAccountRepository;
         this.sessionRepository = sessionRepository;
         this.tokenTtl = tokenTtl;
         this.clock = clock;
@@ -100,7 +96,7 @@ public class ResetPassword {
                     rejected.policy());
         }
 
-        Optional<PasswordResetRepository.PendingReset> pendingReset = passwordResetRepository.consumeReset(token);
+        Optional<MailedLinkRepository.PendingReset> pendingReset = mailedLinkRepository.consumeReset(token);
 
         if (
                 pendingReset.isEmpty()
@@ -131,7 +127,7 @@ public class ResetPassword {
                 hashedPassword);
 
         // the account now has a password
-        passwordlessAccountRepository.setPasswordless(email, false);
+        userRepository.setPasswordless(email, false);
 
         // the old password's sessions do not survive it
         sessionRepository.revokeAllSessions(email);

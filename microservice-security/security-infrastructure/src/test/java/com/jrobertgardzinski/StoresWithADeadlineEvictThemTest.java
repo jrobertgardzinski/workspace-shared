@@ -64,19 +64,17 @@ class StoresWithADeadlineEvictThemTest {
     private static final Map<String, String> MIRRORS_A_REAPED_TABLE = Map.of(
             "InMemoryAuthenticationBlockRepository", "ExpiredBlockReaper",
             "InMemoryRejectedAuthenticationRepository", "RejectedAuthenticationReaper",
-            "InMemoryEmailChangeRepository", "AbandonedEmailChangeReaper",
+            "InMemoryMailedLinkRepository", "AbandonedEmailChangeReaper",
             "InMemorySessionRepository", "ExpiredSessionReaper",
             "InMemoryAccountDeletionSagaStore", "SettledDeletionSagaReaper");
 
     /** Entries die with the account. Sweeping these deletes what nobody asked to delete. */
     private static final Map<String, String> LIVES_WITH_THE_ACCOUNT = Map.ofEntries(
-            Map.entry("InMemoryUserRepository", "the accounts themselves"),
-            Map.entry("InMemoryEnrolledFactorRepository", "a factor is enrolled until its owner removes it"),
-            Map.entry("InMemoryRecoveryCodeRepository", "spare keys, minted once and kept until used"),
-            Map.entry("InMemoryPasswordlessAccountRepository", "a mark on the account, not an event"),
-            Map.entry("InMemoryFederatedIdentityRepository", "the link to a provider outlives every session"),
-            Map.entry("InMemoryEmailVerificationRepository", "one row per address, overwritten in place"),
-            Map.entry("InMemoryPasswordResetRepository", "one row per address, overwritten in place"));
+            Map.entry("InMemoryUserRepository", "the accounts themselves, with what is known about each:"
+                    + " its verification (one row per address, overwritten in place), the passwordless"
+                    + " mark and the links to providers, which outlive every session"),
+            Map.entry("InMemoryEnrolledFactorRepository", "a factor is enrolled until its owner removes"
+                    + " it, and the recovery codes are spare keys, minted once and kept until used"));
 
     /**
      * Configuration rows: a runtime override stands until an administrator withdraws it. No

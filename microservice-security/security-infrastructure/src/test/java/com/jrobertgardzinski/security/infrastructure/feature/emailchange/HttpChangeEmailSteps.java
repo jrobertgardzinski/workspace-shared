@@ -170,20 +170,20 @@ public class HttpChangeEmailSteps {
 
     @Given("the USER also signs in through {string} as subject {string}")
     public void alsoSignsInThrough(String provider, String subject) {
-        federatedIdentities().link(provider, subject, com.jrobertgardzinski.email.domain.Email.of(email));
+        federatedIdentities().linkFederatedIdentity(provider, subject, com.jrobertgardzinski.email.domain.Email.of(email));
     }
 
     @Then("the {string} identity {string} opens the account {string}")
     public void identityOpensTheAccount(String provider, String subject, String email) {
         org.junit.jupiter.api.Assertions.assertEquals(email,
-                federatedIdentities().findUserBy(provider, subject)
+                federatedIdentities().findEmailByFederatedIdentity(provider, subject)
                         .map(com.jrobertgardzinski.email.domain.Email::value).orElse(null),
                 "the federated link follows the account — the subject is the person, not the address");
     }
 
-    private com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository federatedIdentities() {
+    private com.jrobertgardzinski.security.domain.repository.UserRepository federatedIdentities() {
         return server.getApplicationContext()
-                .getBean(com.jrobertgardzinski.security.domain.repository.FederatedIdentityRepository.class);
+                .getBean(com.jrobertgardzinski.security.domain.repository.UserRepository.class);
     }
 
     @Then("the USER can AUTHENTICATE as {string}")

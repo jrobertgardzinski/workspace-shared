@@ -2,7 +2,7 @@ package com.jrobertgardzinski.security.system.verification;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 
 /**
@@ -18,13 +18,13 @@ import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
  */
 public class RequestEmailVerification {
 
-    private final EmailVerificationRepository emailVerificationRepository;
+    private final UserRepository userRepository;
     private final EmailVerificationNotifier notifier;
 
     public RequestEmailVerification(
-                    EmailVerificationRepository emailVerificationRepository,
+                    UserRepository userRepository,
                     EmailVerificationNotifier notifier) {
-        this.emailVerificationRepository = emailVerificationRepository;
+        this.userRepository = userRepository;
         this.notifier = notifier;
     }
 
@@ -39,13 +39,13 @@ public class RequestEmailVerification {
     public Result execute(Email email) {
 
         if (
-                emailVerificationRepository.isVerified(email)
+                userRepository.isVerified(email)
         ) {
             return new Result.AlreadyVerified();
         }
 
         VerificationToken token = VerificationToken.random();
-        emailVerificationRepository.startVerification(email, token);
+        userRepository.startVerification(email, token);
         notifier.sendVerificationLink(email, token);
 
         return new Result.LinkSent();

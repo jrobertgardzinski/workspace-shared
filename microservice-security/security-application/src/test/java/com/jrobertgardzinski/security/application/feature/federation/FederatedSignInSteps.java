@@ -1,6 +1,5 @@
 package com.jrobertgardzinski.security.application.feature.federation;
 
-import com.jrobertgardzinski.security.domain.repository.FakeEmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeSessionRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
 import com.jrobertgardzinski.email.domain.Email;
@@ -11,7 +10,6 @@ import com.jrobertgardzinski.security.application.feature.support.FakeHashAlgori
 import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
-import com.jrobertgardzinski.security.domain.repository.FakeFederatedIdentityRepository;
 import com.jrobertgardzinski.security.domain.vo.AccessTokenValidityInHours;
 import com.jrobertgardzinski.security.domain.vo.ProviderIdentity;
 import com.jrobertgardzinski.security.domain.vo.RefreshTokenValidityInHours;
@@ -39,12 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class FederatedSignInSteps {
 
     private final FakeUserRepository users = new FakeUserRepository();
-    private final FakeEmailVerificationRepository verifications = new FakeEmailVerificationRepository(java.time.Clock.systemUTC());
     private final FakeSessionRepository sessions = new FakeSessionRepository(Clock.systemUTC());
     private final FakeHashAlgorithm hashAlgorithm = new FakeHashAlgorithm();
-    private final FakeFederatedIdentityRepository identities = new FakeFederatedIdentityRepository();
-    private final com.jrobertgardzinski.security.domain.repository.FakePasswordlessAccountRepository passwordless =
-            new com.jrobertgardzinski.security.domain.repository.FakePasswordlessAccountRepository();
     // a real e-mail factor over a capturing channel, so a scenario can enrol one and prove the
     // federated sign-in then owes it
     private final com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository enrolledFactors =
@@ -63,13 +57,13 @@ public class FederatedSignInSteps {
     private final com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment confirmEnrolment =
             new com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment(registry, enrolledFactors, enrolmentStore);
     private final FederatedSignIn federatedSignIn = new FederatedSignIn(
-            identities, users, verifications, sessions, hashAlgorithm,
+            users, sessions, hashAlgorithm,
             new SessionTokensConfig(new RefreshTokenValidityInHours(24), new AccessTokenValidityInHours(1)),
-            Clock.systemUTC(), AccessTokenMint.RANDOM, passwordless, enrolledFactors,
+            Clock.systemUTC(), AccessTokenMint.RANDOM, enrolledFactors,
             new com.jrobertgardzinski.security.system.mfa.OpenMfaChain(
                     new com.jrobertgardzinski.security.system.mfa.MfaChain(registry,
                             com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
-                            new com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository(),
+                            new com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository(),
                             raw -> "hash:" + raw, Clock.systemUTC(), 10),
                     new com.jrobertgardzinski.security.system.mfa.FakePendingAuthenticationStore()));
 
@@ -90,7 +84,7 @@ public class FederatedSignInSteps {
     @Given("a local ACCOUNT {string} with a verified email and the password {string}")
     public void aVerifiedLocalAccount(String email, String password) {
         users.save(new User(Email.of(email), hashAlgorithm.hash(PlaintextPassword.of(password))));
-        verifications.markVerified(Email.of(email));
+        users.markVerified(Email.of(email));
     }
 
     @Given("a local ACCOUNT {string} with an unverified email and the password {string}")
@@ -105,7 +99,7 @@ public class FederatedSignInSteps {
 
     @Then("the ACCOUNT {string} is still unverified")
     public void stillUnverified(String email) {
-        assertFalse(verifications.isVerified(Email.of(email)),
+        assertFalse(users.isVerified(Email.of(email)),
                 "a refused sign-in must not mark the address verified");
     }
 
@@ -114,7 +108,7 @@ public class FederatedSignInSteps {
         // the whole point of the ordering: claimByEmail WRITES (password wiped, sessions revoked,
         // address verified, identity linked) and used to run BEFORE the pending-deletion check, so
         // an account on its way out got a provider identity welded onto it while sign-in was refused
-        assertEquals(0, identities.countLinksOf(Email.of(email)),
+        assertEquals(0, users.countLinksOf(Email.of(email)),
                 "a refused sign-in must leave no provider identity behind");
     }
 
@@ -163,7 +157,7 @@ public class FederatedSignInSteps {
     @Then("the ACCOUNT {string} exists, verified from birth")
     public void accountExistsVerified(String email) {
         assertTrue(users.findBy(Email.of(email)).isPresent(), "the account was not created");
-        assertTrue(verifications.isVerified(Email.of(email)),
+        assertTrue(users.isVerified(Email.of(email)),
                 "the provider's word replaces our mail loop — the account must be born verified");
     }
 

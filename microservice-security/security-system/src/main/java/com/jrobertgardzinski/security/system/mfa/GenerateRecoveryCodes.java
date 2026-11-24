@@ -3,7 +3,7 @@ package com.jrobertgardzinski.security.system.mfa;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.config.mfa.RecoveryCodeConfig;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -23,16 +23,16 @@ public class GenerateRecoveryCodes {
     private static final char[] ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789".toCharArray();
     private static final int GROUP = 5;
 
-    private final RecoveryCodeRepository recoveryCodeRepository;
+    private final EnrolledFactorRepository enrolledFactorRepository;
     private final RecoveryCodeHasher hasher;
     private final RecoveryCodeConfig config;
     private final SecureRandom random = new SecureRandom();
 
     public GenerateRecoveryCodes(
-                    RecoveryCodeRepository recoveryCodeRepository,
+                    EnrolledFactorRepository enrolledFactorRepository,
                     RecoveryCodeHasher hasher,
                     RecoveryCodeConfig config) {
-        this.recoveryCodeRepository = recoveryCodeRepository;
+        this.enrolledFactorRepository = enrolledFactorRepository;
         this.hasher = hasher;
         this.config = config;
     }
@@ -47,7 +47,7 @@ public class GenerateRecoveryCodes {
             plain.add(mint());
         }
 
-        recoveryCodeRepository.replaceAll(
+        enrolledFactorRepository.replaceRecoveryCodes(
                 userEmail,
                 plain.stream().map(code -> hasher.hash(normalise(code))).toList());
 

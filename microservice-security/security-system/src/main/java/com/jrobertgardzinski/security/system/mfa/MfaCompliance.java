@@ -3,7 +3,7 @@ package com.jrobertgardzinski.security.system.mfa;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.config.mfa.MfaPolicy;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.Role;
 
 import java.util.Locale;
@@ -20,14 +20,14 @@ import java.util.stream.Collectors;
 public class MfaCompliance {
 
     private final EnrolledFactorRepository enrolledFactorRepository;
-    private final PasswordlessAccountRepository passwordlessAccountRepository;
+    private final UserRepository userRepository;
     private final MfaPolicy policy;
     private final Set<String> bootstrapAdmins;
 
-    public MfaCompliance(EnrolledFactorRepository enrolledFactorRepository, PasswordlessAccountRepository passwordlessAccountRepository,
+    public MfaCompliance(EnrolledFactorRepository enrolledFactorRepository, UserRepository userRepository,
                          MfaPolicy policy, Set<String> bootstrapAdmins) {
         this.enrolledFactorRepository = enrolledFactorRepository;
-        this.passwordlessAccountRepository = passwordlessAccountRepository;
+        this.userRepository = userRepository;
         this.policy = policy;
         this.bootstrapAdmins = bootstrapAdmins.stream()
                 .map(s -> s.toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
@@ -40,7 +40,7 @@ public class MfaCompliance {
     /** Factors that count toward the floor: the enrolled ones, plus the password if the account has one. */
     public int effectiveFactorCount(Email email) {
         int enrolled = enrolledFactorRepository.findByUser(email).size();
-        return passwordlessAccountRepository.isPasswordless(email) ? enrolled : enrolled + 1;
+        return userRepository.isPasswordless(email) ? enrolled : enrolled + 1;
     }
 
     public boolean isCompliant(Email email, Set<Role> roles) {

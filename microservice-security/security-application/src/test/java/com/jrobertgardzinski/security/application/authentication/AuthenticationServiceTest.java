@@ -10,9 +10,8 @@ import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
 import com.jrobertgardzinski.security.domain.repository.FakeAuthenticationBlockRepository;
-import com.jrobertgardzinski.security.domain.repository.FakeEmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository;
-import com.jrobertgardzinski.security.domain.repository.FakeRecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.FakeEnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeRejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeSessionRepository;
 import com.jrobertgardzinski.security.domain.repository.FakeUserRepository;
@@ -53,7 +52,6 @@ class AuthenticationServiceTest {
 
     private final AdjustableClock clock = new AdjustableClock(Instant.parse("2026-06-15T10:00:00Z"), ZoneOffset.UTC);
     private final FakeUserRepository users = new FakeUserRepository();
-    private final FakeEmailVerificationRepository verifications = new FakeEmailVerificationRepository(clock);
     private final FakeRejectedAuthenticationRepository rejections = new FakeRejectedAuthenticationRepository();
     private final FakeHashAlgorithm hashAlgorithm = new FakeHashAlgorithm();
 
@@ -61,15 +59,16 @@ class AuthenticationServiceTest {
 
     private AuthenticationService service(int maxPerWindow) {
         // no factors are enrolled here, so the chain is empty and sign-in is single-factor
+        FakeEnrolledFactorRepository enrolledFactors = new FakeEnrolledFactorRepository();
         MfaChain mfaChain = new MfaChain(
                 new FactorRegistry(List.of()),
                 ChallengeCodeConfig.withDefaults(),
-                new FakeRecoveryCodeRepository(),
+                enrolledFactors,
                 raw -> "hash:" + raw, clock, 10);
         FakePendingAuthenticationStore pendingStore = new FakePendingAuthenticationStore();
         return new AuthenticationService(
                 AuthenticationFactory.assemble(
-                        users, verifications, rejections, new FakeAuthenticationBlockRepository(),
+                        users, rejections, new FakeAuthenticationBlockRepository(),
                         new FakeSessionRepository(clock),
                         new VerifyPassword(users, hashAlgorithm),
                         BruteForceConfig.builder()
@@ -82,7 +81,7 @@ class AuthenticationServiceTest {
                         clock,
                         () -> BLOCK_MINUTES,
                         AccessTokenMint.RANDOM,
-                        new FakeEnrolledFactorRepository(),
+                        enrolledFactors,
                         mfaChain,
                         pendingStore,
                         new OpenMfaChain(mfaChain, pendingStore)
@@ -93,7 +92,7 @@ class AuthenticationServiceTest {
 
     private void aVerifiedUser() {
         anUnverifiedUser();
-        verifications.markVerified(Email.of(EMAIL));
+        users.markVerified(Email.of(EMAIL));
     }
 
     private void anUnverifiedUser() {

@@ -83,41 +83,12 @@ class AuthenticationTest {
         var mfaChain = new com.jrobertgardzinski.security.system.mfa.MfaChain(
                 new com.jrobertgardzinski.security.system.mfa.FactorRegistry(java.util.List.of()),
                 com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig.withDefaults(),
-                noRecoveryCodes(), raw -> "hash:" + raw, CLOCK, 10);
+                enrolledFactors, raw -> "hash:" + raw, CLOCK, 10);
         var pendingStore = Mockito.mock(com.jrobertgardzinski.security.system.mfa.PendingAuthenticationStore.class);
         authentication = new Authentication(
                 bruteForceGuard, verifyPassword, userRepository, requireVerifiedEmail, generateSession,
                 cleanBruteForceRecords, updateBruteForceRecords,
                 enrolledFactors, new OpenMfaChain(mfaChain, pendingStore));
-    }
-
-    /** No recovery codes exist in these examples — nothing consumes. */
-    private static com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository noRecoveryCodes() {
-        return new com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository() {
-            @Override
-            public void replaceAll(com.jrobertgardzinski.email.domain.Email userEmail,
-                                   java.util.List<String> codeHashes) {
-            }
-
-            @Override
-            public boolean consume(com.jrobertgardzinski.email.domain.Email userEmail, String codeHash) {
-                return false;
-            }
-
-            @Override
-            public int unusedCount(com.jrobertgardzinski.email.domain.Email userEmail) {
-                return 0;
-            }
-
-            @Override
-            public void removeAll(com.jrobertgardzinski.email.domain.Email userEmail) {
-            }
-
-            @Override
-            public void reassign(com.jrobertgardzinski.email.domain.Email fromEmail,
-                                 com.jrobertgardzinski.email.domain.Email toEmail) {
-            }
-        };
     }
 
     @Example

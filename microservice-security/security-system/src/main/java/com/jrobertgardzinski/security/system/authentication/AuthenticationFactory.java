@@ -5,7 +5,6 @@ import com.jrobertgardzinski.security.config.mfa.ChallengeCodeConfig;
 import com.jrobertgardzinski.security.domain.port.AccessTokenMint;
 import com.jrobertgardzinski.security.domain.repository.AuthenticationBlockRepository;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
@@ -37,7 +36,6 @@ public final class AuthenticationFactory {
 
     public static AuthenticationUseCases assemble(
             UserRepository userRepository,
-            EmailVerificationRepository emailVerificationRepository,
             RejectedAuthenticationRepository rejectedAuthenticationRepository,
             AuthenticationBlockRepository authenticationBlockRepository,
             SessionRepository sessionRepository,
@@ -55,7 +53,7 @@ public final class AuthenticationFactory {
         var bruteForceGuard = new _BruteForceGuard(
                 rejectedAuthenticationRepository, authenticationBlockRepository,
                 clock, bruteForceConfig, blockDurationPolicy);
-        var requireVerifiedEmail = new _RequireVerifiedEmail(emailVerificationRepository);
+        var requireVerifiedEmail = new _RequireVerifiedEmail(userRepository);
         var generateSession = new _GenerateSession(sessionRepository, clock, sessionTokensConfig, accessTokenMint);
         // no block repository here any more: a success clears this pair's failures and never a
         // placed block, which would hand the amnesty straight back

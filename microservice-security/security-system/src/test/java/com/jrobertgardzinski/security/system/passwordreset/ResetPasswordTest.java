@@ -8,7 +8,7 @@ import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.domain.repository.SessionRepository;
-import com.jrobertgardzinski.security.domain.repository.PasswordResetRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.token.PasswordResetToken;
 import io.qameta.allure.Epic;
@@ -59,35 +59,30 @@ class ResetPasswordTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-30T12:00:00Z"), ZoneOffset.UTC);
     private static final LocalDateTime NOW = LocalDateTime.now(CLOCK);
 
-    private PasswordResetRepository passwordResetRepository;
+    private MailedLinkRepository mailedLinkRepository;
     private UserRepository userRepository;
     private SessionRepository sessions;
     private ResetPassword resetPassword;
 
     @BeforeTry
     void init() {
-        passwordResetRepository = Mockito.mock(PasswordResetRepository.class);
+        mailedLinkRepository = Mockito.mock(MailedLinkRepository.class);
         userRepository = Mockito.mock(UserRepository.class);
         // the account these examples are about EXISTS; the use case asks, because a link can be
         // clicked after the account it was issued for is gone
         Mockito.when(userRepository.findBy(EMAIL)).thenReturn(Optional.of(
                 new com.jrobertgardzinski.security.domain.entity.User(EMAIL, new HashedPassword("hash:old"))));
         sessions = Mockito.mock(SessionRepository.class);
-        resetPassword = new ResetPassword(passwordResetRepository, userRepository,
+        resetPassword = new ResetPassword(mailedLinkRepository, userRepository,
                 new CreatePasswordHash(FAKE_ALGORITHM, () -> POLICY),
-                new com.jrobertgardzinski.security.domain.repository.PasswordlessAccountRepository() {
-                    public boolean isPasswordless(com.jrobertgardzinski.email.domain.Email e) { return false; }
-                    public void setPasswordless(com.jrobertgardzinski.email.domain.Email e, boolean v) {}
-                    public void reassign(com.jrobertgardzinski.email.domain.Email f, com.jrobertgardzinski.email.domain.Email t) {}
-                    public void purge(com.jrobertgardzinski.email.domain.Email e) {}
-                }, sessions, TTL, CLOCK);
+                sessions, TTL, CLOCK);
     }
 
     @Example
     @Label("A valid token and strong password reset the password")
     void valid_token_resets_the_password() {
-        Mockito.when(passwordResetRepository.consumeReset(TOKEN)).thenReturn(
-                Optional.of(new PasswordResetRepository.PendingReset(EMAIL, NOW.minusMinutes(5))));
+        Mockito.when(mailedLinkRepository.consumeReset(TOKEN)).thenReturn(
+                Optional.of(new MailedLinkRepository.PendingReset(EMAIL, NOW.minusMinutes(5))));
 
         ResetPassword.Result result = resetPassword.execute(TOKEN, STRONG);
 
@@ -102,8 +97,8 @@ class ResetPasswordTest {
         // Sessions are rows unrelated to the password hash, so replacing the hash alone left a
         // stolen access token authorizing — and rotating itself on /refresh — for the whole refresh
         // window after the victim did exactly what every guide tells them to do.
-        Mockito.when(passwordResetRepository.consumeReset(TOKEN)).thenReturn(
-                Optional.of(new PasswordResetRepository.PendingReset(EMAIL, NOW.minusMinutes(5))));
+        Mockito.when(mailedLinkRepository.consumeReset(TOKEN)).thenReturn(
+                Optional.of(new MailedLinkRepository.PendingReset(EMAIL, NOW.minusMinutes(5))));
 
         assertInstanceOf(ResetPassword.Result.PasswordReset.class, resetPassword.execute(TOKEN, STRONG));
 
@@ -116,8 +111,8 @@ class ResetPasswordTest {
         // The account was deleted (or moved to another address) between the mail and the click.
         // updatePassword matches no row, and this used to answer "your password has been reset".
         Mockito.when(userRepository.findBy(EMAIL)).thenReturn(Optional.empty());
-        Mockito.when(passwordResetRepository.consumeReset(TOKEN)).thenReturn(
-                Optional.of(new PasswordResetRepository.PendingReset(EMAIL, NOW.minusMinutes(5))));
+        Mockito.when(mailedLinkRepository.consumeReset(TOKEN)).thenReturn(
+                Optional.of(new MailedLinkRepository.PendingReset(EMAIL, NOW.minusMinutes(5))));
 
         assertInstanceOf(ResetPassword.Result.UserNotFound.class, resetPassword.execute(TOKEN, STRONG));
 
@@ -128,7 +123,7 @@ class ResetPasswordTest {
     @Example
     @Label("A refused reset leaves the sessions alone")
     void a_refused_reset_revokes_nothing() {
-        Mockito.when(passwordResetRepository.consumeReset(TOKEN)).thenReturn(Optional.empty());
+        Mockito.when(mailedLinkRepository.consumeReset(TOKEN)).thenReturn(Optional.empty());
 
         assertInstanceOf(ResetPassword.Result.TokenNotFound.class, resetPassword.execute(TOKEN, STRONG));
 
@@ -138,7 +133,7 @@ class ResetPasswordTest {
     @Example
     @Label("An unknown token is rejected and no password is changed")
     void unknown_token_is_rejected() {
-        Mockito.when(passwordResetRepository.consumeReset(TOKEN)).thenReturn(Optional.empty());
+        Mockito.when(mailedLinkRepository.consumeReset(TOKEN)).thenReturn(Optional.empty());
 
         assertInstanceOf(ResetPassword.Result.TokenNotFound.class, resetPassword.execute(TOKEN, STRONG));
 
@@ -153,13 +148,13 @@ class ResetPasswordTest {
         // registered by someone else, redeeming it sets THAT person's password. The use case says
         // "expired"; the controller answers it exactly like an unknown token, because telling the
         // two apart on the wire would confirm to a stranger that the address has an account.
-        Mockito.when(passwordResetRepository.consumeReset(TOKEN)).thenReturn(
-                Optional.of(new PasswordResetRepository.PendingReset(EMAIL, NOW.minus(TTL).minusSeconds(1))));
+        Mockito.when(mailedLinkRepository.consumeReset(TOKEN)).thenReturn(
+                Optional.of(new MailedLinkRepository.PendingReset(EMAIL, NOW.minus(TTL).minusSeconds(1))));
 
         assertInstanceOf(ResetPassword.Result.TokenExpired.class, resetPassword.execute(TOKEN, STRONG));
 
         // consumed all the same: an expired link must not stay redeemable after a failed attempt
-        Mockito.verify(passwordResetRepository).consumeReset(TOKEN);
+        Mockito.verify(mailedLinkRepository).consumeReset(TOKEN);
         Mockito.verify(userRepository, Mockito.never()).updatePassword(Mockito.any(), Mockito.any());
     }
 
@@ -174,7 +169,7 @@ class ResetPasswordTest {
                                 PasswordError.DIGIT_REQUIRED, PasswordError.SPECIAL_CHAR_REQUIRED),
                         rejected.passwordErrors()),
                 () -> assertEquals(POLICY, rejected.policy()),
-                () -> Mockito.verify(passwordResetRepository, Mockito.never()).consumeReset(Mockito.any()),
+                () -> Mockito.verify(mailedLinkRepository, Mockito.never()).consumeReset(Mockito.any()),
                 () -> Mockito.verify(userRepository, Mockito.never()).updatePassword(Mockito.any(), Mockito.any())
         );
     }
@@ -187,7 +182,7 @@ class ResetPasswordTest {
         ResetPassword.Result.Rejected rejected = assertInstanceOf(ResetPassword.Result.Rejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(PasswordError.PASSWORD_BLANK), rejected.passwordErrors()),
-                () -> Mockito.verify(passwordResetRepository, Mockito.never()).consumeReset(Mockito.any())
+                () -> Mockito.verify(mailedLinkRepository, Mockito.never()).consumeReset(Mockito.any())
         );
     }
 }

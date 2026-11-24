@@ -5,7 +5,6 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.entity.User;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
 import com.jrobertgardzinski.security.domain.repository.RejectedAuthenticationRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
@@ -188,7 +187,7 @@ class BruteForceCountingTest {
         HashAlgorithmPort hashing = context.getBean(HashAlgorithmPort.class);
         context.getBean(TransactionBoundary.class).execute(() -> {
             users.save(new User(email, hashing.hash(PlaintextPassword.of(THEIR_PASSWORD))));
-            context.getBean(EmailVerificationRepository.class).markVerified(email);
+            users.markVerified(email);
             return null;
         });
         return email;

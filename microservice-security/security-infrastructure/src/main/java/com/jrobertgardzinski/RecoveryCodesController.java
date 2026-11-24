@@ -6,7 +6,7 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 
 
 import com.jrobertgardzinski.security.domain.vo.Caller;
-import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
+import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -31,16 +31,16 @@ import java.util.Map;
 final class RecoveryCodesController {
 
     private final GenerateRecoveryCodes generateRecoveryCodes;
-    private final RecoveryCodeRepository recoveryCodes;
+    private final EnrolledFactorRepository enrolledFactorRepository;
     private final TransactionBoundary transactionBoundary;
     private final StepUpGuard stepUpGuard;
 
     RecoveryCodesController(GenerateRecoveryCodes generateRecoveryCodes,
-                            RecoveryCodeRepository recoveryCodes,
+                            EnrolledFactorRepository enrolledFactorRepository,
                             TransactionBoundary transactionBoundary,
                             StepUpGuard stepUpGuard) {
         this.generateRecoveryCodes = generateRecoveryCodes;
-        this.recoveryCodes = recoveryCodes;
+        this.enrolledFactorRepository = enrolledFactorRepository;
         this.transactionBoundary = transactionBoundary;
         this.stepUpGuard = stepUpGuard;
     }
@@ -61,7 +61,7 @@ final class RecoveryCodesController {
 
     @Get(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> remaining(HttpRequest<?> request) {
-        return HttpResponse.ok(Map.of("unused", recoveryCodes.unusedCount(caller(request).email())));
+        return HttpResponse.ok(Map.of("unused", enrolledFactorRepository.unusedRecoveryCodes(caller(request).email())));
     }
 
     private static Caller caller(HttpRequest<?> request) {

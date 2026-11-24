@@ -8,7 +8,7 @@ import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.security.domain.port.EmailVerificationNotifier;
-import com.jrobertgardzinski.security.domain.repository.EmailChangeRepository;
+import com.jrobertgardzinski.security.domain.repository.MailedLinkRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -34,16 +34,16 @@ class RequestEmailChangeTest {
             new BlockedDomains(Set.of(DomainPart.of("blocked.example"))), null, null);
 
     private UserRepository userRepository;
-    private EmailChangeRepository emailChangeRepository;
+    private MailedLinkRepository mailedLinkRepository;
     private EmailVerificationNotifier notifier;
     private RequestEmailChange requestEmailChange;
 
     @BeforeTry
     void init() {
         userRepository = Mockito.mock(UserRepository.class);
-        emailChangeRepository = Mockito.mock(EmailChangeRepository.class);
+        mailedLinkRepository = Mockito.mock(MailedLinkRepository.class);
         notifier = Mockito.mock(EmailVerificationNotifier.class);
-        requestEmailChange = new RequestEmailChange(userRepository, emailChangeRepository, notifier, new AdmitEmail(EMAIL_POLICY));
+        requestEmailChange = new RequestEmailChange(userRepository, mailedLinkRepository, notifier, new AdmitEmail(EMAIL_POLICY));
     }
 
     @Example
@@ -52,7 +52,7 @@ class RequestEmailChangeTest {
         Mockito.when(userRepository.existsBy(NormalizedEmail.of(NEW))).thenReturn(false);
 
         assertInstanceOf(RequestEmailChange.Result.Requested.class, requestEmailChange.execute(CURRENT, NEW));
-        Mockito.verify(emailChangeRepository).startChange(Mockito.any(), Mockito.any());
+        Mockito.verify(mailedLinkRepository).startChange(Mockito.any(), Mockito.any());
         Mockito.verify(notifier).sendVerificationLink(Mockito.eq(NEW), Mockito.any());
     }
 
@@ -66,7 +66,7 @@ class RequestEmailChangeTest {
         assertEquals(java.util.List.of(com.jrobertgardzinski.email.domain.EmailError.DOMAIN_BLOCKED), rejected.emailErrors());
         // a closed shop that only checks at registration is not closed: the account could walk out
         // through a change, taking its roles, factors and federated links with it
-        Mockito.verify(emailChangeRepository, Mockito.never()).startChange(Mockito.any(), Mockito.any());
+        Mockito.verify(mailedLinkRepository, Mockito.never()).startChange(Mockito.any(), Mockito.any());
         Mockito.verify(notifier, Mockito.never()).sendVerificationLink(Mockito.any(), Mockito.any());
         Mockito.verifyNoInteractions(userRepository);
     }
@@ -77,7 +77,7 @@ class RequestEmailChangeTest {
         Mockito.when(userRepository.existsBy(NormalizedEmail.of(NEW))).thenReturn(true);
 
         assertInstanceOf(RequestEmailChange.Result.EmailTaken.class, requestEmailChange.execute(CURRENT, NEW));
-        Mockito.verify(emailChangeRepository, Mockito.never()).startChange(Mockito.any(), Mockito.any());
+        Mockito.verify(mailedLinkRepository, Mockito.never()).startChange(Mockito.any(), Mockito.any());
         Mockito.verify(notifier, Mockito.never()).sendVerificationLink(Mockito.any(), Mockito.any());
     }
 }

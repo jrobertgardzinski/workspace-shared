@@ -6,7 +6,7 @@ import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.application.BrokenRule;
 import com.jrobertgardzinski.security.application.TransactionBoundary;
 import com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier;
-import com.jrobertgardzinski.security.domain.repository.EmailVerificationRepository;
+import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.system.registration.Register;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
@@ -23,7 +23,7 @@ public final class RegistrationService {
 
     private final Register register;
     private final RequestEmailVerification requestEmailVerification;
-    private final EmailVerificationRepository emailVerificationRepository;
+    private final UserRepository userRepository;
     private final RegistrationNoticeNotifier registrationNoticeNotifier;
     private final EmailPolicy emailPolicy;
     private final SourceThrottle throttle;
@@ -32,14 +32,14 @@ public final class RegistrationService {
     public RegistrationService(
                     Register register,
                     RequestEmailVerification requestEmailVerification,
-                    EmailVerificationRepository emailVerificationRepository,
+                    UserRepository userRepository,
                     RegistrationNoticeNotifier registrationNoticeNotifier,
                     EmailPolicy emailPolicy,
                     SourceThrottle throttle,
                     TransactionBoundary transactionBoundary) {
         this.register = register;
         this.requestEmailVerification = requestEmailVerification;
-        this.emailVerificationRepository = emailVerificationRepository;
+        this.userRepository = userRepository;
         this.registrationNoticeNotifier = registrationNoticeNotifier;
         this.emailPolicy = emailPolicy;
         this.throttle = throttle;
@@ -106,7 +106,7 @@ public final class RegistrationService {
                 // quiet refusal: the caller sees a fresh-looking registration; the address owner is
                 // told by mail — a lost-mail re-register gets a fresh link, a real account a notice
                 if (
-                        emailVerificationRepository.isVerified(alreadyTaken.email())
+                        userRepository.isVerified(alreadyTaken.email())
                 ) {
                     registrationNoticeNotifier.sendAlreadyRegistered(alreadyTaken.email());
                 } else {
