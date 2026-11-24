@@ -25,8 +25,16 @@ public final class RequestCaller {
      * "No value present" with an Internal Server Error.
      */
     public static Caller of(HttpRequest<?> request) {
-        return new Caller(Email.of(request.getAttribute(ATTRIBUTE, String.class)
-                .orElseThrow(NotAuthenticatedException::new)));
+        return new Caller(Email.of(email(request)));
+    }
+
+    /**
+     * The caller's address as the filter published it: what a controller hands to the application
+     * layer, which builds the domain's {@link Caller} from it.
+     */
+    public static String email(HttpRequest<?> request) {
+        return request.getAttribute(ATTRIBUTE, String.class)
+                .orElseThrow(NotAuthenticatedException::new);
     }
 
     /** The bearer token as sent, or null when the header is missing or empty. */

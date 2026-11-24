@@ -1,12 +1,8 @@
 package com.jrobertgardzinski;
 
+import com.jrobertgardzinski.security.application.session.SessionService;
 import com.jrobertgardzinski.security.application.TransactionBoundary;
 
-
-import com.jrobertgardzinski.security.domain.vo.Caller;
-import com.jrobertgardzinski.security.domain.vo.ActiveSession;
-import com.jrobertgardzinski.security.system.session.ListActiveSessions;
-import com.jrobertgardzinski.security.system.session.RevokeAllSessions;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
@@ -30,21 +26,15 @@ import java.util.Map;
 @Controller("/sessions")
 final class SessionsController {
 
-    private final ListActiveSessions listActiveSessions;
-    private final RevokeAllSessions revokeAllSessions;
-    private final TransactionBoundary transactionBoundary;
+    private final SessionService sessionService;
 
-    SessionsController(ListActiveSessions listActiveSessions, RevokeAllSessions revokeAllSessions,
-                       TransactionBoundary transactionBoundary) {
-        this.listActiveSessions = listActiveSessions;
-        this.revokeAllSessions = revokeAllSessions;
-        this.transactionBoundary = transactionBoundary;
+    SessionsController(SessionService sessionService) {
+        this.sessionService = sessionService;
     }
 
     @Get(produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> list(HttpRequest<?> request) {
-        Caller caller = RequestCaller.of(request);
-        List<Map<String, Object>> sessions = listActiveSessions.execute(caller).stream()
+        List<Map<String, Object>> sessions = sessionService.list(RequestCaller.email(request)).stream()
                 .map(SessionsController::toJson)
                 .toList();
         return HttpResponse.ok(Map.of("sessions", sessions));
@@ -52,17 +42,13 @@ final class SessionsController {
 
     @Post(value = "/revoke-all", consumes = MediaType.ALL, produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> revokeAll(HttpRequest<?> request) {
-        Caller caller = RequestCaller.of(request);
-        transactionBoundary.execute(() -> {
-            revokeAllSessions.execute(caller);
-            return null;
-        });
+        sessionService.revokeAll(RequestCaller.email(request));
         return HttpResponse.ok(Map.of("status", "ALL_SESSIONS_REVOKED"));
     }
 
-    private static Map<String, Object> toJson(ActiveSession session) {
+    private static Map<String, Object> toJson(SessionService.Session session) {
         return Map.of(
-                "family", session.family().value().toString(),
-                "expiresAt", session.refreshTokenExpiration().value().toString());
+                "family", session.family().toString(),
+                "expiresAt", session.expiresAt().toString());
     }
 }

@@ -1,7 +1,8 @@
 # Plan: `security-application` jako pomost (2026-10-03)
 
-Zaplanowane na polecenie właściciela 2026-10-03. **Kroki 1–2 WYKONANE 2026-11-24** (rejestracja,
-authenticate); kroki 3–8 czekają na obejrzenie kształtu przez właściciela.
+Zaplanowane na polecenie właściciela 2026-10-03. **Kroki 1–3 WYKONANE 2026-11-24** (rejestracja,
+authenticate, sesje, weryfikacja, reset hasła, konto, tożsamość: 12 z 24 kontrolerów); kroki 4–8
+czekają. Stan i reguły: `todo.md`, punkt „APPLICATION JAKO POMOST".
 
 Odstępstwa od tekstu poniżej, przyjęte przy wykonaniu (reguła Roberta z 2026-11-24: „application
 to most między frameworkiem, który zna tylko javowe klasy standardowe i prymitywy, a domeną"):

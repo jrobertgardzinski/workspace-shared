@@ -36,6 +36,16 @@ class StepUpCoverageTest {
     private static final List<Path> CONTROLLERS = List.of(Path.of("src/main/java/com/jrobertgardzinski"));
 
     /**
+     * Where the application services live. A controller that has handed its work to one no longer
+     * spends the elevation itself: the service does, and answers {@code StepUpRequired} when there
+     * was none to spend. So the gate is looked for in both places.
+     */
+    private static final Path APPLICATION = Path.of("../security-application/src/main/java");
+
+    private static final java.util.regex.Pattern APPLICATION_SERVICE_IMPORT = java.util.regex.Pattern.compile(
+            "import (com\\.jrobertgardzinski\\.security\\.application\\.[\\w.]+Service);");
+
+    /**
      * Endpoints that must be behind a step-up, each with the durable access it would otherwise
      * hand a thief holding nothing but a live session.
      */
@@ -119,6 +129,8 @@ class StepUpCoverageTest {
             files.filter(path -> path.getFileName().toString().endsWith("Controller.java"))
                     .forEach(path -> sources.put(path.getFileName().toString().replace(".java", ""), read(path)));
         }
+        // a controller's source, together with the application services it hands its work to
+        sources.replaceAll((controller, source) -> source + servicesOf(source));
         List<String> orphans = java.util.Arrays.stream(com.jrobertgardzinski.security.domain.vo.StepUpAction.values())
                 .filter(action -> sources.values().stream().noneMatch(source -> source.contains("StepUpAction." + action.name())))
                 .map(Enum::name)
@@ -156,10 +168,25 @@ class StepUpCoverageTest {
             Path source = files.filter(path -> path.getFileName().toString().equals(controller + ".java"))
                     .findFirst()
                     .orElseThrow(() -> new IllegalStateException("no such controller: " + controller));
-            return Files.readString(source).contains("requireElevation");
+            String text = Files.readString(source);
+            // the gate in the controller itself, or the gate in the application service it calls:
+            // the service spends the elevation, and the controller must render the refusal, which
+            // an exhaustive switch over the outcome forces it to
+            return text.contains("requireElevation")
+                    || (text.contains("StepUpRequired") && servicesOf(text).contains("sessionElevation.consume("));
         } catch (IOException unreadable) {
             throw new IllegalStateException("cannot read " + controller, unreadable);
         }
+    }
+
+    /** The sources of the application services this controller imports, concatenated. */
+    private static String servicesOf(String controllerSource) {
+        StringBuilder services = new StringBuilder();
+        java.util.regex.Matcher imported = APPLICATION_SERVICE_IMPORT.matcher(controllerSource);
+        while (imported.find()) {
+            services.append(read(APPLICATION.resolve(imported.group(1).replace('.', '/') + ".java")));
+        }
+        return services.toString();
     }
     private static Stream<Path> walkAll() throws IOException {
         Stream<Path> all = Stream.empty();

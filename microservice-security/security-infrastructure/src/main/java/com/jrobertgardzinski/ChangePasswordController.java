@@ -1,12 +1,8 @@
 package com.jrobertgardzinski;
 
+import com.jrobertgardzinski.security.application.account.AccountService;
 import com.jrobertgardzinski.security.application.TransactionBoundary;
 
-
-import com.jrobertgardzinski.security.domain.vo.Caller;
-import com.jrobertgardzinski.password.domain.PlaintextPassword;
-import com.jrobertgardzinski.security.system.account.ChangePassword;
-import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -23,7 +19,7 @@ import java.util.Map;
 /**
  * HTTP entry point for changing a password. A protected endpoint: {@link AuthorizationFilter} has
  * already authorized the access token and published the caller's email, so we change that user's
- * password once their current password checks out, driving the {@link ChangePassword} use case.
+ * password once their current password checks out, driving the {@code ChangePassword} use case.
  *
  * <p>Authorized is not the same as unlimited. Checking the current password runs a full Argon2 and
  * answers whether the guess was right, so with a stolen access token this endpoint is a password
@@ -46,46 +42,37 @@ import java.util.Map;
 @Controller("/account/password")
 final class ChangePasswordController {
 
-    private final ChangePassword changePassword;
-    private final TransactionBoundary transactionBoundary;
-    private final SourceThrottle throttle;
+    private final AccountService accountService;
     private final ClientIpResolver clientIpResolver;
 
-    ChangePasswordController(ChangePassword changePassword, TransactionBoundary transactionBoundary,
-                             @Named("change-password") SourceThrottle throttle, ClientIpResolver clientIpResolver) {
-        this.changePassword = changePassword;
-        this.transactionBoundary = transactionBoundary;
-        this.throttle = throttle;
+    ChangePasswordController(AccountService accountService, ClientIpResolver clientIpResolver) {
+        this.accountService = accountService;
         this.clientIpResolver = clientIpResolver;
     }
 
     @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     HttpResponse<?> change(HttpRequest<?> request, @Body Map<String, Object> body) {
-        SourceThrottle.Decision decision = throttle.check(clientIpResolver.resolve(request));
-        if (!decision.allowed()) {
-            return HttpResponse.status(HttpStatus.TOO_MANY_REQUESTS)
-                    .header("Retry-After", String.valueOf(decision.retryAfterSeconds()))
-                    .body(Map.of("status", "TOO_MANY_ATTEMPTS"));
-        }
-        if (JsonBody.missing(body, "currentPassword") || JsonBody.missing(body, "newPassword")) {
-            return HttpResponse.badRequest(Map.of("status", "BAD_REQUEST"));
-        }
-        Caller caller = RequestCaller.of(request);
-        String current = JsonBody.text(body, "currentPassword");
-        String next = JsonBody.text(body, "newPassword");
-        ChangePassword.Result result = transactionBoundary.execute(() -> changePassword.execute(
-                caller, () -> PlaintextPassword.of(current), () -> PlaintextPassword.of(next)));
-        return switch (result) {
-            case ChangePassword.Result.Changed ignored ->
+        AccountService.ChangePasswordOutcome outcome = accountService.changePassword(
+                RequestCaller.email(request),
+                JsonBody.text(body, "currentPassword"),
+                JsonBody.text(body, "newPassword"),
+                clientIpResolver.resolve(request).value());
+        return switch (outcome) {
+            case AccountService.ChangePasswordOutcome.Changed _ ->
                     HttpResponse.ok(Map.of("status", "PASSWORD_CHANGED"));
-            case ChangePassword.Result.WrongPassword _ ->
+            case AccountService.ChangePasswordOutcome.WrongPassword _ ->
                     HttpResponse.badRequest().body(Map.of("status", "FAILED_AUTHENTICATION_ATTEMPT"));
-            case ChangePassword.Result.AccountGone _ ->
+            case AccountService.ChangePasswordOutcome.AccountGone _ ->
                     HttpResponse.unauthorized().body(Map.of("status", "ACCOUNT_GONE"));
-            case ChangePassword.Result.Rejected rejected ->
+            case AccountService.ChangePasswordOutcome.Rejected rejected ->
                     HttpResponse.unprocessableEntity().body(Map.of(
-                            "passwordErrors",
-                            SecurityController.passwordErrors(rejected.passwordErrors(), rejected.policy())));
+                            "passwordErrors", SecurityController.wire(rejected.passwordErrors())));
+            case AccountService.ChangePasswordOutcome.MissingPassword _ ->
+                    HttpResponse.badRequest(Map.of("status", "BAD_REQUEST"));
+            case AccountService.ChangePasswordOutcome.Throttled throttled ->
+                    HttpResponse.status(HttpStatus.TOO_MANY_REQUESTS)
+                            .header("Retry-After", String.valueOf(throttled.retryAfterSeconds()))
+                            .body(Map.of("status", "TOO_MANY_ATTEMPTS"));
         };
     }
 }

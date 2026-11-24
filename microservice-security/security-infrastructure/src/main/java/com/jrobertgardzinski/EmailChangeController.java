@@ -1,14 +1,9 @@
 package com.jrobertgardzinski;
 
+import com.jrobertgardzinski.security.application.account.AccountService;
+import io.micronaut.http.HttpStatus;
 import com.jrobertgardzinski.security.application.TransactionBoundary;
 
-import com.jrobertgardzinski.security.domain.vo.StepUpAction;
-
-
-import com.jrobertgardzinski.email.config.EmailPolicy;
-import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.vo.Caller;
-import com.jrobertgardzinski.security.system.account.RequestEmailChange;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
@@ -34,61 +29,34 @@ import java.util.Map;
 @Controller("/account/email")
 final class EmailChangeController {
 
-    private final RequestEmailChange requestEmailChange;
-    private final TransactionBoundary transactionBoundary;
-    private final com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier noticeNotifier;
-    private final StepUpGuard stepUpGuard;
-    private final EmailPolicy emailPolicy;
+    private final AccountService accountService;
 
-    EmailChangeController(RequestEmailChange requestEmailChange, TransactionBoundary transactionBoundary,
-                          com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier noticeNotifier,
-                          StepUpGuard stepUpGuard, EmailPolicy emailPolicy) {
-        this.requestEmailChange = requestEmailChange;
-        this.transactionBoundary = transactionBoundary;
-        this.noticeNotifier = noticeNotifier;
-        this.stepUpGuard = stepUpGuard;
-        this.emailPolicy = emailPolicy;
+    EmailChangeController(AccountService accountService) {
+        this.accountService = accountService;
     }
 
     @Post(value = "/request", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     HttpResponse<?> request(HttpRequest<?> request, @Body Map<String, Object> body) {
-        // moving the address moves the account, and the confirmation lands in the NEW mailbox — so
-        // a thief with a live session could walk off with the whole account and the owner would
-        // learn about it from a notice. Guarded where the change STARTS; the confirmation itself
-        // still needs the token mailed to that new address.
-        // the body is read BEFORE the guard, which SPENDS a one-shot elevation: a typo in the new
-        // address used to cost the whole step-up chain and then answer 400 (HTTP-10)
-        Caller caller = RequestCaller.of(request);
-        Email newEmail;
-        try {
-            newEmail = Email.of(JsonBody.text(body, "newEmail"));
-        } catch (IllegalArgumentException invalid) {
-            return HttpResponse.badRequest().body(Map.of("status", "INVALID_EMAIL"));
-        }
-        java.util.Optional<HttpResponse<Map<String, Object>>> stepUp =
-                stepUpGuard.requireElevation(request, StepUpAction.CHANGE_EMAIL);
-        if (stepUp.isPresent()) {
-            return stepUp.get();
-        }
-        RequestEmailChange.Result result = transactionBoundary.execute(
-                () -> requestEmailChange.execute(caller, newEmail));
-        return switch (result) {
-            case RequestEmailChange.Result.Requested ignored ->
+        AccountService.RequestEmailChangeOutcome outcome = accountService.requestEmailChange(
+                RequestCaller.email(request),
+                RequestCaller.bearerToken(request),
+                JsonBody.text(body, "newEmail"));
+        return switch (outcome) {
+            // quiet refusal: a taken address looks like a fresh request on the wire; the address
+            // owner is told by mail
+            case AccountService.RequestEmailChangeOutcome.Requested _,
+                 AccountService.RequestEmailChangeOutcome.EmailTaken _ ->
                     HttpResponse.accepted().body(Map.of("status", "EMAIL_CHANGE_LINK_SENT"));
+            case AccountService.RequestEmailChangeOutcome.InvalidEmail _ ->
+                    HttpResponse.badRequest().body(Map.of("status", "INVALID_EMAIL"));
+            case AccountService.RequestEmailChangeOutcome.StepUpRequired stepUp ->
+                    HttpResponse.status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("status", "STEP_UP_REQUIRED", "action", stepUp.action()));
             // the policy's refusal is NOT quiet: it is about the address the caller typed, not
             // about who else holds it, so it says which rule was broken — exactly as /register does
-            case RequestEmailChange.Result.Rejected rejected ->
+            case AccountService.RequestEmailChangeOutcome.Rejected rejected ->
                     HttpResponse.unprocessableEntity().body(Map.of(
-                            "emailErrors",
-                            SecurityController.emailErrors(rejected.emailErrors(), emailPolicy)));
-            case RequestEmailChange.Result.EmailTaken ignored -> {
-                // quiet refusal: the wire looks like a fresh request; the address owner is told by mail
-                transactionBoundary.execute(() -> {
-                    noticeNotifier.sendAlreadyRegistered(newEmail);
-                    return null;
-                });
-                yield HttpResponse.accepted().body(Map.of("status", "EMAIL_CHANGE_LINK_SENT"));
-            }
+                            "emailErrors", SecurityController.wire(rejected.emailErrors())));
         };
     }
 }

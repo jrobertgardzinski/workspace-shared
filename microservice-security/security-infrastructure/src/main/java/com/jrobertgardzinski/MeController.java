@@ -1,9 +1,6 @@
 package com.jrobertgardzinski;
 
-
-import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.repository.UserRepository;
-import com.jrobertgardzinski.security.domain.vo.Role;
+import com.jrobertgardzinski.security.application.identity.IdentityService;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
@@ -26,34 +23,21 @@ import java.util.Map;
 @Controller("/me")
 final class MeController {
 
-    private final com.jrobertgardzinski.security.system.roles.RequireRole roles;
-    private final com.jrobertgardzinski.security.system.mfa.MfaCompliance compliance;
-    private final UserRepository users;
+    private final IdentityService identityService;
 
-    MeController(com.jrobertgardzinski.security.system.roles.RequireRole roles,
-                 com.jrobertgardzinski.security.system.mfa.MfaCompliance compliance,
-                 UserRepository users) {
-        this.roles = roles;
-        this.compliance = compliance;
-        this.users = users;
+    MeController(IdentityService identityService) {
+        this.identityService = identityService;
     }
 
     @Get(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> me(HttpRequest<?> request) {
-        Email email = RequestCaller.of(request).email();
-        // rolesInForce, not the persisted grants: a BOOTSTRAP ADMIN holds ADMIN by configuration and
-        // has no row saying so. Reading the row alone told such an administrator they were a plain
-        // USER — here and in the JWT — while /admin/** let them in, so every consumer that gates on
-        // this answer disagreed with the service that issued it.
-        java.util.Set<Role> roleSet = this.roles.rolesInForce(email);
-        List<String> roles = roleSet.stream().map(Role::name).sorted().toList();
-        // the MFA role floor, so consumers and the UI can nudge an under-protected privileged account
+        IdentityService.Me me = identityService.me(RequestCaller.email(request));
         return HttpResponse.ok(Map.of(
-                "id", users.findBy(email).map(user -> user.id().toString()).orElseThrow(),
-                "email", email.value(),
-                "roles", roles,
-                "mfaCompliant", compliance.isCompliant(email, roleSet),
-                "requiredFactors", compliance.requiredFactors(roleSet),
-                "haveFactors", compliance.effectiveFactorCount(email)));
+                "id", me.id(),
+                "email", me.email(),
+                "roles", me.roles(),
+                "mfaCompliant", me.mfaCompliant(),
+                "requiredFactors", me.requiredFactors(),
+                "haveFactors", me.haveFactors()));
     }
 }

@@ -274,6 +274,63 @@ public class BeanFactory {
                 authentication, throttle, transactionBoundary);
     }
 
+    @Singleton
+    com.jrobertgardzinski.security.application.session.SessionService sessionService(
+            RefreshSession refreshSession,
+            Logout logout,
+            ListActiveSessions listActiveSessions,
+            RevokeAllSessions revokeAllSessions,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.session.SessionService(
+                refreshSession, logout, listActiveSessions, revokeAllSessions, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.verification.VerificationService verificationService(
+            RequestEmailVerification requestEmailVerification,
+            VerifyEmail verifyEmail,
+            @Named("verification") SourceThrottle throttle,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.verification.VerificationService(
+                requestEmailVerification, verifyEmail, throttle, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.passwordreset.PasswordResetService passwordResetService(
+            RequestPasswordReset requestPasswordReset,
+            ResetPassword resetPassword,
+            @Named("password-reset") SourceThrottle throttle,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.passwordreset.PasswordResetService(
+                requestPasswordReset, resetPassword, throttle, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.account.AccountService accountService(
+            ChangePassword changePassword,
+            RequestEmailChange requestEmailChange,
+            ConfirmEmailChange confirmEmailChange,
+            com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier registrationNoticeNotifier,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
+            EmailPolicy emailPolicy,
+            @Named("change-password") SourceThrottle changePasswordThrottle,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.account.AccountService(
+                changePassword, requestEmailChange, confirmEmailChange, registrationNoticeNotifier,
+                sessionElevation, emailPolicy, changePasswordThrottle, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.identity.IdentityService identityService(
+            RequireRole requireRole,
+            com.jrobertgardzinski.security.system.mfa.MfaCompliance mfaCompliance,
+            UserRepository userRepository,
+            com.jrobertgardzinski.security.system.identity.DisplayNames displayNames,
+            @Named("display-names") SourceThrottle displayNamesThrottle) {
+        return new com.jrobertgardzinski.security.application.identity.IdentityService(
+                requireRole, mfaCompliance, userRepository, displayNames, displayNamesThrottle);
+    }
+
     /**
      * One {@link SourceThrottle} per expensive anonymous endpoint — separate windows, so a burst
      * against one endpoint cannot starve another. Zero disables an instance.

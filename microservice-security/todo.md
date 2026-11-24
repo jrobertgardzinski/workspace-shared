@@ -1087,15 +1087,35 @@ jak w `273f693`.
         `UnreadableCredentials`, `EmailNotVerified`, `Blocked(until)`, `MfaRequired(ticket,
         nextFactor, challengeData)`, `Throttled`.
       - `BrokenRule(code, parameter)`: złamana reguła z parametrem w mocy, słowami brzegu.
-        `SecurityController.emailErrors/passwordErrors` zostały jako cienkie przejściówki dla
-        kontrolerów jeszcze nieprzeniesionych (`ChangePassword`, `PasswordReset`, `EmailChange`).
       - `TransactionBoundary` przeniesiony z infrastruktury do application (port aplikacyjny);
         obie implementacje zostały w infrze.
       - Oba kontrolery: konstruktor z 8 → 2 i z 6 → 4 zależności, zero importów z domeny i systemu.
       Drut bez zmian. Zielone: pełne `verify` security, application 51 (36 + 15 nowych:
       `RegistrationServiceTest`, `AuthenticationServiceTest`), infrastruktura 345, zero pominiętych.
-      STOP wg planu: Robert ogląda kształt dwóch serwisów, zanim pójdą kroki 3–6 (22 kontrolery).
+      Robert 2026-11-24 na pytanie o kształt: „Rób jak chcesz" — kształt przyjęty, dalej bez STOP.
       Glue Cucumbera nadal woła use case'y wprost, nieprzepinane.
+      KROK 3 ZROBIONY 2026-11-24 (10 kontrolerów, żaden nie importuje już domeny ani systemu):
+      - `SessionService` (`refresh`, `logout`, `list`, `revokeAll`) ← `Refresh`, `Logout`, `Sessions`.
+      - `VerificationService` (`requestLink`, `verify`) ← `VerifyEmail`.
+      - `PasswordResetService` (`requestLink`, `reset`) ← `PasswordReset`.
+      - `AccountService` (`changePassword`, `requestEmailChange`, `confirmEmailChange`) ←
+        `ChangePassword`, `EmailChange`, `ConfirmEmailChange`.
+      - `IdentityService` (`me`, `displayNames`) ← `Me`, `Users`.
+      Reguły, które z tego wyszły: (1) adres dzwoniącego idzie jako String
+      (`RequestCaller.email(request)`), `Caller` buduje serwis; (2) to, czego domena nie umie
+      zbudować, jest WARIANTEM wyniku (`UnreadableEmail`, `UnreadableToken`, `InvalidEmail`,
+      `MissingPassword`), a kontroler zlewa go z resztą tam, gdzie drut ma milczeć; (3) BRAMKA
+      STEP-UP zeszła do serwisu: `AccountService.requestEmailChange` sam zużywa elewację
+      (`SessionElevation.consume`) i oddaje `StepUpRequired(action)`, nadal PO sprawdzeniu adresu.
+      `StepUpGuard` zostaje dla kontrolerów jeszcze nieprzeniesionych. `StepUpCoverageTest` (czyta
+      źródła) idzie teraz za kontrolerem do serwisu, który ten importuje.
+      Drut bez zmian. Zielone: pełne `verify`, 19 + 42 + 123 + 76 + 345, zero pominiętych
+      (application 76 = 36 Cucumber + 40 testów sześciu serwisów).
+      ZOSTAŁO: krok 4 (MFA, step-up: `AuthFactor`, `Factors`, `RecoveryCodes`, `AdminFactors`,
+      `StepUp`), krok 5 (admin, kasacja konta, OAuth: `AdminRoles`, `AdminSettings`,
+      `AdminPasswordPolicy`, `DeleteAccount`, `Oauth`), krok 6 (`AccountDeletionOrchestrator`),
+      krok 8 (porty MFA z systemu do domeny). Po krokach 4–5 `StepUpGuard`, `RoleGuard` i
+      przejściówki `SecurityController.emailErrors/passwordErrors` znikają.
 - [x] JEDNO REPOZYTORIUM PER ENCJA (2026-11-24; werdykt Roberta: „jedno repo per encja wystarczy.
       Teraz jest jedno repo per usecase i wygląda chujowo", plan zatwierdzony „w 100%"). Było 11
       portów (po jednym na TABELĘ, dopisywane od czerwca do września z każdą funkcją), jest 6;
