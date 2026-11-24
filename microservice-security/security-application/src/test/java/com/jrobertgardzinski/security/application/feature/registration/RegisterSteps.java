@@ -53,7 +53,11 @@ public class RegisterSteps {
 
     @Then("REGISTRATION is rejected")
     public void registrationIsRejected() {
-        assertInstanceOf(Register.Result.Rejected.class, result);
+        assertTrue(
+                result instanceof Register.Result.EmailRejected
+                        || result instanceof Register.Result.PasswordRejected
+                        || result instanceof Register.Result.BothRejected,
+                "expected a refusal, got " + result);
     }
 
     /**
@@ -68,16 +72,29 @@ public class RegisterSteps {
 
     @Then("the EMAIL is flagged as {word}")
     public void theEmailIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().emailErrors());
+        assertFlag(flag, emailErrors());
     }
 
     @Then("the password is flagged as {word}")
     public void thePasswordIsFlaggedAs(String flag) {
-        assertFlag(flag, rejected().passwordErrors());
+        assertFlag(flag, passwordErrors());
     }
 
-    private Register.Result.Rejected rejected() {
-        return assertInstanceOf(Register.Result.Rejected.class, result);
+    /** The e-mail channel's refusals as the wire renders them: a channel that passed renders empty. */
+    private List<?> emailErrors() {
+        return switch (result) {
+            case Register.Result.EmailRejected rejected -> rejected.emailErrors();
+            case Register.Result.BothRejected rejected -> rejected.emailErrors();
+            default -> List.of();
+        };
+    }
+
+    private List<?> passwordErrors() {
+        return switch (result) {
+            case Register.Result.PasswordRejected rejected -> rejected.passwordErrors();
+            case Register.Result.BothRejected rejected -> rejected.passwordErrors();
+            default -> List.of();
+        };
     }
 
     private void assertFlag(String flag, List<?> errors) {

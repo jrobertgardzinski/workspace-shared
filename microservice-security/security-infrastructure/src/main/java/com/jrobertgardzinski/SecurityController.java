@@ -120,7 +120,7 @@ public class SecurityController {
                         requestEmailVerification.execute(alreadyTaken.email());
                     }
                 }
-                case Register.Result.Rejected rejected -> {
+                case Register.Result.EmailRejected _, Register.Result.PasswordRejected _, Register.Result.BothRejected _ -> {
                     // nothing was written, and nothing is mailed: the address may not even be one
                 }
             }
@@ -130,7 +130,18 @@ public class SecurityController {
         return switch (result) {
             case Register.Result.Registered registered ->
                     HttpResponse.<Map<String, Object>>created(CHECK_YOUR_MAILBOX);
-            case Register.Result.Rejected rejected ->
+            // one 422 shape for the three refusals: a channel that passed renders as an empty list
+            case Register.Result.EmailRejected rejected ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
+                            .body(Map.of(
+                                    "emailErrors", emailErrors(rejected.emailErrors(), emailPolicy),
+                                    "passwordErrors", List.of()));
+            case Register.Result.PasswordRejected rejected ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
+                            .body(Map.of(
+                                    "emailErrors", List.of(),
+                                    "passwordErrors", passwordErrors(rejected.passwordErrors(), rejected.policy())));
+            case Register.Result.BothRejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNPROCESSABLE_ENTITY)
                             .body(Map.of(
                                     "emailErrors", emailErrors(rejected.emailErrors(), emailPolicy),

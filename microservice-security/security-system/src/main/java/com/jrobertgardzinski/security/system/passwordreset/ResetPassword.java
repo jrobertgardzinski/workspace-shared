@@ -1,6 +1,7 @@
 package com.jrobertgardzinski.security.system.passwordreset;
 
 import com.jrobertgardzinski.email.domain.Email;
+import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
@@ -16,7 +17,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
-import com.jrobertgardzinski.password.domain.PasswordStatus;
 
 /**
  * Completes a password reset: the new password must meet the policy, the token must match a pending
@@ -91,15 +91,13 @@ public class ResetPassword {
 
     public Result execute(PasswordResetToken token, Supplier<PlaintextPassword> newPasswordCandidate) {
 
-        CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
-
-        switch (createPasswordHashResult.status()) {
-            case PasswordStatus.Rejected _ -> {
-                return new Result.Rejected(
-                        createPasswordHashResult.errors(),
-                        createPasswordHashResult.policy());
-            }
-            case PasswordStatus.Passed _ -> {}
+        HashedPassword hashedPassword;
+        try {
+            hashedPassword = createPasswordHash.create(newPasswordCandidate);
+        } catch (CreatePasswordHash.Rejected rejected) {
+            return new Result.Rejected(
+                    rejected.errors(),
+                    rejected.policy());
         }
 
         Optional<PasswordResetRepository.PendingReset> pendingReset = passwordResetRepository.consumeReset(token);
@@ -130,7 +128,7 @@ public class ResetPassword {
 
         userRepository.updatePassword(
                 email,
-                createPasswordHashResult.hashedPassword());
+                hashedPassword);
 
         // the account now has a password
         passwordlessAccountRepository.setPasswordless(email, false);

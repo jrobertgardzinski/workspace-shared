@@ -4,7 +4,6 @@ import com.jrobertgardzinski.security.domain.entity.SessionTokens;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 import com.jrobertgardzinski.security.system.mfa.PendingAuthentication;
 import com.jrobertgardzinski.security.system.mfa.PresentProof;
-import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 
 /**
  * Drives a sign-in that is past link #1 through its remaining factors, one proof at a time. Lives
@@ -52,26 +51,24 @@ public class ContinueAuthentication {
 
     public Result execute(String ticket, String proof) {
 
-        PresentProof.Result presentProofResult = presentProof.present(ticket, proof);
-
-        PendingAuthentication chain = presentProofResult.chain();
-
-        switch (presentProofResult.status()) {
-            case ProofStatus.InvalidTicket _ -> { return new Result.InvalidTicket(); }
-            case ProofStatus.TooManyAttempts _ -> {
-                updateBruteForceRecords.execute(chain);
-                return new Result.TooManyAttempts();
-            }
-            case ProofStatus.WrongProof _ -> {
-                updateBruteForceRecords.execute(chain);
-                return new Result.WrongProof(
-                        chain.attemptsLeft());
-            }
-            case ProofStatus.Passed _ -> {}
+        PresentProof.Passed passed;
+        try {
+            passed = presentProof.present(ticket, proof);
+        } catch (PresentProof.InvalidTicket invalidTicket) {
+            return new Result.InvalidTicket();
+        } catch (PresentProof.TooManyAttempts tooManyAttempts) {
+            updateBruteForceRecords.execute(tooManyAttempts.chain());
+            return new Result.TooManyAttempts();
+        } catch (PresentProof.WrongProof wrongProof) {
+            updateBruteForceRecords.execute(wrongProof.chain());
+            return new Result.WrongProof(
+                    wrongProof.chain().attemptsLeft());
         }
 
+        PendingAuthentication chain = passed.chain();
+
         if (
-                presentProofResult.chainCompleted()
+                passed.chainCompleted()
         ) {
             // the chain proved the PERSON; whether the ACCOUNT still signs in is a separate question,
             // and link #1's answer to it is as old as the chain took to walk. A deletion requested

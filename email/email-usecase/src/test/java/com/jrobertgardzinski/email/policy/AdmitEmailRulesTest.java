@@ -7,7 +7,6 @@ import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
-import com.jrobertgardzinski.email.domain.EmailStatus;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import io.qameta.allure.Story;
@@ -17,6 +16,8 @@ import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Epic("Email")
 @Feature("Use case")
@@ -34,9 +35,9 @@ class AdmitEmailRulesTest {
     @Property
     @Label("every broken rule is named, in policy order")
     void brokenRulesAreNamedInPolicyOrder(@ForAll("refusals") Tuple.Tuple2<String, List<EmailError>> row) {
-        AdmitEmail.Result result = admitEmail.evaluate(Email.of(row.get1()));
-
-        assertThat(result.errors()).isEqualTo(row.get2());
+        assertThatThrownBy(() -> admitEmail.evaluate(Email.of(row.get1())))
+                .isInstanceOfSatisfying(AdmitEmail.Rejected.class, rejected ->
+                        assertThat(rejected.errors()).isEqualTo(row.get2()));
     }
 
     @Provide
@@ -53,44 +54,37 @@ class AdmitEmailRulesTest {
     }
 
     @Example
-    @Label("an address that passes every rule is allowed, and comes back as itself")
+    @Label("an address that passes every rule is admitted: nothing is thrown")
     void passingAddressIsAllowed() {
-        Email email = Email.of("user@acme.example");
-
-        assertThat(admitEmail.evaluate(email)).isEqualTo(new AdmitEmail.Result(email, List.of()));
-        assertThat(admitEmail.evaluate(email).status()).isInstanceOf(EmailStatus.Passed.class);
+        assertThatCode(() -> admitEmail.evaluate(Email.of("user@acme.example"))).doesNotThrowAnyException();
     }
 
     @Example
     @Label("a rule the deployment did not configure is not applied")
     void absentRulesAreSkipped() {
-        Email email = Email.of("user@throwaway.example");
-
-        assertThat(new AdmitEmail(new EmailPolicy()).evaluate(email)).isEqualTo(new AdmitEmail.Result(email, List.of()));
+        assertThatCode(() -> new AdmitEmail(new EmailPolicy()).evaluate(Email.of("user@throwaway.example")))
+                .doesNotThrowAnyException();
     }
 
     @Example
     @Label("a candidate that does not construct is refused by the invariant it broke, and nothing else is asked")
     void malformedCandidateIsRefusedByItsInvariant() {
-        AdmitEmail.Result result = admitEmail.evaluate(() -> Email.of("invalid"));
-
-        assertThat(result).isEqualTo(new AdmitEmail.Result(null, List.of(EmailError.EMAIL_FORMAT_INVALID)));
-        assertThat(result.status()).isInstanceOf(EmailStatus.Rejected.class);
+        assertThatThrownBy(() -> admitEmail.evaluate(() -> Email.of("invalid")))
+                .isInstanceOfSatisfying(AdmitEmail.Rejected.class, rejected ->
+                        assertThat(rejected.errors()).containsExactly(EmailError.EMAIL_FORMAT_INVALID));
     }
 
     @Example
     @Label("a candidate that constructs is judged by the rules and handed back")
-    void constructingCandidateIsJudgedAndHandedBack() {
-        assertThat(admitEmail.evaluate(() -> Email.of("user@acme.example")))
-                .isEqualTo(new AdmitEmail.Result(Email.of("user@acme.example"), List.of()));
+    void constructingCandidateIsJudgedAndHandedBack() throws Exception {
+        assertThat(admitEmail.evaluate(() -> Email.of("user@acme.example"))).isEqualTo(Email.of("user@acme.example"));
     }
 
     @Example
     @Label("the domain is compared case-insensitively: the value lower-cases it before any rule sees it")
     void domainCaseDoesNotMatter() {
-        AdmitEmail.Result result = admitEmail.evaluate(Email.of("user@Blocked.Example"));
-
-        assertThat(result.errors()).isEqualTo(
-                List.of(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN));
+        assertThatThrownBy(() -> admitEmail.evaluate(Email.of("user@Blocked.Example")))
+                .isInstanceOfSatisfying(AdmitEmail.Rejected.class, rejected ->
+                        assertThat(rejected.errors()).containsExactly(EmailError.DOMAIN_BLOCKED, EmailError.NOT_A_COMPANY_DOMAIN));
     }
 }

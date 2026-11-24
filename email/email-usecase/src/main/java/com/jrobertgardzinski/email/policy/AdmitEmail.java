@@ -4,7 +4,6 @@ import com.jrobertgardzinski.email.config.EmailPolicy;
 import com.jrobertgardzinski.email.domain.DomainPart;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
-import com.jrobertgardzinski.email.domain.EmailStatus;
 import com.jrobertgardzinski.email.domain.InvalidEmailException;
 
 import java.util.LinkedList;
@@ -14,9 +13,9 @@ import java.util.regex.Pattern;
 
 /**
  * Whether an address may hold an account here: the deployment's {@link EmailPolicy}, applied to a
- * new registration and to the address an existing account wants to move to alike. A refused one
- * comes back as {@link Result.Failure} with every broken rule at once, in policy order, so a form
- * can show all of them in one round. A {@code null} rule in the policy is an absent rule.
+ * new registration and to the address an existing account wants to move to alike. A refused one is
+ * thrown as {@link Rejected} with every broken rule at once, in policy order, so a form can show
+ * all of them in one round. A {@code null} rule in the policy is an absent rule.
  *
  * <p>The policy is a boot value, so it is given once here; the password policy, which can change
  * between attempts, is asked per attempt by {@code CreatePasswordHash} from its port.
@@ -35,40 +34,37 @@ public class AdmitEmail {
         this.policy = policy;
     }
 
-    /**
-     * The address as it constructed ({@code null} when it did not) and every invariant or rule it
-     * broke, in policy order. Admitted iff {@code errors} is empty.
-     */
-    public record Result(Email email, List<EmailError> errors) {
-        public Result {
-            errors = List.copyOf(errors);
+    /** The address broke at least one invariant or rule: which ones, in policy order. */
+    public static final class Rejected extends Exception {
+
+        private final List<EmailError> errors;
+
+        public Rejected(List<EmailError> errors) {
+            this.errors = List.copyOf(errors);
         }
 
-        /** Read off the errors, so the two cannot disagree. */
-        public EmailStatus status() {
-            if (errors.isEmpty()) {
-                return new EmailStatus.Passed();
-            }
-            return new EmailStatus.Rejected();
+        public List<EmailError> errors() {
+            return errors;
         }
     }
 
     /**
      * The candidate as the edge received it: one that does not construct is refused by the invariant
-     * it broke, one that does is judged by the rules.
+     * it broke, one that does is judged by the rules and handed back.
      */
-    public Result evaluate(Supplier<Email> candidate) {
+    public Email evaluate(Supplier<Email> candidate) throws Rejected {
         Email email;
         try {
             email = candidate.get();
         } catch (InvalidEmailException refused) {
-            return new Result(null, List.of(refused.error()));
+            throw new Rejected(List.of(refused.error()));
         }
-        return evaluate(email);
+        evaluate(email);
+        return email;
     }
 
-    /** An address that did construct, judged by the rules. */
-    public Result evaluate(Email email) {
+    /** An address that did construct, judged by the rules: returns when every one of them is met. */
+    public void evaluate(Email email) throws Rejected {
         List<EmailError> errors = new LinkedList<>();
         DomainPart domain = email.domain();
         if (!RFC_FORMAT.matcher(email.value()).matches()) {
@@ -84,6 +80,8 @@ public class AdmitEmail {
             errors.add(EmailError.NOT_A_COMPANY_DOMAIN);
         }
 
-        return new Result(email, errors);
+        if (!errors.isEmpty()) {
+            throw new Rejected(errors);
+        }
     }
 }

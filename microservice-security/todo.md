@@ -1024,11 +1024,61 @@ jak w `273f693`.
 - [ ] STAN DZWONIĄCEGO W TYPIE WEJŚCIOWYM (2026-11-08): `Caller` zamiast `Email` tam, gdzie adres
       pochodzi z tokena; `UserNotFound` w `ChangePassword`/`StepUp` → `AccountGone`. Plan do
       wykonania w nowej sesji: `PLAN-STAN-DZWONIACEGO-2026-11-08.md` (obok tego pliku).
+- [ ] SĘDZIOWIE RZUCAJĄ WYJĄTKI CHECKED (2026-11-10, propozycja Roberta: „sędziowie powinni
+      zwracać obiekt lub void i rzucać wyjątek w razie problemu… głównie wyjątki typu checked. To
+      nam oszczędzi trochę opakowywania kodu jak to było w AdmitEmail"; „dawaj" na pierwszą parę).
+      Kształt: sędzia oddaje WARTOŚĆ sukcesu (albo nic) i rzuca jeden wyjątek checked na każdą
+      odmowę, zagnieżdżony w sędzim wzorem `Result` (`VerifyPassword.UserNotFound`,
+      `VerifyPassword.WrongPassword`); use case łapie `try`/`catch` i zwraca swój wariant sealed
+      `Result`. Granica z werdyktu 5.11 („żadnych wyjątków na przewidziane odmowy") zostaje: dotyczy
+      wyniku use case'u dla brzegu, nie sędziego dla use case'u. `throws` wymusza obsługę u każdego
+      wołającego, także tam, gdzie dziś jest `instanceof` (`Register`) — mocniej niż sealed; rekordy
+      `Result` sędziów i nulle (`user`, `hashedPassword`, `email`, `chain`) znikają, co zamyka punkt
+      (2) „dane w wariantach" niżej. Find usages na wyjątku pokazuje to samo, co na rekordzie
+      statusu — to nie jest argument różnicujący. Stack trace przy odmowie nie liczy się obok
+      Argon2, więc bez sztuczek z `writableStackTrace`.
+      ZROBIONE 2026-11-10 (dekret Roberta po pierwszej parze: „przerobił pozostałych sędziów na
+      throwable, a Result stosuj jedynie w dużych usecase'ach, czyli tych na najwyższym poziomie, co
+      zaraz miałyby być używane przez warstwę application"; zielone: email, password, security
+      19+42+124+36+345, zero pominiętych; zacommitowane 2026-11-24):
+      - `VerifyPassword` → `User`, rzuca `UserNotFound`/`WrongPassword`; `ChangePassword` łapie
+        osobno, `Authentication` jednym `catch (UserNotFound | WrongPassword)`, `StepUp` ignoruje
+        zwrot.
+      - `AdmitEmail` (email-usecase) → `Email evaluate(Supplier)` / `void evaluate(Email)`, rzuca
+        `Rejected(errors)`; `RequestEmailChange` łapie.
+      - `CreatePasswordHash` (password-usecase) → `HashedPassword`, rzuca `Rejected(errors, policy)`;
+        `ChangePassword` i `ResetPassword` łapią.
+      - `PresentProof` → rekord `Passed(chain, chainCompleted)` (dwa fakty sukcesu, bez nulla),
+        rzuca `InvalidTicket`, `WrongProof(chain)`, `TooManyAttempts(chain)`;
+        `ContinueAuthentication` ładuje brute force w dwóch `catch`; `ContinueStepUp` sprawdza brak
+        rekordu step-upu PO `try` (ten sam magazyn co bilety łańcucha, więc kolejność nie zmienia
+        odpowiedzi).
+      - `RequireRole` → `void check(...)`, rzuca `NotAUser`/`NotAModerator`/`NotAnAdmin`;
+        `RoleGuard` łapie na brzegu i mapuje na kody 403. Instrukcja `switch` po `Role` nie jest
+        sprawdzana na komplet ramion; pilnuje tego property test „every role has a refusal".
+      - `OpenMfaChain.Result` → `OpenMfaChain.Opened` (sam sukces, nie ma odmowy), bo `Result` jest
+        teraz zarezerwowane dla use case'ów wołanych z warstwy application.
+      - Skasowane: `CredentialsStatus`, `ProofStatus`, `RoleStatus` (security-domain), `EmailStatus`
+        (email-domain), `PasswordStatus` (password-domain). Rekordy `Result` sędziów zniknęły, z nimi
+        nulle w `user`/`hashedPassword`/`email`/`chain` (punkt (2) niżej zamknięty).
+      - `Register`: wyjątek przerywa, a rejestracja sądzi oba kanały naraz, więc odmowa rozpadła się
+        na TRZY nazwane warianty `Result`: `EmailRejected(emailErrors)`,
+        `PasswordRejected(passwordErrors, policy)`, `BothRejected(emailErrors, passwordErrors,
+        policy)` — rekomendacja (a) z opisu wyżej, bez sentineli. Hasło jest sądzone także po
+        odrzuconym adresie: `try` hasła zagnieżdżony w `catch` adresu, jedyne takie miejsce. Drut
+        BEZ ZMIAN: `SecurityController` renderuje trzy warianty na to samo 422 z
+        `emailErrors`/`passwordErrors`, kanał, który przeszedł, to pusta lista; `RegisterSteps`
+        czytają listy z wariantu. WERDYKT ROBERTA co do kształtu `Register` jeszcze nie padł.
+      ODRZUCONE tego dnia (Robert: „nie"): wciągnięcie `mustProvePassword` do `if` w `StepUp`
+      (boolean zostaje) i zdjęcie niezmiennika „nie puste" z `PlaintextPassword` (Supplier w
+      `verify`/`create` zostaje). Otwarte: dwa przeciążenia `verify` rozdzielają find usages na
+      dwie listy; wersja z `Supplier` Robertowi „się nie podoba", alternatywy nie wybrał.
 - [ ] ZOSTAWIONE ŚWIADOMIE PO SEALED (2026-11-07, decyzja Roberta: „wrócimy do tego"):
       (1) `SessionStatus` (`ACTIVE`/`ROTATED`) został enumem, bo to stan utrwalany w bazie przez
       `name()`/`valueOf` (`JdbcSessionRepository`), nie werdykt sędziego. Jego `switch` w
       `RefreshSession` nadal nie jest sprawdzany przez kompilator.
-      (2) Dane w wariantach: np. `Passed(User)` zamiast `user == null` w `VerifyPassword.Result`;
+      (2) Dane w wariantach (zamyka się wraz z wyjątkami sędziów, punkt wyżej; `VerifyPassword`
+      już bez nulla): np. `Passed(User)` zamiast `user == null` w `VerifyPassword.Result`;
       analogicznie `PresentProof.Result.chain` (`null` przy `InvalidTicket`) i
       `CreatePasswordHash.Result.hashedPassword` (`null` przy `Rejected`).
 - [x] ODSTĘPSTWA OD WZORCA, zdjęte 2026-11-07 według rekomendacji z opisu poniżej („Rób całość"):

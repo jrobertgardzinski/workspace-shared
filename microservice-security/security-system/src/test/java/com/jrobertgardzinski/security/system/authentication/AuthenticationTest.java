@@ -9,7 +9,6 @@ import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AccessTokenValidityInHours;
 import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
-import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 import com.jrobertgardzinski.security.domain.vo.IpAddress;
 import com.jrobertgardzinski.security.domain.vo.AttemptedAccount;
 import com.jrobertgardzinski.security.domain.vo.LockoutSubject;
@@ -142,12 +141,12 @@ class AuthenticationTest {
 
     @Example
     @Label("Authenticated when the guard allows and credentials are valid")
-    void authenticated_when_guard_allows_and_credentials_valid() {
+    void authenticated_when_guard_allows_and_credentials_valid() throws Exception {
         SessionTokens sessionTokens = SessionTokens.createFor(GIVEN.email, CONFIG, CLOCK, com.jrobertgardzinski.security.domain.port.AccessTokenMint.RANDOM);
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, new CredentialsStatus.Passed()));
+                .thenReturn(GIVEN.user);
         Mockito.when(generateSession.create(GIVEN.email)).thenReturn(sessionTokens);
 
         Authentication.Result result = authentication.execute(GIVEN.request);
@@ -170,11 +169,11 @@ class AuthenticationTest {
 
     @Example
     @Label("Rejected when the guard allows but credentials are invalid")
-    void rejected_when_guard_allows_but_credentials_invalid() {
+    void rejected_when_guard_allows_but_credentials_invalid() throws Exception {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(null, new CredentialsStatus.WrongPassword()));
+                .thenThrow(new VerifyPassword.WrongPassword());
 
         Authentication.Result result = authentication.execute(GIVEN.request);
 
@@ -190,11 +189,11 @@ class AuthenticationTest {
 
     @Example
     @Label("Email-not-verified when credentials are valid but the address is unverified")
-    void email_not_verified_when_address_unverified() {
+    void email_not_verified_when_address_unverified() throws Exception {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, new CredentialsStatus.Passed()));
+                .thenReturn(GIVEN.user);
         Mockito.when(requireVerifiedEmail.isVerified(GIVEN.email)).thenReturn(false);
 
         Authentication.Result result = authentication.execute(GIVEN.request);
@@ -209,11 +208,11 @@ class AuthenticationTest {
 
     @Example
     @Label("Rejected when the password is right but the account is being deleted — and the miss is written down")
-    void rejected_when_the_account_is_being_deleted() {
+    void rejected_when_the_account_is_being_deleted() throws Exception {
         Mockito.when(bruteForceGuard.execute(Mockito.any()))
                 .thenReturn(Optional.empty());
         Mockito.when(verifyPassword.verify(GIVEN.email, GIVEN.password))
-                .thenReturn(new VerifyPassword.Result(GIVEN.user, new CredentialsStatus.Passed()));
+                .thenReturn(GIVEN.user);
         Mockito.when(userRepository.isPendingDeletion(GIVEN.email)).thenReturn(true);
 
         Authentication.Result result = authentication.execute(GIVEN.request);

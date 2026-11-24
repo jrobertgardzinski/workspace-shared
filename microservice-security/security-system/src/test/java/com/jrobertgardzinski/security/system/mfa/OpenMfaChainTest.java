@@ -57,7 +57,7 @@ class OpenMfaChainTest {
         EnrolledFactor emailFactor = new EnrolledFactor(
                 USER, FactorType.EMAIL_CODE, FactorLabels.of(FactorType.EMAIL_CODE), 0, USER.value());
 
-        OpenMfaChain.Result result = new OpenMfaChain(mfaChain, store).open(USER, List.of(emailFactor), SOURCE);
+        OpenMfaChain.Opened result = new OpenMfaChain(mfaChain, store).open(USER, List.of(emailFactor), SOURCE);
 
         PendingAuthentication pending = store.find(result.ticket()).orElseThrow();
         assertThat(result.nextFactor()).isEqualTo(FactorType.EMAIL_CODE);

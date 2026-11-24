@@ -3,7 +3,6 @@ package com.jrobertgardzinski.password.policy;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
-import com.jrobertgardzinski.password.domain.PasswordStatus;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 
 import java.util.LinkedList;
@@ -13,11 +12,11 @@ import java.util.regex.Pattern;
 
 /**
  * Judges a plaintext password against the policy in force and, if it passes, hashes it. There is
- * no way to obtain the hash of a password that failed: a refused one comes back
- * {@link PasswordStatus.Rejected} with every broken rule at once, in policy order, so a form can
- * show all of them in one round. A candidate that does not construct (blank) is refused as
- * {@link PasswordError#PASSWORD_BLANK} with the policy skipped. The policy is asked once per
- * attempt, so a refusal names the policy it was judged against.
+ * no way to obtain the hash of a password that failed: a refused one is thrown as {@link Rejected}
+ * with every broken rule at once, in policy order, so a form can show all of them in one round. A
+ * candidate that does not construct (blank) is refused as {@link PasswordError#PASSWORD_BLANK} with
+ * the policy skipped. The policy is asked once per attempt, so a refusal names the policy it was
+ * judged against.
  */
 public class CreatePasswordHash {
 
@@ -34,31 +33,36 @@ public class CreatePasswordHash {
     }
 
     /**
-     * The hash, present only when every rule passed ({@code null} otherwise); the rules broken, in
-     * policy order; and the policy they were judged against, because that policy can change between
-     * two attempts, so the codes alone would not say what "too short" meant for this one.
+     * The rules the password broke, in policy order, and the policy they were judged against, because
+     * that policy can change between two attempts, so the codes alone would not say what "too short"
+     * meant for this one.
      */
-    public record Result(HashedPassword hashedPassword, List<PasswordError> errors, PasswordPolicy policy) {
-        public Result {
-            errors = List.copyOf(errors);
+    public static final class Rejected extends Exception {
+
+        private final List<PasswordError> errors;
+        private final PasswordPolicy policy;
+
+        public Rejected(List<PasswordError> errors, PasswordPolicy policy) {
+            this.errors = List.copyOf(errors);
+            this.policy = policy;
         }
 
-        /** Read off the errors, so the two cannot disagree. */
-        public PasswordStatus status() {
-            if (errors.isEmpty()) {
-                return new PasswordStatus.Passed();
-            }
-            return new PasswordStatus.Rejected();
+        public List<PasswordError> errors() {
+            return errors;
+        }
+
+        public PasswordPolicy policy() {
+            return policy;
         }
     }
 
-    public Result create(Supplier<PlaintextPassword> candidate) {
+    public HashedPassword create(Supplier<PlaintextPassword> candidate) throws Rejected {
         PasswordPolicy passwordPolicy = passwordPolicyInForce.current();
         PlaintextPassword plaintextPassword;
         try {
             plaintextPassword = candidate.get();
         } catch (IllegalArgumentException blank) {
-            return new Result(null, List.of(PasswordError.PASSWORD_BLANK), passwordPolicy);
+            throw new Rejected(List.of(PasswordError.PASSWORD_BLANK), passwordPolicy);
         }
         List<PasswordError> errors = new LinkedList<>();
         String password = plaintextPassword.value();
@@ -79,11 +83,9 @@ public class CreatePasswordHash {
             errors.add(PasswordError.SPECIAL_CHAR_REQUIRED);
         }
 
-        if (errors.isEmpty()) {
-            return new Result(hashAlgorithm.hash(plaintextPassword), errors, passwordPolicy);
+        if (!errors.isEmpty()) {
+            throw new Rejected(errors, passwordPolicy);
         }
-        else {
-            return new Result(null, errors, passwordPolicy);
-        }
+        return hashAlgorithm.hash(plaintextPassword);
     }
 }

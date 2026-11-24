@@ -4,6 +4,7 @@ import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.entity.AuthenticationBlock;
 import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.entity.SessionTokens;
+import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
 import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
@@ -16,7 +17,6 @@ import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
 import java.util.Optional;
-import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 
 public class Authentication {
 
@@ -90,26 +90,24 @@ public class Authentication {
                     authenticationBlock.get());
         }
 
-        VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(
-                request.email(),
-                request.plaintextPassword());
-
-        switch (verifyPasswordResult.status()) {
-            case CredentialsStatus.UserNotFound _, CredentialsStatus.WrongPassword _ -> {
-                // a miss is written down, whichever half was wrong — and a stranger's address came from
-                // a form, so they are not told whether the account exists; ChangePassword and StepUp
-                // take a Caller instead, and there a missing account is AccountGone
-                updateBruteForceRecords.execute(subject);
-                return new Result.Rejected();
-            }
-            case CredentialsStatus.Passed _ -> {}
+        User user;
+        try {
+            user = verifyPassword.verify(
+                    request.email(),
+                    request.plaintextPassword());
+        } catch (VerifyPassword.UserNotFound | VerifyPassword.WrongPassword wrongCredentials) {
+            // a miss is written down, whichever half was wrong — and a stranger's address came from
+            // a form, so they are not told whether the account exists; ChangePassword and StepUp
+            // take a Caller instead, and there a missing account is AccountGone
+            updateBruteForceRecords.execute(subject);
+            return new Result.Rejected();
         }
 
         // the STORED spelling from here on, not the one that was typed: everything after this — the
         // verified-address check, the factor lookup, the session and every lookup the token later
         // drives — is keyed by an address, and an account that can be reached by two spellings must
         // not be half-reached by one of them
-        Email email = verifyPasswordResult.user().email();
+        Email email = user.email();
 
         if (
                 userRepository.isPendingDeletion(email)
@@ -144,11 +142,11 @@ public class Authentication {
                     generateSession.create(email));
         }
 
-        OpenMfaChain.Result openMfaChainResult = openMfaChain.open(email, factors, source);
+        OpenMfaChain.Opened opened = openMfaChain.open(email, factors, source);
 
         return new Result.MfaRequired(
-                openMfaChainResult.ticket(),
-                openMfaChainResult.nextFactor(),
-                openMfaChainResult.challengeData());
+                opened.ticket(),
+                opened.nextFactor(),
+                opened.challengeData());
     }
 }

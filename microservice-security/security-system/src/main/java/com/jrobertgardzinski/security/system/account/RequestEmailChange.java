@@ -12,7 +12,6 @@ import com.jrobertgardzinski.security.domain.vo.EmailChange;
 import com.jrobertgardzinski.security.domain.vo.token.VerificationToken;
 
 import java.util.List;
-import com.jrobertgardzinski.email.domain.EmailStatus;
 
 
 /**
@@ -69,14 +68,11 @@ public class RequestEmailChange {
 
         // the same question Register asks of a new address, asked again of the one an account wants
         // to move to: a closed shop that only checks at registration is not closed
-        AdmitEmail.Result admitEmailResult = admitEmail.evaluate(newEmail);
-
-        switch (admitEmailResult.status()) {
-            case EmailStatus.Rejected _ -> {
-                return new Result.Rejected(
-                        admitEmailResult.errors());
-            }
-            case EmailStatus.Passed _ -> {}
+        try {
+            admitEmail.evaluate(newEmail);
+        } catch (AdmitEmail.Rejected rejected) {
+            return new Result.Rejected(
+                    rejected.errors());
         }
 
         if (

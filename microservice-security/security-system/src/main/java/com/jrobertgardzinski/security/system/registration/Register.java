@@ -2,11 +2,10 @@ package com.jrobertgardzinski.security.system.registration;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.email.domain.EmailError;
-import com.jrobertgardzinski.email.domain.EmailStatus;
 import com.jrobertgardzinski.email.domain.NormalizedEmail;
 import com.jrobertgardzinski.email.policy.AdmitEmail;
+import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
-import com.jrobertgardzinski.password.domain.PasswordStatus;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
@@ -37,13 +36,29 @@ public class Register {
         record Registered(User user) implements Result {}
 
         /**
-         * Both channels at once: the rules the address broke and the rules the password broke, at least
-         * one list non-empty, and the policy the password was judged against, because that policy can
-         * change between attempts; the address policy is a boot value the edge already holds.
+         * The address broke the e-mail policy and the password passed: the rules the address broke,
+         * in policy order. The address policy is a boot value the edge already holds.
          */
-        record Rejected(List<EmailError> emailErrors, List<PasswordError> passwordErrors,
-                        PasswordPolicy policy) implements Result {
-            public Rejected {
+        record EmailRejected(List<EmailError> emailErrors) implements Result {
+            public EmailRejected {
+                emailErrors = List.copyOf(emailErrors);
+            }
+        }
+
+        /**
+         * The address passed and the password broke the policy: the rules it broke, and the policy
+         * it was judged against, because that policy can change between attempts.
+         */
+        record PasswordRejected(List<PasswordError> passwordErrors, PasswordPolicy policy) implements Result {
+            public PasswordRejected {
+                passwordErrors = List.copyOf(passwordErrors);
+            }
+        }
+
+        /** Both channels at once, so the form shows both in one round. */
+        record BothRejected(List<EmailError> emailErrors, List<PasswordError> passwordErrors,
+                            PasswordPolicy policy) implements Result {
+            public BothRejected {
                 emailErrors = List.copyOf(emailErrors);
                 passwordErrors = List.copyOf(passwordErrors);
             }
@@ -54,43 +69,50 @@ public class Register {
 
     public Result execute(Supplier<Email> emailCandidate, Supplier<PlaintextPassword> passwordCandidate) {
 
-        AdmitEmail.Result admitEmailResult = admitEmail.evaluate(emailCandidate);
+        Email email;
+        try {
+            email = admitEmail.evaluate(emailCandidate);
+        } catch (AdmitEmail.Rejected emailRejected) {
+            // the password is judged even when the address already failed: the form shows both
+            // channels in one round
+            try {
+                createPasswordHash.create(passwordCandidate);
+            } catch (CreatePasswordHash.Rejected passwordRejected) {
+                return new Result.BothRejected(
+                        emailRejected.errors(),
+                        passwordRejected.errors(),
+                        passwordRejected.policy());
+            }
+            return new Result.EmailRejected(
+                    emailRejected.errors());
+        }
 
-        // judged even when the address already failed: the form shows both channels in one round.
         // A passing password is hashed here, BEFORE existsBy below: a taken address answers the same
         // 201 as a fresh one, and it must take the same time, or the clock tells the caller what
         // the body hides
-        CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(passwordCandidate);
-
-        if (
-                admitEmailResult.status() instanceof EmailStatus.Rejected ||
-                createPasswordHashResult.status() instanceof PasswordStatus.Rejected
-        ) {
-            return new Result.Rejected(
-                    admitEmailResult.errors(),
-                    createPasswordHashResult.errors(),
-                    createPasswordHashResult.policy());
+        HashedPassword hashedPassword;
+        try {
+            hashedPassword = createPasswordHash.create(passwordCandidate);
+        } catch (CreatePasswordHash.Rejected passwordRejected) {
+            return new Result.PasswordRejected(
+                    passwordRejected.errors(),
+                    passwordRejected.policy());
         }
 
         if (
                 userRepository.existsBy(
-                        NormalizedEmail.of(
-                                admitEmailResult.email()))
+                        NormalizedEmail.of(email))
         ) {
-            return new Result.EmailAlreadyTaken(
-                    admitEmailResult.email());
+            return new Result.EmailAlreadyTaken(email);
         }
 
         try {
             return new Result.Registered(
                     userRepository.save(
-                            new User(
-                                    admitEmailResult.email(),
-                                    createPasswordHashResult.hashedPassword())));
+                            new User(email, hashedPassword)));
         } catch (EmailAlreadyTakenException e) {
             // the storage uniqueness check lost the race after our existsBy check passed
-            return new Result.EmailAlreadyTaken(
-                    admitEmailResult.email());
+            return new Result.EmailAlreadyTaken(email);
         }
     }
 }

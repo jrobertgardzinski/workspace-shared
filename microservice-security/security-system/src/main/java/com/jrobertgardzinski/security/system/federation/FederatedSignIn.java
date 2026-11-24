@@ -163,12 +163,12 @@ public class FederatedSignIn {
                             SessionFamily.start()));
         }
 
-        OpenMfaChain.Result openMfaChainResult = openMfaChain.open(account, factors, source);
+        OpenMfaChain.Opened opened = openMfaChain.open(account, factors, source);
 
         return new Result.MfaRequired(
-                openMfaChainResult.ticket(),
-                openMfaChainResult.nextFactor(),
-                openMfaChainResult.challengeData());
+                opened.ticket(),
+                opened.nextFactor(),
+                opened.challengeData());
     }
 
     /**

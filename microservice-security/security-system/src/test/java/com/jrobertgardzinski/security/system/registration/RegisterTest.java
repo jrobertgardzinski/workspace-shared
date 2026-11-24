@@ -76,7 +76,7 @@ class RegisterTest {
     }
 
     @Property
-    @Label("Rejected when email, password, or both fail validation — the password refusal naming the policy in force")
+    @Label("Refused when email, password, or both fail validation — each refusal named, the password's naming the policy in force")
     void rejected_when_any_validation_fails(
             @ForAll boolean emailFails,
             @ForAll boolean passwordFails) {
@@ -88,13 +88,22 @@ class RegisterTest {
 
         Register.Result result = register.execute(() -> Email.of(email), () -> PlaintextPassword.of(password));
 
-        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
-        assertAll(
-                () -> assertEquals(emailFails ? List.of(EmailError.DOMAIN_BLOCKED) : List.of(), rejected.emailErrors()),
-                () -> assertEquals(passwordFails, !rejected.passwordErrors().isEmpty()),
-                () -> assertEquals(POLICY, rejected.policy()),
-                () -> Mockito.verify(userRepository, Mockito.never()).save(Mockito.any())
-        );
+        if (emailFails && passwordFails) {
+            Register.Result.BothRejected rejected = assertInstanceOf(Register.Result.BothRejected.class, result);
+            assertEquals(List.of(EmailError.DOMAIN_BLOCKED), rejected.emailErrors());
+            assertFalse(rejected.passwordErrors().isEmpty());
+            assertEquals(POLICY, rejected.policy());
+        }
+        if (emailFails && !passwordFails) {
+            Register.Result.EmailRejected rejected = assertInstanceOf(Register.Result.EmailRejected.class, result);
+            assertEquals(List.of(EmailError.DOMAIN_BLOCKED), rejected.emailErrors());
+        }
+        if (!emailFails && passwordFails) {
+            Register.Result.PasswordRejected rejected = assertInstanceOf(Register.Result.PasswordRejected.class, result);
+            assertFalse(rejected.passwordErrors().isEmpty());
+            assertEquals(POLICY, rejected.policy());
+        }
+        Mockito.verify(userRepository, Mockito.never()).save(Mockito.any());
     }
 
     @Example
@@ -102,7 +111,7 @@ class RegisterTest {
     void both_channels_refused_at_once() {
         Register.Result result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(WEAK_PASSWORD));
 
-        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
+        Register.Result.BothRejected rejected = assertInstanceOf(Register.Result.BothRejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(EmailError.DOMAIN_BLOCKED), rejected.emailErrors()),
                 () -> assertEquals(List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.UPPERCASE_REQUIRED,
@@ -118,7 +127,7 @@ class RegisterTest {
     void malformed_address_is_a_code_and_the_password_is_still_judged() {
         Register.Result result = register.execute(() -> Email.of("invalid"), () -> PlaintextPassword.of(WEAK_PASSWORD));
 
-        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
+        Register.Result.BothRejected rejected = assertInstanceOf(Register.Result.BothRejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(EmailError.EMAIL_FORMAT_INVALID), rejected.emailErrors()),
                 () -> assertFalse(rejected.passwordErrors().isEmpty(), "the password channel must be judged too"),
@@ -131,7 +140,7 @@ class RegisterTest {
     void blank_password_is_a_code() {
         Register.Result result = register.execute(() -> Email.of("a..b@gmail.com"), () -> PlaintextPassword.of("   "));
 
-        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
+        Register.Result.BothRejected rejected = assertInstanceOf(Register.Result.BothRejected.class, result);
         assertAll(
                 () -> assertEquals(List.of(EmailError.LOCAL_PART_CONSECUTIVE_DOTS), rejected.emailErrors()),
                 () -> assertEquals(List.of(PasswordError.PASSWORD_BLANK), rejected.passwordErrors()),
@@ -140,12 +149,11 @@ class RegisterTest {
     }
 
     @Example
-    @Label("a refused address with a fine password carries no password refusal at all")
+    @Label("a refused address with a fine password is refused for the address alone")
     void fine_password_carries_no_failure() {
         Register.Result result = register.execute(() -> Email.of(BLOCKED_EMAIL), () -> PlaintextPassword.of(PASSWORD));
 
-        Register.Result.Rejected rejected = assertInstanceOf(Register.Result.Rejected.class, result);
-        assertEquals(List.of(), rejected.passwordErrors());
+        assertInstanceOf(Register.Result.EmailRejected.class, result);
     }
 
     @Property
@@ -158,7 +166,7 @@ class RegisterTest {
         if (row.get2().isEmpty()) {
             assertInstanceOf(Register.Result.Registered.class, result);
         } else {
-            assertEquals(row.get2(), assertInstanceOf(Register.Result.Rejected.class, result).emailErrors());
+            assertEquals(row.get2(), assertInstanceOf(Register.Result.EmailRejected.class, result).emailErrors());
         }
     }
 

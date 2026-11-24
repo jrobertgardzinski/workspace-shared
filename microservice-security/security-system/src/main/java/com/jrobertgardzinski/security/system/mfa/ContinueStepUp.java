@@ -3,7 +3,6 @@ package com.jrobertgardzinski.security.system.mfa;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
 
 import java.util.Optional;
-import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 
 /**
  * The second half of a step-up: a factor proof presented against the ticket {@link StepUp} opened.
@@ -44,7 +43,17 @@ public class ContinueStepUp {
         // a chain that completes closes its ticket
         Optional<StepUpStore.StepUpPending> stepUpPending = store.find(ticket);
 
-        PresentProof.Result presentProofResult = presentProof.present(ticket, proof);
+        PresentProof.Passed passed;
+        try {
+            passed = presentProof.present(ticket, proof);
+        } catch (PresentProof.InvalidTicket invalidTicket) {
+            return new Result.InvalidTicket();
+        } catch (PresentProof.TooManyAttempts tooManyAttempts) {
+            return new Result.TooManyAttempts();
+        } catch (PresentProof.WrongProof wrongProof) {
+            return new Result.WrongProof(
+                    wrongProof.chain().attemptsLeft());
+        }
 
         if (
                 stepUpPending.isEmpty()
@@ -52,18 +61,8 @@ public class ContinueStepUp {
             return new Result.InvalidTicket();
         }
 
-        switch (presentProofResult.status()) {
-            case ProofStatus.InvalidTicket _ -> { return new Result.InvalidTicket(); }
-            case ProofStatus.TooManyAttempts _ -> { return new Result.TooManyAttempts(); }
-            case ProofStatus.WrongProof _ -> {
-                return new Result.WrongProof(
-                        presentProofResult.chain().attemptsLeft());
-            }
-            case ProofStatus.Passed _ -> {}
-        }
-
         if (
-                presentProofResult.chainCompleted()
+                passed.chainCompleted()
         ) {
             elevation.elevate(
                     stepUpPending.get().accessToken(),
@@ -73,7 +72,7 @@ public class ContinueStepUp {
 
         return new Result.FactorRequired(
                 ticket,
-                presentProofResult.chain().currentType(),
-                presentProofResult.chain().challengeData());
+                passed.chain().currentType(),
+                passed.chain().challengeData());
     }
 }

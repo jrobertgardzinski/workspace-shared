@@ -2,6 +2,7 @@ package com.jrobertgardzinski.security.system.account;
 
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Caller;
+import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
@@ -12,8 +13,6 @@ import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
 import java.util.function.Supplier;
-import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
-import com.jrobertgardzinski.password.domain.PasswordStatus;
 
 /**
  * Changes a signed-in user's password: the current password must match, and the new password must
@@ -80,28 +79,26 @@ public class ChangePassword {
 
         Email email = caller.email();
 
-        VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, currentPasswordCandidate);
-
-        switch (verifyPasswordResult.status()) {
-            case CredentialsStatus.UserNotFound _ -> { return new Result.AccountGone(); }
-            case CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
-            case CredentialsStatus.Passed _ -> {}
+        try {
+            verifyPassword.verify(email, currentPasswordCandidate);
+        } catch (VerifyPassword.UserNotFound gone) {
+            return new Result.AccountGone();
+        } catch (VerifyPassword.WrongPassword wrong) {
+            return new Result.WrongPassword();
         }
 
-        CreatePasswordHash.Result createPasswordHashResult = createPasswordHash.create(newPasswordCandidate);
-
-        switch (createPasswordHashResult.status()) {
-            case PasswordStatus.Rejected _ -> {
-                return new Result.Rejected(
-                        createPasswordHashResult.errors(),
-                        createPasswordHashResult.policy());
-            }
-            case PasswordStatus.Passed _ -> {}
+        HashedPassword hashedPassword;
+        try {
+            hashedPassword = createPasswordHash.create(newPasswordCandidate);
+        } catch (CreatePasswordHash.Rejected rejected) {
+            return new Result.Rejected(
+                    rejected.errors(),
+                    rejected.policy());
         }
 
         userRepository.updatePassword(
                 email,
-                createPasswordHashResult.hashedPassword());
+                hashedPassword);
 
         // the old password's sessions do not survive it
         sessionRepository.revokeAllSessions(email);

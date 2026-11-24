@@ -3,7 +3,6 @@ package com.jrobertgardzinski.security.system.roles;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.vo.Role;
-import com.jrobertgardzinski.security.domain.vo.RoleStatus;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -18,16 +17,26 @@ public final class RequireRole {
         this.rolesOf = rolesOf;
     }
 
-    /** {@link RoleStatus.Passed} when the caller holds the role; otherwise the one refusal that names it. */
-    public RoleStatus check(Caller caller, Role required) {
+    /**
+     * The caller lacks the role: one refusal per role, so a non-admin learns only that they are not
+     * one. The wire code for each ({@code NOT_AN_ADMIN}) is the edge's to spell.
+     */
+    public static final class NotAUser extends Exception {}
+
+    public static final class NotAModerator extends Exception {}
+
+    public static final class NotAnAdmin extends Exception {}
+
+    /** Returns when the caller holds the role; otherwise throws the one refusal that names it. */
+    public void check(Caller caller, Role required) throws NotAUser, NotAModerator, NotAnAdmin {
         if (rolesInForce(caller.email()).contains(required)) {
-            return new RoleStatus.Passed();
+            return;
         }
-        return switch (required) {
-            case USER -> new RoleStatus.NotAUser();
-            case MODERATOR -> new RoleStatus.NotAModerator();
-            case ADMIN -> new RoleStatus.NotAnAdmin();
-        };
+        switch (required) {
+            case USER -> throw new NotAUser();
+            case MODERATOR -> throw new NotAModerator();
+            case ADMIN -> throw new NotAnAdmin();
+        }
     }
 
     public Set<Role> rolesInForce(Email caller) {

@@ -14,7 +14,6 @@ import com.jrobertgardzinski.security.system.password.VerifyPassword;
 
 import java.util.List;
 import java.util.function.Supplier;
-import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 
 /**
  * Re-proves a caller for a sensitive action. The requirement per action comes from the
@@ -123,12 +122,12 @@ public class StepUp {
         ) {
             // No password offered, or a blank one, does not construct, and it answers like a wrong
             // one: VerifyPassword says so.
-            VerifyPassword.Result verifyPasswordResult = verifyPassword.verify(email, passwordCandidate);
-
-            switch (verifyPasswordResult.status()) {
-                case CredentialsStatus.UserNotFound _ -> { return new Result.AccountGone(); }
-                case CredentialsStatus.WrongPassword _ -> { return new Result.WrongPassword(); }
-                case CredentialsStatus.Passed _ -> {}
+            try {
+                verifyPassword.verify(email, passwordCandidate);
+            } catch (VerifyPassword.UserNotFound gone) {
+                return new Result.AccountGone();
+            } catch (VerifyPassword.WrongPassword wrong) {
+                return new Result.WrongPassword();
             }
         }
 

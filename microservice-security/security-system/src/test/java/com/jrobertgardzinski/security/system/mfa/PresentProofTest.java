@@ -6,7 +6,6 @@ import com.jrobertgardzinski.security.domain.entity.EnrolledFactor;
 import com.jrobertgardzinski.security.domain.port.CodeChannel;
 import com.jrobertgardzinski.security.domain.repository.RecoveryCodeRepository;
 import com.jrobertgardzinski.security.domain.vo.FactorType;
-import com.jrobertgardzinski.security.domain.vo.ProofStatus;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.DisplayName;
@@ -20,6 +19,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * One proof against one ticket, in the one place both a sign-in and a step-up now go through.
@@ -56,10 +56,7 @@ class PresentProofTest {
     @Test
     @DisplayName("a ticket nobody opened is invalid")
     void an_unknown_ticket_is_invalid() {
-        PresentProof.Result result = presentProof.present("a-ticket-nobody-opened", "000000");
-
-        assertThat(result.status()).isInstanceOf(ProofStatus.InvalidTicket.class);
-        assertThat(result.chain()).isNull();
+        assertThrows(PresentProof.InvalidTicket.class, () -> presentProof.present("a-ticket-nobody-opened", "000000"));
     }
 
     @Test
@@ -68,9 +65,7 @@ class PresentProofTest {
         String ticket = store.open(mfaChain.begin(USER, List.of(EMAIL_FACTOR)));
         Clock later = Clock.offset(CLOCK, Duration.ofMinutes(TICKET_TTL_MINUTES + 1));
 
-        PresentProof.Result result = new PresentProof(mfaChain, store, later).present(ticket, mailbox.lastCode);
-
-        assertThat(result.status()).isInstanceOf(ProofStatus.InvalidTicket.class);
+        assertThrows(PresentProof.InvalidTicket.class, () -> new PresentProof(mfaChain, store, later).present(ticket, mailbox.lastCode));
         assertThat(store.find(ticket)).isEmpty();
     }
 
@@ -79,10 +74,9 @@ class PresentProofTest {
     void a_wrong_proof_costs_a_try() {
         String ticket = store.open(mfaChain.begin(USER, List.of(EMAIL_FACTOR)));
 
-        PresentProof.Result result = presentProof.present(ticket, "000000");
+        PresentProof.WrongProof wrongProof = assertThrows(PresentProof.WrongProof.class, () -> presentProof.present(ticket, "000000"));
 
-        assertThat(result.status()).isInstanceOf(ProofStatus.WrongProof.class);
-        assertThat(result.chain().attemptsLeft()).isEqualTo(CONFIG.maxAttempts().value() - 1);
+        assertThat(wrongProof.chain().attemptsLeft()).isEqualTo(CONFIG.maxAttempts().value() - 1);
         assertThat(store.find(ticket)).isPresent();
     }
 
@@ -91,46 +85,42 @@ class PresentProofTest {
     void the_last_try_costs_the_ticket() {
         String ticket = store.open(mfaChain.begin(USER, List.of(EMAIL_FACTOR)));
 
-        PresentProof.Result result = null;
-        for (int attempt = 1; attempt <= CONFIG.maxAttempts().value(); attempt++) {
-            result = presentProof.present(ticket, "000000");
+        for (int attempt = 1; attempt < CONFIG.maxAttempts().value(); attempt++) {
+            assertThrows(PresentProof.WrongProof.class, () -> presentProof.present(ticket, "000000"));
         }
+        PresentProof.TooManyAttempts tooManyAttempts = assertThrows(PresentProof.TooManyAttempts.class, () -> presentProof.present(ticket, "000000"));
 
-        assertThat(result.status()).isInstanceOf(ProofStatus.TooManyAttempts.class);
-        assertThat(result.chain())
+        assertThat(tooManyAttempts.chain())
                 .as("the chain still comes back, so a sign-in knows whom to charge the miss to")
                 .isNotNull();
         assertThat(store.find(ticket)).isEmpty();
-        assertThat(presentProof.present(ticket, mailbox.lastCode).status())
-                .isInstanceOf(ProofStatus.InvalidTicket.class);
+        assertThrows(PresentProof.InvalidTicket.class, () -> presentProof.present(ticket, mailbox.lastCode));
     }
 
     @Test
     @DisplayName("the right proof for the last factor completes the chain and closes the ticket")
-    void the_right_proof_completes_a_one_factor_chain() {
+    void the_right_proof_completes_a_one_factor_chain() throws Exception {
         String ticket = store.open(mfaChain.begin(USER, List.of(EMAIL_FACTOR)));
 
-        PresentProof.Result result = presentProof.present(ticket, mailbox.lastCode);
+        PresentProof.Passed passed = presentProof.present(ticket, mailbox.lastCode);
 
-        assertThat(result.status()).isInstanceOf(ProofStatus.Passed.class);
-        assertThat(result.chainCompleted()).isTrue();
+        assertThat(passed.chainCompleted()).isTrue();
         assertThat(store.find(ticket)).isEmpty();
     }
 
     @Test
     @DisplayName("the right proof with a factor still owed moves the chain on and keeps the ticket")
-    void the_right_proof_advances_a_longer_chain() {
+    void the_right_proof_advances_a_longer_chain() throws Exception {
         String ticket = store.open(mfaChain.begin(USER, List.of(EMAIL_FACTOR, SMS_FACTOR)));
 
-        PresentProof.Result result = presentProof.present(ticket, mailbox.lastCode);
+        PresentProof.Passed passed = presentProof.present(ticket, mailbox.lastCode);
 
-        assertThat(result.status()).isInstanceOf(ProofStatus.Passed.class);
-        assertThat(result.chainCompleted()).isFalse();
-        assertThat(result.chain().currentType()).isEqualTo(FactorType.SMS_CODE);
-        assertThat(result.chain().attemptsLeft())
+        assertThat(passed.chainCompleted()).isFalse();
+        assertThat(passed.chain().currentType()).isEqualTo(FactorType.SMS_CODE);
+        assertThat(passed.chain().attemptsLeft())
                 .as("a new factor starts with a full set of tries")
                 .isEqualTo(CONFIG.maxAttempts().value());
-        assertThat(store.find(ticket)).contains(result.chain());
+        assertThat(store.find(ticket)).contains(passed.chain());
     }
 
     /** A channel that keeps the code instead of sending it, so the test can answer the challenge. */

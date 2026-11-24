@@ -8,7 +8,6 @@ import com.jrobertgardzinski.password.config.SpecialChars;
 import com.jrobertgardzinski.password.domain.HashAlgorithmPort;
 import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PasswordError;
-import com.jrobertgardzinski.password.domain.PasswordStatus;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -19,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Epic("Password")
 @Feature("Use case")
@@ -33,9 +33,11 @@ class CreatePasswordHashRulesTest {
     void brokenRulesAreNamedInPolicyOrder(@ForAll("refusals") Tuple.Tuple2<String, List<PasswordError>> row) {
         CreatePasswordHash useCase = new CreatePasswordHash(explodingAlgorithm(), () -> DEFAULTS);
 
-        CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of(row.get1()));
-
-        assertThat(result).isEqualTo(new CreatePasswordHash.Result(null, row.get2(), DEFAULTS));
+        assertThatThrownBy(() -> useCase.create(() -> PlaintextPassword.of(row.get1())))
+                .isInstanceOfSatisfying(CreatePasswordHash.Rejected.class, rejected -> {
+                    assertThat(rejected.errors()).isEqualTo(row.get2());
+                    assertThat(rejected.policy()).isEqualTo(DEFAULTS);
+                });
     }
 
     @Provide
@@ -53,25 +55,20 @@ class CreatePasswordHashRulesTest {
 
     @Example
     @Label("a password that meets every rule comes back hashed by the algorithm")
-    void passingPasswordIsHashed() {
+    void passingPasswordIsHashed() throws Exception {
         CreatePasswordHash useCase = new CreatePasswordHash(stubAlgorithm(), () -> DEFAULTS);
 
-        CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of("Str0ng!pass"));
-
-        assertThat(result).isEqualTo(new CreatePasswordHash.Result(new HashedPassword("hash:Str0ng!pass"), List.of(), DEFAULTS));
-        assertThat(result.status()).isInstanceOf(PasswordStatus.Passed.class);
+        assertThat(useCase.create(() -> PlaintextPassword.of("Str0ng!pass"))).isEqualTo(new HashedPassword("hash:Str0ng!pass"));
     }
 
     @Example
     @Label("a rule switched off in the policy is not applied")
-    void switchedOffRulesAreNotApplied() {
+    void switchedOffRulesAreNotApplied() throws Exception {
         PasswordPolicy lenient = new PasswordPolicy(MinLength.DEFAULT, SpecialChars.DEFAULT,
                 new RequiresUppercase(false), new RequiresLowercase(false), new RequiresDigit(false));
         CreatePasswordHash useCase = new CreatePasswordHash(stubAlgorithm(), () -> lenient);
 
-        CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of("!!!!!"));
-
-        assertThat(result).isEqualTo(new CreatePasswordHash.Result(new HashedPassword("hash:!!!!!"), List.of(), lenient));
+        assertThat(useCase.create(() -> PlaintextPassword.of("!!!!!"))).isEqualTo(new HashedPassword("hash:!!!!!"));
     }
 
     @Example
@@ -80,10 +77,11 @@ class CreatePasswordHashRulesTest {
         PasswordPolicy strict = PasswordPolicy.defaultsExcept(new MinLength(12), new SpecialChars("#?!"));
         CreatePasswordHash useCase = new CreatePasswordHash(explodingAlgorithm(), () -> strict);
 
-        CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of("Str0ngPass*"));
-
-        assertThat(result).isEqualTo(new CreatePasswordHash.Result(null,
-                List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.SPECIAL_CHAR_REQUIRED), strict));
+        assertThatThrownBy(() -> useCase.create(() -> PlaintextPassword.of("Str0ngPass*")))
+                .isInstanceOfSatisfying(CreatePasswordHash.Rejected.class, rejected -> {
+                    assertThat(rejected.errors()).containsExactly(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.SPECIAL_CHAR_REQUIRED);
+                    assertThat(rejected.policy()).isEqualTo(strict);
+                });
     }
 
     @Example
@@ -91,10 +89,11 @@ class CreatePasswordHashRulesTest {
     void blankCandidateIsACodeOfItsOwn() {
         CreatePasswordHash useCase = new CreatePasswordHash(explodingAlgorithm(), () -> DEFAULTS);
 
-        CreatePasswordHash.Result result = useCase.create(() -> PlaintextPassword.of("   "));
-
-        assertThat(result).isEqualTo(new CreatePasswordHash.Result(null, List.of(PasswordError.PASSWORD_BLANK), DEFAULTS));
-        assertThat(result.status()).isInstanceOf(PasswordStatus.Rejected.class);
+        assertThatThrownBy(() -> useCase.create(() -> PlaintextPassword.of("   ")))
+                .isInstanceOfSatisfying(CreatePasswordHash.Rejected.class, rejected -> {
+                    assertThat(rejected.errors()).containsExactly(PasswordError.PASSWORD_BLANK);
+                    assertThat(rejected.policy()).isEqualTo(DEFAULTS);
+                });
     }
 
     @Example
@@ -104,12 +103,15 @@ class CreatePasswordHashRulesTest {
         AtomicReference<PasswordPolicy> inForce = new AtomicReference<>(DEFAULTS);
         CreatePasswordHash useCase = new CreatePasswordHash(explodingAlgorithm(), inForce::get);
 
-        CreatePasswordHash.Result underDefaults = useCase.create(() -> PlaintextPassword.of("weak"));
+        assertThatThrownBy(() -> useCase.create(() -> PlaintextPassword.of("weak")))
+                .isInstanceOfSatisfying(CreatePasswordHash.Rejected.class, rejected ->
+                        assertThat(rejected.policy()).isEqualTo(DEFAULTS));
         inForce.set(strict);
-        CreatePasswordHash.Result underStrict = useCase.create(() -> PlaintextPassword.of("Str0ng!pass"));
-
-        assertThat(underDefaults.policy()).isEqualTo(DEFAULTS);
-        assertThat(underStrict).isEqualTo(new CreatePasswordHash.Result(null, List.of(PasswordError.MIN_LENGTH_NOT_MET), strict));
+        assertThatThrownBy(() -> useCase.create(() -> PlaintextPassword.of("Str0ng!pass")))
+                .isInstanceOfSatisfying(CreatePasswordHash.Rejected.class, rejected -> {
+                    assertThat(rejected.errors()).containsExactly(PasswordError.MIN_LENGTH_NOT_MET);
+                    assertThat(rejected.policy()).isEqualTo(strict);
+                });
     }
 
     // --- stubs ---

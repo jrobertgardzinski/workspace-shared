@@ -6,7 +6,6 @@ import com.jrobertgardzinski.password.domain.HashedPassword;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.security.domain.entity.User;
 import com.jrobertgardzinski.security.domain.repository.UserRepository;
-import com.jrobertgardzinski.security.domain.vo.CredentialsStatus;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -38,25 +37,31 @@ public class VerifyPassword {
     }
 
     /**
-     * The account, present only when the password {@link CredentialsStatus.Passed passed} ({@code null} otherwise), and
-     * which of the three it was.
+     * No account goes by that address. Named apart from {@link WrongPassword} for the use cases;
+     * the wire must answer both alike, or a guess learns which half it got wrong.
      */
-    public record Result(User user, CredentialsStatus status) {}
+    public static final class UserNotFound extends Exception {}
 
-    /** A candidate that does not construct (blank) is no password at all, so it is a wrong one. */
-    public Result verify(Email email, Supplier<PlaintextPassword> passwordCandidate) {
+    /** The account exists and the password is not its own. */
+    public static final class WrongPassword extends Exception {}
+
+    /**
+     * The account, once the password proved to be its own. A candidate that does not construct
+     * (blank) is no password at all, so it is a wrong one.
+     */
+    public User verify(Email email, Supplier<PlaintextPassword> passwordCandidate) throws UserNotFound, WrongPassword {
 
         PlaintextPassword plaintextPassword;
         try {
             plaintextPassword = passwordCandidate.get();
         } catch (IllegalArgumentException blank) {
-            return new Result(null, new CredentialsStatus.WrongPassword());
+            throw new WrongPassword();
         }
 
         return verify(email, plaintextPassword);
     }
 
-    public Result verify(Email email, PlaintextPassword plaintextPassword) {
+    public User verify(Email email, PlaintextPassword plaintextPassword) throws UserNotFound, WrongPassword {
 
         Optional<User> user = userRepository.findBy(email);
 
@@ -73,15 +78,15 @@ public class VerifyPassword {
         if (
                 user.isEmpty()
         ) {
-            return new Result(null, new CredentialsStatus.UserNotFound());
+            throw new UserNotFound();
         }
 
         if (
                 !passwordMatches
         ) {
-            return new Result(null, new CredentialsStatus.WrongPassword());
+            throw new WrongPassword();
         }
 
-        return new Result(user.get(), new CredentialsStatus.Passed());
+        return user.get();
     }
 }

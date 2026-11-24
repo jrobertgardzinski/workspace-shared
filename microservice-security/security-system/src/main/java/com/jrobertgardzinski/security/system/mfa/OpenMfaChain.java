@@ -20,9 +20,9 @@ public class OpenMfaChain {
     }
 
     /** The ticket the proofs are presented against, the factor due first, and its challenge if it has one. */
-    public record Result(String ticket, FactorType nextFactor, String challengeData) {}
+    public record Opened(String ticket, FactorType nextFactor, String challengeData) {}
 
-    public Result open(Email email, List<EnrolledFactor> factors, Source source) {
+    public Opened open(Email email, List<EnrolledFactor> factors, Source source) {
 
         // the chain remembers where it began, so a wrong proof is charged to the same pair a wrong
         // password is — see PendingAuthentication. Asked for here, once, so that no way of opening
@@ -30,7 +30,7 @@ public class OpenMfaChain {
         PendingAuthentication pendingAuthentication = mfaChain.begin(email, factors).startedFrom(source);
         String ticket = pendingAuthenticationStore.open(pendingAuthentication);
 
-        return new Result(
+        return new Opened(
                 ticket,
                 factors.get(0).type(),
                 pendingAuthentication.challengeData());

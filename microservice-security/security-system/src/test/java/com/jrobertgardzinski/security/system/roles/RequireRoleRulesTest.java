@@ -3,7 +3,6 @@ package com.jrobertgardzinski.security.system.roles;
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.security.domain.vo.Role;
-import com.jrobertgardzinski.security.domain.vo.RoleStatus;
 import io.qameta.allure.Allure;
 import io.qameta.allure.Epic;
 import io.qameta.allure.Feature;
@@ -21,6 +20,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Epic("Security")
 @Feature("Roles")
@@ -39,7 +40,7 @@ class RequireRoleRulesTest {
     @Label("a role the store granted satisfies the requirement")
     void grantedRoleSatisfies() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of(ADMIN, Set.of(Role.USER, Role.ADMIN))));
-        assertThat(require.check(new Caller(ADMIN), Role.ADMIN)).isInstanceOf(RoleStatus.Passed.class);
+        assertThatCode(() -> require.check(new Caller(ADMIN), Role.ADMIN)).doesNotThrowAnyException();
         assertThat(require.rolesInForce(ADMIN)).containsExactlyInAnyOrder(Role.USER, Role.ADMIN);
     }
 
@@ -47,15 +48,15 @@ class RequireRoleRulesTest {
     @Label("a bootstrap admin is ADMIN before any grant exists")
     void bootstrapAdminIsAdmin() {
         RequireRole require = new RequireRole(BootstrapAdmins.of(List.of(" Admin@Example.com ")), store(Map.of()));
-        assertThat(require.check(new Caller(ADMIN), Role.ADMIN)).isInstanceOf(RoleStatus.Passed.class);
+        assertThatCode(() -> require.check(new Caller(ADMIN), Role.ADMIN)).doesNotThrowAnyException();
         assertThat(require.rolesInForce(ADMIN)).contains(Role.ADMIN);
     }
 
     @Example
-    @Label("a USER without the role is refused with NOT_AN_ADMIN")
+    @Label("a USER without the role is refused as NotAnAdmin")
     void memberIsRefused() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of(MEMBER, Set.of(Role.USER))));
-        assertThat(require.check(new Caller(MEMBER), Role.ADMIN)).isInstanceOf(RoleStatus.NotAnAdmin.class);
+        assertThatThrownBy(() -> require.check(new Caller(MEMBER), Role.ADMIN)).isInstanceOf(RequireRole.NotAnAdmin.class);
     }
 
     @Example
@@ -63,20 +64,20 @@ class RequireRoleRulesTest {
     void strangerHasNoRoles() {
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of()));
         assertThat(require.rolesInForce(STRANGER)).isEmpty();
-        assertThat(require.check(new Caller(STRANGER), Role.USER)).isInstanceOf(RoleStatus.NotAUser.class);
+        assertThatThrownBy(() -> require.check(new Caller(STRANGER), Role.USER)).isInstanceOf(RequireRole.NotAUser.class);
     }
 
     @Property
-    @Label("every role has a refusal code of its own, and it names the missing role")
-    void everyRoleHasItsOwnCode(@ForAll("roles") Role required) {
+    @Label("every role has a refusal of its own, and it names the missing role")
+    void everyRoleHasItsOwnRefusal(@ForAll("roles") Role required) {
         Allure.parameter("required", required);
         RequireRole require = new RequireRole(BootstrapAdmins.none(), store(Map.of()));
-        Class<? extends RoleStatus> refusal = switch (required) {
-            case USER -> RoleStatus.NotAUser.class;
-            case MODERATOR -> RoleStatus.NotAModerator.class;
-            case ADMIN -> RoleStatus.NotAnAdmin.class;
+        Class<? extends Exception> refusal = switch (required) {
+            case USER -> RequireRole.NotAUser.class;
+            case MODERATOR -> RequireRole.NotAModerator.class;
+            case ADMIN -> RequireRole.NotAnAdmin.class;
         };
-        assertThat(require.check(new Caller(STRANGER), required)).isInstanceOf(refusal);
+        assertThatThrownBy(() -> require.check(new Caller(STRANGER), required)).isInstanceOf(refusal);
     }
 
     @Provide
@@ -88,7 +89,7 @@ class RequireRoleRulesTest {
     @Label("a blank bootstrap entry is ignored, an invalid one is refused at declaration")
     void bootstrapListIsParsedNotTrusted() {
         assertThat(BootstrapAdmins.of(List.of("", "  ")).admins()).isEmpty();
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> BootstrapAdmins.of(List.of("not-an-address")))
+        assertThatThrownBy(() -> BootstrapAdmins.of(List.of("not-an-address")))
                 .isInstanceOf(RuntimeException.class);
     }
 }
