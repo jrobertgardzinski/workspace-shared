@@ -1,6 +1,18 @@
 # Plan: `security-application` jako pomost (2026-10-03)
 
-Zaplanowane na polecenie właściciela 2026-10-03. **Plan, nie wykonanie — nic jeszcze nie zmienione.**
+Zaplanowane na polecenie właściciela 2026-10-03. **Kroki 1–2 WYKONANE 2026-11-24** (rejestracja,
+authenticate); kroki 3–8 czekają na obejrzenie kształtu przez właściciela.
+
+Odstępstwa od tekstu poniżej, przyjęte przy wykonaniu (reguła Roberta z 2026-11-24: „application
+to most między frameworkiem, który zna tylko javowe klasy standardowe i prymitywy, a domeną"):
+- serwis przyjmuje WYŁĄCZNIE Stringi (adres IP też: `ClientIpResolver` oddaje `.value()`), nie
+  `IpAddress`;
+- `Outcome` serwisu niesie wyłącznie typy standardowe i własny rekord `BrokenRule(code, parameter)`,
+  nie `EmailErrorCodes`/`PasswordPolicy`; trzy warianty odmowy `Register` zlewają się w jedno
+  `Rejected(emailErrors, passwordErrors)`, kanał, który przeszedł, to pusta lista;
+- `authenticate` ma osobny wariant `UnreadableCredentials` (401 bez ciała, bez wpisu do liczników),
+  żeby drut został bajt w bajt;
+- dowód puszczony jako pełne `verify`, nie lista testów.
 
 ## Reguła właściciela (cel, nie propozycja)
 

@@ -1,5 +1,7 @@
 package com.jrobertgardzinski;
 
+import com.jrobertgardzinski.security.application.TransactionBoundary;
+
 import com.jrobertgardzinski.security.system.authentication.ContinueAuthentication;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import io.micronaut.http.HttpRequest;

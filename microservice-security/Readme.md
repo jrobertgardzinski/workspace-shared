@@ -55,12 +55,17 @@ A security microservice (registration, authentication, password hashing) built w
 never the ones above:
 
 ```
-UI  →  Infrastructure  →  System  →  Config  →  Domain
+UI  →  Infrastructure  →  Application  →  System  →  Config  →  Domain
 ```
 
-`security-application` is the sixth module and stands beside that chain rather than inside it: it
-has **no `src/main`** — only Cucumber glue that drives the very same use cases in process, without
-HTTP. Nothing on the production path depends on it, which is why the chain above skips it.
+`security-application` is the bridge between the framework and the domain. The framework side
+knows only standard Java classes and primitives; an application service takes those, builds the
+domain's objects from them, runs the use cases and answers in plain values again
+(`RegistrationService`, `AuthenticationService`). Infrastructure is left with two jobs: binding
+production adapters to ports, and mapping the application onto the framework (beans, controllers).
+The bridge is being built endpoint by endpoint (since 2026-11-24): the controllers not moved yet
+still call the use cases themselves. The module's tests also hold the Cucumber glue that drives
+the use cases in process, without HTTP.
 
 ### The three entry points — one behaviour, many doors
 

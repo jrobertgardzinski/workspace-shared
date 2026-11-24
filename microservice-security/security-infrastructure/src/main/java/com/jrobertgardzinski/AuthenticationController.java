@@ -1,21 +1,15 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.password.domain.PlaintextPassword;
-import com.jrobertgardzinski.security.domain.vo.AuthenticationRequest;
-import com.jrobertgardzinski.security.domain.vo.Source;
-import com.jrobertgardzinski.security.system.authentication.Authentication;
-import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
-import jakarta.inject.Named;
+import com.jrobertgardzinski.security.application.authentication.AuthenticationService;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Body;
 import io.micronaut.http.annotation.Controller;
+import io.micronaut.http.annotation.Post;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
-import io.micronaut.http.annotation.Post;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -23,8 +17,8 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * HTTP entry point for authentication. Drives the same {@link Authentication} use case the
- * application-level Cucumber glue drives directly — "same behaviour, different entry point". The
+ * HTTP entry point for authentication. It reads the request into plain strings, hands them to
+ * {@link AuthenticationService}, and renders the outcome. The
  * source IP that brute-force protection keys on is resolved from the connection (see
  * {@link ClientIpResolver}), not from the request body, so a caller cannot pick its own source.
  * The User-Agent header rides along as observed context — forensics only, never part of the key.
@@ -51,70 +45,56 @@ import java.util.Map;
 @Controller("/authenticate")
 public class AuthenticationController {
 
-    private final Authentication authentication;
+    private final AuthenticationService authenticationService;
     private final ClientIpResolver ipResolver;
     private final RefreshCookies refreshCookies;
-    private final TransactionBoundary transactionBoundary;
-    private final SourceThrottle throttle;
     private final Clock clock;
 
-    public AuthenticationController(Authentication authentication, ClientIpResolver ipResolver,
-                                    RefreshCookies refreshCookies, TransactionBoundary transactionBoundary,
-                                    @Named("authentication") SourceThrottle throttle, Clock clock) {
-        this.authentication = authentication;
+    public AuthenticationController(AuthenticationService authenticationService, ClientIpResolver ipResolver,
+                                    RefreshCookies refreshCookies, Clock clock) {
+        this.authenticationService = authenticationService;
         this.ipResolver = ipResolver;
         this.refreshCookies = refreshCookies;
-        this.transactionBoundary = transactionBoundary;
-        this.throttle = throttle;
         this.clock = clock;
     }
 
     @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     public HttpResponse<Map<String, Object>> authenticate(@Body Map<String, String> body, HttpRequest<?> request) {
-        Source source = new Source(ipResolver.resolve(request),
+        AuthenticationService.Outcome outcome = authenticationService.authenticate(
+                body.get("email"),
+                body.get("password"),
+                ipResolver.resolve(request).value(),
                 request.getHeaders().findFirst("User-Agent").orElse(""));
-        // the per-account guard counts FAILURES and a correct password clears them, so it does not
-        // bound how many attempts one source may start — this does
-        SourceThrottle.Decision decision = throttle.check(source.ipAddress());
-        if (!decision.allowed()) {
-            return HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
-                    .header("Retry-After", String.valueOf(decision.retryAfterSeconds()))
-                    .body(Refusal.alsoAsError("TOO_MANY_ATTEMPTS"));
-        }
-        AuthenticationRequest authenticationRequest;
-        try {
-            authenticationRequest = new AuthenticationRequest(
-                    source, Email.of(body.get("email")), PlaintextPassword.of(body.get("password")));
-        } catch (IllegalArgumentException unreadable) {
-            // A credential the domain cannot even construct used to escape as a 500 carrying the
-            // domain's own sentence: an Internal Server Error for a typo, plus a stack trace in the
-            // log for every one of them. To the caller it is not a different KIND of failure — an
-            // address that cannot exist owns no account — so it answers exactly like a wrong
-            // password, and learns nothing the 401 did not already say. It costs no lookup and
-            // therefore no brute-force count: there is no account here to guess at.
-            return HttpResponse.status(HttpStatus.UNAUTHORIZED);
-        }
-        Authentication.Result result = transactionBoundary.execute(() -> authentication.execute(authenticationRequest));
 
-        return switch (result) {
-            case Authentication.Result.Authenticated authenticated ->
-                    HttpResponse.ok(Map.<String, Object>of("accessToken", authenticated.session().plainAccessToken()))
-                            .cookie(refreshCookies.issue(authenticated.session().plainRefreshToken()));
-            case Authentication.Result.Rejected rejected ->
+        return switch (outcome) {
+            case AuthenticationService.Outcome.Authenticated authenticated ->
+                    HttpResponse.ok(Map.<String, Object>of("accessToken", authenticated.accessToken()))
+                            .cookie(refreshCookies.issue(authenticated.refreshToken()));
+            case AuthenticationService.Outcome.Rejected rejected ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Refusal.of("WRONG_CREDENTIALS"));
-            case Authentication.Result.EmailNotVerified notVerified ->
+            // A credential the domain cannot even construct used to escape as a 500 carrying the
+            // domain's own sentence: an Internal Server Error for a typo, plus a stack trace in the
+            // log for every one of them. It answers like a wrong password, and learns nothing the
+            // 401 did not already say.
+            case AuthenticationService.Outcome.UnreadableCredentials unreadable ->
+                    HttpResponse.status(HttpStatus.UNAUTHORIZED);
+            case AuthenticationService.Outcome.EmailNotVerified notVerified ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.FORBIDDEN)
                             .body(Refusal.alsoAsError("EMAIL_NOT_VERIFIED"));
-            case Authentication.Result.Blocked blocked ->
+            case AuthenticationService.Outcome.Blocked blocked ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
-                            .header("Retry-After", Long.toString(secondsUntil(blocked.authenticationBlock().expiryDate())))
+                            .header("Retry-After", Long.toString(secondsUntil(blocked.until())))
                             .body(Refusal.alsoAsError("TOO_MANY_ATTEMPTS"));
             // password was right, but the user has factors — no session yet; the first challenge is out.
             // The refresh token is withheld until the chain completes (see AuthFactorController).
-            case Authentication.Result.MfaRequired mfa ->
+            case AuthenticationService.Outcome.MfaRequired mfa ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.ACCEPTED)
-                            .body(MfaBody.of(mfa.ticket(), mfa.nextFactor().value(), mfa.challengeData()));
+                            .body(MfaBody.of(mfa.ticket(), mfa.nextFactor(), mfa.challengeData()));
+            case AuthenticationService.Outcome.Throttled throttled ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
+                            .header("Retry-After", String.valueOf(throttled.retryAfterSeconds()))
+                            .body(Refusal.alsoAsError("TOO_MANY_ATTEMPTS"));
         };
     }
 

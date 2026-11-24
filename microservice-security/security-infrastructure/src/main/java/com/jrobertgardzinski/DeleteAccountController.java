@@ -1,5 +1,7 @@
 package com.jrobertgardzinski;
 
+import com.jrobertgardzinski.security.application.TransactionBoundary;
+
 import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.domain.vo.Caller;
 import com.jrobertgardzinski.email.domain.InvalidEmailException;

@@ -251,6 +251,31 @@ public class BeanFactory {
         return new Register(userRepository, admitEmail, createPasswordHash);
     }
 
+    // ---- the application layer: one bean per service, nothing decided here ----
+
+    @Singleton
+    com.jrobertgardzinski.security.application.registration.RegistrationService registrationService(
+            Register register,
+            RequestEmailVerification requestEmailVerification,
+            EmailVerificationRepository emailVerificationRepository,
+            com.jrobertgardzinski.security.domain.port.RegistrationNoticeNotifier registrationNoticeNotifier,
+            EmailPolicy emailPolicy,
+            @Named("registration") SourceThrottle throttle,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.registration.RegistrationService(
+                register, requestEmailVerification, emailVerificationRepository, registrationNoticeNotifier,
+                emailPolicy, throttle, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.authentication.AuthenticationService authenticationService(
+            Authentication authentication,
+            @Named("authentication") SourceThrottle throttle,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.authentication.AuthenticationService(
+                authentication, throttle, transactionBoundary);
+    }
+
     /**
      * One {@link SourceThrottle} per expensive anonymous endpoint — separate windows, so a burst
      * against one endpoint cannot starve another. Zero disables an instance.

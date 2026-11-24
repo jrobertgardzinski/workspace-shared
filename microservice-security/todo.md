@@ -1073,6 +1073,29 @@ jak w `273f693`.
       (boolean zostaje) i zdjęcie niezmiennika „nie puste" z `PlaintextPassword` (Supplier w
       `verify`/`create` zostaje). Otwarte: dwa przeciążenia `verify` rozdzielają find usages na
       dwie listy; wersja z `Supplier` Robertowi „się nie podoba", alternatywy nie wybrał.
+- [~] APPLICATION JAKO POMOST (2026-11-24; reguła Roberta: „application to most między
+      frameworkiem, który zna tylko javowe klasy standardowe i prymitywy, a domeną, która na
+      podstawie standardowych klas javy i prymitywów jest w stanie tworzyć obiekty i wykonywać
+      logikę"). `security-application` znów ma `src/main`; kroki 1–2 planu
+      `docs/plan-application-2026-10-03.md` ZROBIONE, odstępstwa spisane na górze tamtego pliku.
+      - `RegistrationService.register(String email, String password, String ipAddress)` → sealed
+        `Outcome`: `Registered`, `EmailAlreadyTaken`, `Rejected(emailErrors, passwordErrors)`,
+        `Throttled(retryAfterSeconds)`. Przejął z `SecurityController`: throttle, transakcję,
+        `Email.of`/`PlaintextPassword.of` i decyzję „link czy notka" po zajętym adresie.
+      - `AuthenticationService.authenticate(String email, String password, String ipAddress,
+        String userAgent)` → `Authenticated(accessToken, refreshToken)`, `Rejected`,
+        `UnreadableCredentials`, `EmailNotVerified`, `Blocked(until)`, `MfaRequired(ticket,
+        nextFactor, challengeData)`, `Throttled`.
+      - `BrokenRule(code, parameter)`: złamana reguła z parametrem w mocy, słowami brzegu.
+        `SecurityController.emailErrors/passwordErrors` zostały jako cienkie przejściówki dla
+        kontrolerów jeszcze nieprzeniesionych (`ChangePassword`, `PasswordReset`, `EmailChange`).
+      - `TransactionBoundary` przeniesiony z infrastruktury do application (port aplikacyjny);
+        obie implementacje zostały w infrze.
+      - Oba kontrolery: konstruktor z 8 → 2 i z 6 → 4 zależności, zero importów z domeny i systemu.
+      Drut bez zmian. Zielone: pełne `verify` security, application 51 (36 + 15 nowych:
+      `RegistrationServiceTest`, `AuthenticationServiceTest`), infrastruktura 345, zero pominiętych.
+      STOP wg planu: Robert ogląda kształt dwóch serwisów, zanim pójdą kroki 3–6 (22 kontrolery).
+      Glue Cucumbera nadal woła use case'y wprost, nieprzepinane.
 - [ ] ZOSTAWIONE ŚWIADOMIE PO SEALED (2026-11-07, decyzja Roberta: „wrócimy do tego"):
       (1) `SessionStatus` (`ACTIVE`/`ROTATED`) został enumem, bo to stan utrwalany w bazie przez
       `name()`/`valueOf` (`JdbcSessionRepository`), nie werdykt sędziego. Jego `switch` w

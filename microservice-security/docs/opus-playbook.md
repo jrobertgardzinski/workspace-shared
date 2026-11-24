@@ -9,8 +9,9 @@ wskazuje pliki.
 ## Zasady pracy w tym repo (obowiązują każde zadanie)
 
 - **Heksagon**: domena (`security-domain`) bez frameworka i bez adnotacji; use case'y
-  w **`security-system`** (`security-application` NIE MA `src/main` — to warstwa testowa, która
-  napędza te use case'y Cucumberem; sprostowane 2026-09-12); stroiki/rekordy konfiguracyjne
+  w **`security-system`** (`security-application` to POMOST między frameworkiem a domeną: bierze
+  Stringi i prymitywy, buduje obiekty domenowe, odpala use case'y; odbudowywany od 2026-11-24,
+  wcześniejsze „nie ma `src/main`" było wnioskiem AI, nie regułą właściciela); stroiki/rekordy konfiguracyjne
   w `security-config`
   (framework-free, defaulty+walidacja w konstruktorze — wzór: `OauthProviderSettings`,
   `ChallengeCodeConfig`); HTTP/JDBC/Kafka/beany tylko w `security-infrastructure`.
