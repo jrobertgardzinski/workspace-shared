@@ -31,6 +31,11 @@
             <artifactId>password-domain</artifactId>
         </dependency>
         <dependency>
+            <!-- the catalogue of live rules an administrator reads -->
+            <groupId>com.jrobertgardzinski</groupId>
+            <artifactId>config</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.jrobertgardzinski</groupId>
             <artifactId>security-config</artifactId>
             <scope>test</scope>

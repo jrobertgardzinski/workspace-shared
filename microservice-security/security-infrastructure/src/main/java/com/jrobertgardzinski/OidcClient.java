@@ -1,8 +1,6 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.email.domain.Email;
 import com.jrobertgardzinski.security.config.oauth.OauthProviderSettings;
-import com.jrobertgardzinski.security.domain.vo.ProviderIdentity;
 import io.micronaut.json.JsonMapper;
 import jakarta.inject.Singleton;
 
@@ -26,7 +24,7 @@ import java.util.stream.Collectors;
 /**
  * The server-side half of the OAuth dance: exchanges an authorization code (with its PKCE
  * verifier) at the provider's token endpoint and turns the provider's assertion into a validated
- * {@link ProviderIdentity}. Two shapes of assertion exist (see
+ * {@link Asserted} identity. Two shapes of assertion exist (see
  * {@link OauthProviderSettings.IdentitySource}):
  *
  * <ul>
@@ -46,6 +44,13 @@ import java.util.stream.Collectors;
  */
 @Singleton
 final class OidcClient {
+
+    /**
+     * What the provider asserted about whoever just signed in with it, read and validated but not
+     * yet judged: whether {@code email} is an address at all is the domain's to say.
+     */
+    record Asserted(String provider, String subject, String email, boolean emailVerified) {
+    }
 
     /** Anything the provider or its assertion got wrong — one failure mode for the boundary. */
     static final class OauthDanceFailed extends RuntimeException {
@@ -73,8 +78,8 @@ final class OidcClient {
         this.clock = clock;
     }
 
-    ProviderIdentity identityFrom(OauthProviderSettings provider, String code, String codeVerifier,
-                                  String expectedNonce) {
+    Asserted identityFrom(OauthProviderSettings provider, String code, String codeVerifier,
+                          String expectedNonce) {
         Map<String, Object> tokens = postForm(provider.tokenUrl(), Map.of(
                 "grant_type", "authorization_code",
                 "code", code,
@@ -90,8 +95,8 @@ final class OidcClient {
 
     // --- ID_TOKEN: the OIDC path ------------------------------------------------
 
-    private ProviderIdentity fromIdToken(OauthProviderSettings provider, Map<String, Object> tokens,
-                                         String expectedNonce) {
+    private Asserted fromIdToken(OauthProviderSettings provider, Map<String, Object> tokens,
+                                 String expectedNonce) {
         String idToken = (String) tokens.get("id_token");
         if (idToken == null) {
             throw new OauthDanceFailed("the token endpoint returned no id_token");
@@ -104,7 +109,7 @@ final class OidcClient {
         if (subject == null || subject.isBlank() || email == null || email.isBlank()) {
             throw new OauthDanceFailed("the id_token names no subject or email");
         }
-        return new ProviderIdentity(provider.name(), subject, Email.of(email), vouched);
+        return new Asserted(provider.name(), subject, email, vouched);
     }
 
     private Map<String, Object> validatedClaims(OauthProviderSettings provider, String idToken,
@@ -165,7 +170,7 @@ final class OidcClient {
 
     // --- USERINFO: the plain-OAuth2 path -----------------------------------------
 
-    private ProviderIdentity fromUserinfo(OauthProviderSettings provider, Map<String, Object> tokens) {
+    private Asserted fromUserinfo(OauthProviderSettings provider, Map<String, Object> tokens) {
         String accessToken = (String) tokens.get("access_token");
         if (accessToken == null || accessToken.isBlank()) {
             throw new OauthDanceFailed("the token endpoint returned no access_token");
@@ -197,7 +202,7 @@ final class OidcClient {
         if (verifiedClaim == null && provider.assumeEmailVerified()) {
             vouched = true;
         }
-        return new ProviderIdentity(provider.name(), subject, Email.of(email), vouched);
+        return new Asserted(provider.name(), subject, email, vouched);
     }
 
     private record VerifiedEmail(String address) {

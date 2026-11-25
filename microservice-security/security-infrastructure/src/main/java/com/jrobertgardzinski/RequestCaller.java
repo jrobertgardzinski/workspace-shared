@@ -1,15 +1,13 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.email.domain.Email;
-import com.jrobertgardzinski.security.domain.vo.Caller;
 import io.micronaut.http.HttpRequest;
 
 /**
  * The authenticated caller of a protected request: the authorization filter publishes the address
  * under {@link #ATTRIBUTE} once the bearer token is accepted, and every resource reads it here.
  *
- * <p>Used to be called {@code Caller}; renamed when the domain got a {@link Caller} of its own,
- * because the controllers live in this very package and the import would have shadowed the helper.
+ * <p>Used to be called {@code Caller}; renamed when the domain got a {@code Caller} of its own,
+ * which the application layer builds from what this hands over.
  */
 public final class RequestCaller {
 
@@ -19,18 +17,13 @@ public final class RequestCaller {
     }
 
     /**
-     * Only meaningful behind the authorization filter; a request that never passed it has no
+     * The caller's address as the filter published it: what a controller hands to the application
+     * layer, which builds the domain's {@code Caller} from it.
+     *
+     * <p>Only meaningful behind the authorization filter; a request that never passed it has no
      * caller — and is answered 401, not 500. {@code GET /me/} (one trailing slash) used to miss the
      * filter's Ant pattern and land here, so a protected route executed unfiltered and answered
      * "No value present" with an Internal Server Error.
-     */
-    public static Caller of(HttpRequest<?> request) {
-        return new Caller(Email.of(email(request)));
-    }
-
-    /**
-     * The caller's address as the filter published it: what a controller hands to the application
-     * layer, which builds the domain's {@link Caller} from it.
      */
     public static String email(HttpRequest<?> request) {
         return request.getAttribute(ATTRIBUTE, String.class)

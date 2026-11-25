@@ -1,8 +1,6 @@
 package com.jrobertgardzinski;
 
 import com.jrobertgardzinski.security.application.account.AccountService;
-import com.jrobertgardzinski.security.application.TransactionBoundary;
-
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Body;

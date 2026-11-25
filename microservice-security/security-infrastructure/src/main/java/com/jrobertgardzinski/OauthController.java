@@ -1,11 +1,7 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.security.application.TransactionBoundary;
-
+import com.jrobertgardzinski.security.application.federation.FederationService;
 import com.jrobertgardzinski.security.config.oauth.OauthProviderSettings;
-import com.jrobertgardzinski.security.domain.vo.Source;
-import com.jrobertgardzinski.security.domain.vo.ProviderIdentity;
-import com.jrobertgardzinski.security.system.federation.FederatedSignIn;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
@@ -32,7 +28,8 @@ import java.util.Map;
 /**
  * HTTP entry points for social sign-in: {@code GET /oauth/{provider}/start} sends the browser to
  * the configured provider (Authorization Code + PKCE, S256), {@code GET /oauth/callback} receives
- * it back, exchanges the code server-side and drives the {@link FederatedSignIn} use case. On
+ * it back, exchanges the code server-side and hands what the provider asserted to
+ * {@link FederationService}. On
  * success the browser is redirected to the {@code return} URL it asked for — the access token
  * rides in the URL FRAGMENT (never sent to any server; readable by the SPA), the refresh token in
  * the usual HttpOnly cookie. The return URL must match a configured prefix, otherwise the
@@ -61,16 +58,15 @@ final class OauthController {
     private final Map<String, OauthProviderSettings> providers;
     private final OauthFlowStore flows;
     private final OidcClient oidc;
-    private final FederatedSignIn federatedSignIn;
+    private final FederationService federationService;
     private final RefreshCookies refreshCookies;
-    private final TransactionBoundary transactionBoundary;
     private final List<String> allowedReturnPrefixes;
     private final boolean secureCookies;
     private final ClientIpResolver clientIpResolver;
 
     OauthController(List<OauthProviderSettings> providers, OauthFlowStore flows, OidcClient oidc,
-                    FederatedSignIn federatedSignIn, RefreshCookies refreshCookies,
-                    TransactionBoundary transactionBoundary, ClientIpResolver clientIpResolver,
+                    FederationService federationService, RefreshCookies refreshCookies,
+                    ClientIpResolver clientIpResolver,
                     @Value("${security.oauth.allowed-return-prefixes:http://localhost:8083/}")
                     List<String> allowedReturnPrefixes,
                     @Value("${security.cookie.secure:true}") boolean secureCookies) {
@@ -79,9 +75,8 @@ final class OauthController {
                 .collect(java.util.stream.Collectors.toMap(OauthProviderSettings::name, p -> p));
         this.flows = flows;
         this.oidc = oidc;
-        this.federatedSignIn = federatedSignIn;
+        this.federationService = federationService;
         this.refreshCookies = refreshCookies;
-        this.transactionBoundary = transactionBoundary;
         this.clientIpResolver = clientIpResolver;
         // A RAW startsWith on a prefix without a trailing slash is not a host check: the natural
         // thing to configure ("http://app.example.com") also admits http://app.example.com.evil.net/
@@ -155,39 +150,49 @@ final class OauthController {
             return backTo(flow.returnUrl(), "#oauthError=" + encode(error != null ? error : "missing_code"))
                     .cookie(clearedStateCookie());
         }
-        ProviderIdentity identity;
+        OidcClient.Asserted asserted;
         try {
-            identity = oidc.identityFrom(providers.get(flow.provider()), code, flow.codeVerifier(),
+            asserted = oidc.identityFrom(providers.get(flow.provider()), code, flow.codeVerifier(),
                     flow.nonce());
         } catch (RuntimeException refused) {
             // RuntimeException too, and deliberately: what the provider sends is not ours to trust.
-            // An id_token with a dotless e-mail domain or a non-numeric exp threw out of here and
-            // answered 500 ON THE SECURITY ORIGIN, echoing the provider's data in the body — while
-            // the browser sat on a page that was supposed to redirect. The user's situation is the
-            // same in every one of those cases: the sign-in did not happen.
+            // An id_token with a non-numeric exp threw out of here and answered 500 ON THE SECURITY
+            // ORIGIN, echoing the provider's data in the body — while the browser sat on a page
+            // that was supposed to redirect. The user's situation is the same in every one of those
+            // cases: the sign-in did not happen.
             LOG.warn("federated sign-in through {} failed: {}", flow.provider(), refused.toString());
             return backTo(flow.returnUrl(), "#oauthError=SIGN_IN_FAILED").cookie(clearedStateCookie());
         }
-        // where the callback came from: if a factor chain opens, its wrong proofs are charged to
-        // this address against this account, exactly as after a password sign-in
-        Source source = new Source(clientIpResolver.resolve(request),
+        // where the callback came from rides along: if a factor chain opens, its wrong proofs are
+        // charged to this address against this account, exactly as after a password sign-in
+        FederationService.SignInOutcome outcome = federationService.signIn(
+                asserted.provider(),
+                asserted.subject(),
+                asserted.email(),
+                asserted.emailVerified(),
+                clientIpResolver.resolve(request).value(),
                 request.getHeaders().findFirst("User-Agent").orElse(""));
-        FederatedSignIn.Result result = transactionBoundary.execute(
-                () -> federatedSignIn.execute(identity, source));
-        return switch (result) {
-            case FederatedSignIn.Result.SignedIn signedIn -> backTo(flow.returnUrl(),
-                    "#accessToken=" + encode(signedIn.session().plainAccessToken()))
-                    .cookie(refreshCookies.issue(signedIn.session().plainRefreshToken()))
+        return switch (outcome) {
+            case FederationService.SignInOutcome.SignedIn signedIn -> backTo(flow.returnUrl(),
+                    "#accessToken=" + encode(signedIn.accessToken()))
+                    .cookie(refreshCookies.issue(signedIn.refreshToken()))
                     .cookie(clearedStateCookie());
             // the account has enrolled factors: hand the ticket back so the UI can finish the chain
             // through /authenticate/factor, exactly like a password sign-in
-            case FederatedSignIn.Result.MfaRequired mfa -> backTo(flow.returnUrl(),
-                    "#mfaTicket=" + encode(mfa.ticket()) + "&nextFactor=" + encode(mfa.nextFactor().value())
+            case FederationService.SignInOutcome.MfaRequired mfa -> backTo(flow.returnUrl(),
+                    "#mfaTicket=" + encode(mfa.ticket()) + "&nextFactor=" + encode(mfa.nextFactor())
                             + (mfa.challengeData() == null ? "" : "&challengeData=" + encode(mfa.challengeData())));
-            case FederatedSignIn.Result.EmailNotVouched _ ->
+            case FederationService.SignInOutcome.EmailNotVouched notVouched ->
                     backTo(flow.returnUrl(), "#oauthError=EMAIL_NOT_VOUCHED");
-            case FederatedSignIn.Result.AccountClosing _ ->
+            case FederationService.SignInOutcome.AccountClosing closing ->
                     backTo(flow.returnUrl(), "#oauthError=ACCOUNT_CLOSING");
+            // an address with a dotless domain, say: the provider's mistake, and to the person at
+            // the browser the same thing as any other failed dance
+            case FederationService.SignInOutcome.UnreadableEmail unreadable -> {
+                LOG.warn("federated sign-in through {} failed: the provider's e-mail is not an address",
+                        flow.provider());
+                yield backTo(flow.returnUrl(), "#oauthError=SIGN_IN_FAILED").cookie(clearedStateCookie());
+            }
         };
     }
 

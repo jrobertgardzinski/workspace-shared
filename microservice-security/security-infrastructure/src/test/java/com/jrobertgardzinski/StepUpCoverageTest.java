@@ -36,9 +36,9 @@ class StepUpCoverageTest {
     private static final List<Path> CONTROLLERS = List.of(Path.of("src/main/java/com/jrobertgardzinski"));
 
     /**
-     * Where the application services live. A controller that has handed its work to one no longer
-     * spends the elevation itself: the service does, and answers {@code StepUpRequired} when there
-     * was none to spend. So the gate is looked for in both places.
+     * Where the application services live. No controller spends the elevation itself: the service
+     * it hands its work to does, and answers {@code StepUpRequired} when there was none to spend.
+     * So the gate is looked for there, and the controller is asked only to render the refusal.
      */
     private static final Path APPLICATION = Path.of("../security-application/src/main/java");
 
@@ -116,33 +116,42 @@ class StepUpCoverageTest {
     }
 
     /**
-     * The catalogue and the endpoints agree: every {@link StepUpAction} is consumed by some
-     * controller (a constant nobody guards with is a requirement the deployment configures for
-     * nothing), and every endpoint that must step up names its action from the catalogue - the
-     * only way an action reaches the policy, so a string that is not in the catalogue cannot
-     * quietly fall to the strictest requirement, or to none.
+     * The catalogue and the endpoints agree: every {@link StepUpAction} is SPENT behind some
+     * endpoint that must step up (a constant nobody guards with is a requirement the deployment
+     * configures for nothing), and every such endpoint spends an action named from the catalogue -
+     * the only way an action reaches the policy, so a string that is not in the catalogue cannot
+     * quietly fall to the strictest requirement, or to none. "Spent" is the call itself,
+     * {@code sessionElevation.consume(accessToken, StepUpAction.X)}: an action that is merely
+     * mentioned, in a refusal nobody can reach any more, does not count.
      */
     @Test
     void the_catalogue_of_actions_and_the_endpoints_agree() throws IOException {
-        Map<String, String> sources = new java.util.TreeMap<>();
+        // the application services each endpoint that must step up hands its work to
+        Map<String, String> services = new java.util.TreeMap<>();
         try (Stream<Path> files = walkAll()) {
             files.filter(path -> path.getFileName().toString().endsWith("Controller.java"))
-                    .forEach(path -> sources.put(path.getFileName().toString().replace(".java", ""), read(path)));
+                    .filter(path -> MUST_STEP_UP.containsKey(path.getFileName().toString().replace(".java", "")))
+                    .forEach(path -> services.put(
+                            path.getFileName().toString().replace(".java", ""), servicesOf(read(path))));
         }
-        // a controller's source, together with the application services it hands its work to
-        sources.replaceAll((controller, source) -> source + servicesOf(source));
         List<String> orphans = java.util.Arrays.stream(com.jrobertgardzinski.security.domain.vo.StepUpAction.values())
-                .filter(action -> sources.values().stream().noneMatch(source -> source.contains("StepUpAction." + action.name())))
+                .filter(action -> services.values().stream().noneMatch(source -> source.contains(spending(action))))
                 .map(Enum::name)
                 .toList();
         assertEquals(List.of(), orphans,
-                "these actions are in the catalogue but no endpoint consumes an elevation for them: " + orphans);
+                "these actions are in the catalogue but no endpoint spends an elevation for them: " + orphans);
 
         List<String> unnamed = MUST_STEP_UP.keySet().stream().sorted()
-                .filter(controller -> !sources.getOrDefault(controller, "").contains("StepUpAction."))
+                .filter(controller -> java.util.Arrays.stream(com.jrobertgardzinski.security.domain.vo.StepUpAction.values())
+                        .noneMatch(action -> services.getOrDefault(controller, "").contains(spending(action))))
                 .toList();
         assertEquals(List.of(), unnamed,
-                "these endpoints step up without naming their action from the catalogue: " + unnamed);
+                "these endpoints step up without spending an action from the catalogue: " + unnamed);
+    }
+
+    /** The call that spends a one-shot elevation for this action, as the services write it. */
+    private static String spending(com.jrobertgardzinski.security.domain.vo.StepUpAction action) {
+        return "sessionElevation.consume(accessToken, StepUpAction." + action.name() + ")";
     }
 
     private static String read(Path path) {
@@ -169,11 +178,10 @@ class StepUpCoverageTest {
                     .findFirst()
                     .orElseThrow(() -> new IllegalStateException("no such controller: " + controller));
             String text = Files.readString(source);
-            // the gate in the controller itself, or the gate in the application service it calls:
-            // the service spends the elevation, and the controller must render the refusal, which
-            // an exhaustive switch over the outcome forces it to
-            return text.contains("requireElevation")
-                    || (text.contains("StepUpRequired") && servicesOf(text).contains("sessionElevation.consume("));
+            // the gate is in the application service the controller calls: the service spends the
+            // elevation, and the controller must render the refusal, which an exhaustive switch
+            // over the outcome forces it to
+            return text.contains("StepUpRequired") && servicesOf(text).contains("sessionElevation.consume(");
         } catch (IOException unreadable) {
             throw new IllegalStateException("cannot read " + controller, unreadable);
         }
@@ -188,6 +196,7 @@ class StepUpCoverageTest {
         }
         return services.toString();
     }
+
     private static Stream<Path> walkAll() throws IOException {
         Stream<Path> all = Stream.empty();
         for (Path root : CONTROLLERS) {

@@ -61,11 +61,13 @@ UI  →  Infrastructure  →  Application  →  System  →  Config  →  Domain
 `security-application` is the bridge between the framework and the domain. The framework side
 knows only standard Java classes and primitives; an application service takes those, builds the
 domain's objects from them, runs the use cases and answers in plain values again
-(`RegistrationService`, `AuthenticationService`). Infrastructure is left with two jobs: binding
-production adapters to ports, and mapping the application onto the framework (beans, controllers).
-The bridge is being built endpoint by endpoint (since 2026-11-24): the controllers not moved yet
-still call the use cases themselves. The module's tests also hold the Cucumber glue that drives
-the use cases in process, without HTTP.
+(`RegistrationService`, `AuthenticationService`, `MfaService`, `AdminService` and the rest: one
+service per group of use cases). Infrastructure is left with two jobs: binding production adapters
+to ports, and mapping the application onto the framework (beans, controllers). Every controller and
+the authorization filter go through the bridge (since 2026-11-25); the gates in front of a
+sensitive action, the role and the fresh step-up, are the services' too. One thing still reaches a
+use case from infrastructure: the account-deletion saga's orchestrator and the reaper beside it.
+The module's tests also hold the Cucumber glue that drives the use cases in process, without HTTP.
 
 ### The three entry points — one behaviour, many doors
 

@@ -1,9 +1,5 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.email.config.EmailPolicy;
-import com.jrobertgardzinski.email.domain.EmailError;
-import com.jrobertgardzinski.password.domain.PasswordError;
-import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.security.application.BrokenRule;
 import com.jrobertgardzinski.security.application.registration.RegistrationService;
 import io.micronaut.http.HttpRequest;
@@ -88,15 +84,5 @@ public class SecurityController {
      */
     static List<Map<String, Object>> wire(List<BrokenRule> rules) {
         return rules.stream().map(rule -> Map.of(rule.code(), rule.parameter())).toList();
-    }
-
-    /** For the controllers that still read a use case's result themselves. */
-    static List<Map<String, Object>> emailErrors(List<EmailError> errors, EmailPolicy policy) {
-        return wire(BrokenRule.ofEmail(errors, policy));
-    }
-
-    /** For the controllers that still read a use case's result themselves. */
-    static List<Map<String, Object>> passwordErrors(List<PasswordError> errors, PasswordPolicy policy) {
-        return wire(BrokenRule.ofPassword(errors, policy));
     }
 }

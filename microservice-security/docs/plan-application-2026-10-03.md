@@ -1,9 +1,10 @@
 # Plan: `security-application` jako pomost (2026-10-03)
 
 Zaplanowane na polecenie właściciela 2026-10-03. **Kroki 1–3 WYKONANE 2026-11-24** (rejestracja,
-authenticate, sesje, weryfikacja, reset hasła, konto, tożsamość: 12 z 24 kontrolerów), **krok 4
-2026-11-25** (MFA i step-up: 17 z 24); kroki 5–8 czekają. Stan i reguły: `todo.md`, punkt
-„APPLICATION JAKO POMOST".
+authenticate, sesje, weryfikacja, reset hasła, konto, tożsamość: 12 z 24 kontrolerów), **kroki 4–5
+i 7 2026-11-25** (MFA, step-up, admin, kasacja konta, OAuth: wszystkie 22 kontrolery, które wołały
+use case, plus `AuthorizationFilter`, którego plan nie wymieniał); kroki 6 i 8 czekają. Stan i
+reguły: `todo.md`, punkt „APPLICATION JAKO POMOST".
 
 Odstępstwa od tekstu poniżej, przyjęte przy wykonaniu (reguła Roberta z 2026-11-24: „application
 to most między frameworkiem, który zna tylko javowe klasy standardowe i prymitywy, a domeną"):
@@ -18,6 +19,13 @@ to most między frameworkiem, który zna tylko javowe klasy standardowe i prymit
 - krok 4: `/authenticate/factor` poszedł do `AuthenticationService` (wspólne okno throttla z
   `/authenticate`), nie do `MfaService`; reset czynników przez administratora do `AdminService`
   (bramka roli i step-up w jednym miejscu dla wszystkich dźwigni z kroku 5).
+- krok 5: `RoleGuard`, `StepUpGuard` i `Caller` NIE zostały w kontrolerze, jak zakładał punkt 1
+  („czytają token z requestu"): kontroler czyta z żądania adres i token jako Stringi, a obie bramki
+  są w serwisach. `OidcClient` oddaje napisy (`Asserted`), `ProviderIdentity` buduje
+  `FederationService`.
+- krok 8 w tej postaci jest do ponownej decyzji: gałąź `worktree-domain-ports-move` (inna sesja,
+  2026-11-24, niescalona) przenosi porty w PRZECIWNĄ stronę, z `domain.port` do pakietów use
+  case'ów w `system`.
 
 ## Reguła właściciela (cel, nie propozycja)
 

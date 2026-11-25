@@ -1146,10 +1146,56 @@ jak w `273f693`.
       (odczyty repozytorium), `IdentityService.me` z kroku 3.
       Zielone: pełne `verify`, 19 + 42 + 123 + 105 + 345, zero pominiętych (application 105 =
       36 Cucumber + 69 testów dziewięciu serwisów).
-      ZOSTAŁO: krok 5 (admin, kasacja konta, OAuth: `AdminRoles`, `AdminSettings`,
-      `AdminPasswordPolicy`, `DeleteAccount`, `Oauth`), krok 6 (`AccountDeletionOrchestrator`),
-      krok 8 (porty MFA z systemu do domeny). Po kroku 5 `StepUpGuard`, `RoleGuard` i
-      przejściówki `SecurityController.emailErrors/passwordErrors` znikają.
+      KROK 5 ZROBIONY 2026-11-25: ŻADEN kontroler nie importuje już domeny ani systemu (22 z 24
+      woła serwis; `JwksController` i `TestMailboxController` nie mają use case'u).
+      - `AdminService` dostał resztę dźwigni: `setRoles` ← `AdminRoles`; `settings`,
+        `setSetting` ← `AdminSettings`; `passwordPolicy`, `setPasswordMinLength` ←
+        `AdminPasswordPolicy`. Katalog reguł czyta z `Configuration` (biblioteka `config`, doszła
+        jako zależność compile), raport polityki haseł to pięć kluczy z tego samego katalogu, więc
+        `LadderedPasswordPolicy.inForce()` nie ma już wywołań z drutu: woła je tylko własny test
+        (`LadderedPasswordPolicyRulesTest`). Zostawione, do decyzji przy okazji.
+      - `AccountDeletionService.start` ← `DeleteAccount`. Która to droga (własne konto czy cudze),
+        rozstrzyga serwis; wynik rozróżnia `OwnAccountClosing` i `SomebodyElsesClosing(user,
+        administrator)`, bo linia audytu (z maskowaniem adresów) została w kontrolerze.
+      - `FederationService.signIn` ← `Oauth`. `OidcClient` oddaje `Asserted` (same Stringi),
+        `ProviderIdentity` i `Source` buduje serwis; adres, którego domena nie zbuduje, to wariant
+        `UnreadableEmail` (drut jak dotąd: `#oauthError=SIGN_IN_FAILED`).
+      - `AuthorizationService` (`authorize`, `meetsMfaFloor`) ← `AuthorizationFilter`. Plan go nie
+        wymieniał, a to było ostatnie wejście HTTP, które samo budowało `AccessToken` i czytało
+        `UserRepository`. Które ścieżki zostają otwarte pod podłogą MFA, decyduje dalej filtr
+        (ścieżki to drut).
+      SKASOWANE: `StepUpGuard`, `RoleGuard`, `RequestCaller.of` (kontroler czyta już tylko
+      `RequestCaller.email`/`bearerToken`), przejściówki `SecurityController.emailErrors`/
+      `passwordErrors` (`RegistrationRefusalShapeTest` woła `wire(BrokenRule.of…)`), martwe importy
+      `TransactionBoundary` w ośmiu kontrolerach z kroku 3.
+      ZMIANY ZACHOWANIA (drut ten sam, przesunięta bramka step-up: to, co żądanie nazywa, jest
+      czytane PRZED wydaniem elewacji, tak jak od dawna w `AdminRoles`; każda ma test serwisu):
+      - `PUT /admin/settings/{key}` bez `value`: `400 NO_VALUE` nie zjada elewacji;
+      - `POST /admin/settings/password/min-length` z nie-liczbą: `400 NOT_A_NUMBER` nie zjada;
+      - `DELETE /account/{cudzy}` z za szeroką mapą `purge`: `422 INVALID_PURGE_CHOICES` nie zjada.
+        `404 NO_SUCH_USER` zostało PO step-upie (inaczej żywa sesja admina bez dowodu mogłaby
+        sprawdzać, które adresy istnieją).
+      Skutek uboczny tych trzech: admin BEZ elewacji dostaje teraz 400/422 zamiast 403.
+      - Linia audytu kasacji cudzego konta wychodzi PO udanym starcie sagi, nie przed.
+      `StepUpCoverageTest` zaostrzony: akcja liczy się jako pilnowana tylko wtedy, gdy serwis,
+      który importuje kontroler z `MUST_STEP_UP`, zawiera wywołanie
+      `sessionElevation.consume(accessToken, StepUpAction.X)`; sama wzmianka o akcji nie
+      wystarcza. SPRAWDZONE MUTACJĄ (zaległość z kroku 3): wycięcie `consume` dla
+      `GENERATE_RECOVERY_CODES`, `ADMIN_ROLES` i `DELETE_ACCOUNT` wywraca ten test (trzy sieroty)
+      i po jednym teście w `MfaServiceTest`, `AdminServiceTest`, `AccountDeletionServiceTest`.
+      Granica tego testu: czyta źródła, więc widzi bramkę na poziomie SERWISU, nie metody; bramkę
+      w konkretnej metodzie pilnują testy serwisów.
+      KROK 7 (docs) ZROBIONY: `Readme.md` mówi, że przez pomost idzie każdy kontroler i filtr.
+      ZOSTAŁO:
+      - krok 6: `AccountDeletionOrchestrator` (saga, pakty, Kafka) i `UnverifiedAccountReaper`,
+        jedyne klasy infrastruktury poza adapterami i `BeanFactory`, które wołają use case
+        (`DeleteAccount`). Najwyższe ryzyko w planie, nieruszone.
+      - krok 8: DO PONOWNEJ DECYZJI ROBERTA. Plan chciał porty MFA z `system` do `domain`, a gałąź
+        `worktree-domain-ports-move` (inna sesja, 2026-11-24, 3 commity, niescalona, worktree
+        w `.claude/worktrees/`) przenosi porty odwrotnie: z `domain.port` do `system`. Scalenie jej
+        z mainem da konflikty importów w nowych serwisach i testach (`CapturingCodeChannel`,
+        `RegistrationNoticeNotifier`, `AccessTokenMint`), czysto mechaniczne.
+      - glue Cucumbera w `security-application` nadal woła use case'y wprost, nie serwisy.
 - [x] JEDNO REPOZYTORIUM PER ENCJA (2026-11-24; werdykt Roberta: „jedno repo per encja wystarczy.
       Teraz jest jedno repo per usecase i wygląda chujowo", plan zatwierdzony „w 100%"). Było 11
       portów (po jednym na TABELĘ, dopisywane od czerwca do września z każdą funkcją), jest 6;

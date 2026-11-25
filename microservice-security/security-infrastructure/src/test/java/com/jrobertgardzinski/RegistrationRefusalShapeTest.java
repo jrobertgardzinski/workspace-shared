@@ -8,6 +8,7 @@ import com.jrobertgardzinski.password.domain.PasswordError;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
 import com.jrobertgardzinski.password.config.MinLength;
 import com.jrobertgardzinski.password.config.SpecialChars;
+import com.jrobertgardzinski.security.application.BrokenRule;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +33,8 @@ class RegistrationRefusalShapeTest {
         var policy = new EmailPolicy(null, null,
                 new CompanyDomains(Set.of(DomainPart.of("zeta.example"), DomainPart.of("acme.example"))));
 
-        var errors = SecurityController.emailErrors(List.of(EmailError.NOT_A_COMPANY_DOMAIN), policy);
+        var errors = SecurityController.wire(
+                BrokenRule.ofEmail(List.of(EmailError.NOT_A_COMPANY_DOMAIN), policy));
 
         assertEquals(List.of(Map.of("NOT_A_COMPANY_DOMAIN", List.of("acme.example", "zeta.example"))), errors);
     }
@@ -40,9 +42,9 @@ class RegistrationRefusalShapeTest {
     @Test
     @DisplayName("denylist rules, the format rule and the address's own invariants carry no parameter")
     void denylistsStayBare() {
-        var errors = SecurityController.emailErrors(
+        var errors = SecurityController.wire(BrokenRule.ofEmail(
                 List.of(EmailError.RFC_FORMAT_INVALID, EmailError.DOMAIN_BLOCKED, EmailError.DISPOSABLE_DOMAIN,
-                        EmailError.EMAIL_FORMAT_INVALID), new EmailPolicy());
+                        EmailError.EMAIL_FORMAT_INVALID), new EmailPolicy()));
 
         assertEquals(List.of(
                 Map.of("RFC_FORMAT_INVALID", true),
@@ -56,9 +58,9 @@ class RegistrationRefusalShapeTest {
     void passwordChannelUnchanged() {
         var policy = PasswordPolicy.defaultsExcept(new MinLength(12), new SpecialChars("#?!"));
 
-        var errors = SecurityController.passwordErrors(
+        var errors = SecurityController.wire(BrokenRule.ofPassword(
                 List.of(PasswordError.MIN_LENGTH_NOT_MET, PasswordError.SPECIAL_CHAR_REQUIRED,
-                        PasswordError.DIGIT_REQUIRED, PasswordError.PASSWORD_BLANK), policy);
+                        PasswordError.DIGIT_REQUIRED, PasswordError.PASSWORD_BLANK), policy));
 
         assertEquals(List.of(
                 Map.of("MIN_LENGTH_NOT_MET", 12),

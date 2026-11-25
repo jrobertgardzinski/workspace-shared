@@ -136,7 +136,8 @@ public class BeanFactory {
      * The password policy in force: every rule live over restart over rebuild, under the library's
      * own keys ({@code security.password.policy.*}). {@code @Context} so an illegal property fails
      * the boot and never the first request. The one bean of its kind: the use cases ask it as
-     * {@link PasswordPolicyInForce}, the admin report asks it for the length's provenance.
+     * {@link PasswordPolicyInForce}, and declaring its rules live is what enters them in the
+     * catalogue the admin report reads their provenance from.
      */
     @Context
     LadderedPasswordPolicy passwordPolicyInForce(Configuration configuration) {
@@ -276,6 +277,15 @@ public class BeanFactory {
     }
 
     @Singleton
+    com.jrobertgardzinski.security.application.authorization.AuthorizationService authorizationService(
+            com.jrobertgardzinski.security.system.authorization.Authorize authorize,
+            UserRepository userRepository,
+            com.jrobertgardzinski.security.system.mfa.MfaCompliance mfaCompliance) {
+        return new com.jrobertgardzinski.security.application.authorization.AuthorizationService(
+                authorize, userRepository, mfaCompliance);
+    }
+
+    @Singleton
     com.jrobertgardzinski.security.application.session.SessionService sessionService(
             RefreshSession refreshSession,
             Logout logout,
@@ -360,11 +370,34 @@ public class BeanFactory {
     @Singleton
     com.jrobertgardzinski.security.application.admin.AdminService adminService(
             RequireRole requireRole,
+            com.jrobertgardzinski.security.system.roles.SetUserRoles setUserRoles,
+            SetSetting setSetting,
+            Configuration configuration,
             com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
             com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
             com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
         return new com.jrobertgardzinski.security.application.admin.AdminService(
-                requireRole, enrolledFactorRepository, sessionElevation, transactionBoundary);
+                requireRole, setUserRoles, setSetting, configuration, enrolledFactorRepository,
+                sessionElevation, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.account.AccountDeletionService accountDeletionService(
+            com.jrobertgardzinski.security.system.account.StartAccountDeletion startAccountDeletion,
+            UserRepository userRepository,
+            RequireRole requireRole,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.account.AccountDeletionService(
+                startAccountDeletion, userRepository, requireRole, sessionElevation, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.federation.FederationService federationService(
+            com.jrobertgardzinski.security.system.federation.FederatedSignIn federatedSignIn,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.federation.FederationService(
+                federatedSignIn, transactionBoundary);
     }
 
     /**
