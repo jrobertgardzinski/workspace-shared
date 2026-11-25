@@ -268,10 +268,11 @@ public class BeanFactory {
     @Singleton
     com.jrobertgardzinski.security.application.authentication.AuthenticationService authenticationService(
             Authentication authentication,
+            com.jrobertgardzinski.security.system.authentication.ContinueAuthentication continueAuthentication,
             @Named("authentication") SourceThrottle throttle,
             com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
         return new com.jrobertgardzinski.security.application.authentication.AuthenticationService(
-                authentication, throttle, transactionBoundary);
+                authentication, continueAuthentication, throttle, transactionBoundary);
     }
 
     @Singleton
@@ -329,6 +330,41 @@ public class BeanFactory {
             @Named("display-names") SourceThrottle displayNamesThrottle) {
         return new com.jrobertgardzinski.security.application.identity.IdentityService(
                 requireRole, mfaCompliance, userRepository, displayNames, displayNamesThrottle);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.mfa.MfaService mfaService(
+            com.jrobertgardzinski.security.system.mfa.EnrolFactor enrolFactor,
+            com.jrobertgardzinski.security.system.mfa.ConfirmEnrolment confirmEnrolment,
+            com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes generateRecoveryCodes,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
+            UserRepository userRepository,
+            com.jrobertgardzinski.security.system.mfa.FactorRegistry factorRegistry,
+            com.jrobertgardzinski.security.system.mfa.MfaCompliance mfaCompliance,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.mfa.MfaService(
+                enrolFactor, confirmEnrolment, generateRecoveryCodes, enrolledFactorRepository,
+                userRepository, factorRegistry, mfaCompliance, sessionElevation, transactionBoundary);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.mfa.StepUpService stepUpService(
+            com.jrobertgardzinski.security.system.mfa.StepUp stepUp,
+            com.jrobertgardzinski.security.system.mfa.ContinueStepUp continueStepUp,
+            @Named("step-up") SourceThrottle throttle) {
+        return new com.jrobertgardzinski.security.application.mfa.StepUpService(
+                stepUp, continueStepUp, throttle);
+    }
+
+    @Singleton
+    com.jrobertgardzinski.security.application.admin.AdminService adminService(
+            RequireRole requireRole,
+            com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository enrolledFactorRepository,
+            com.jrobertgardzinski.security.system.mfa.SessionElevation sessionElevation,
+            com.jrobertgardzinski.security.application.TransactionBoundary transactionBoundary) {
+        return new com.jrobertgardzinski.security.application.admin.AdminService(
+                requireRole, enrolledFactorRepository, sessionElevation, transactionBoundary);
     }
 
     /**

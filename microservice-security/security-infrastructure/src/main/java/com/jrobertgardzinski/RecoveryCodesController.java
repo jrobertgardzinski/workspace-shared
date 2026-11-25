@@ -1,15 +1,9 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.security.application.TransactionBoundary;
-
-import com.jrobertgardzinski.security.domain.vo.StepUpAction;
-
-
-import com.jrobertgardzinski.security.domain.vo.Caller;
-import com.jrobertgardzinski.security.domain.repository.EnrolledFactorRepository;
-import com.jrobertgardzinski.security.system.mfa.GenerateRecoveryCodes;
+import com.jrobertgardzinski.security.application.mfa.MfaService;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
+import io.micronaut.http.HttpStatus;
 import io.micronaut.http.MediaType;
 import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Get;
@@ -17,7 +11,6 @@ import io.micronaut.http.annotation.Post;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,41 +23,29 @@ import java.util.Map;
 @Controller("/account/recovery-codes")
 final class RecoveryCodesController {
 
-    private final GenerateRecoveryCodes generateRecoveryCodes;
-    private final EnrolledFactorRepository enrolledFactorRepository;
-    private final TransactionBoundary transactionBoundary;
-    private final StepUpGuard stepUpGuard;
+    private final MfaService mfaService;
 
-    RecoveryCodesController(GenerateRecoveryCodes generateRecoveryCodes,
-                            EnrolledFactorRepository enrolledFactorRepository,
-                            TransactionBoundary transactionBoundary,
-                            StepUpGuard stepUpGuard) {
-        this.generateRecoveryCodes = generateRecoveryCodes;
-        this.enrolledFactorRepository = enrolledFactorRepository;
-        this.transactionBoundary = transactionBoundary;
-        this.stepUpGuard = stepUpGuard;
+    RecoveryCodesController(MfaService mfaService) {
+        this.mfaService = mfaService;
     }
 
     @Post(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> generate(HttpRequest<?> request) {
-        // recovery codes are spare keys: shown once, and each one signs in when a factor is out of
-        // reach. A merely-live session must not be able to mint itself a set and keep them.
-        java.util.Optional<HttpResponse<Map<String, Object>>> stepUp =
-                stepUpGuard.requireElevation(request, StepUpAction.GENERATE_RECOVERY_CODES);
-        if (stepUp.isPresent()) {
-            return stepUp.get();
-        }
-        Caller caller = caller(request);
-        List<String> plainCodes = transactionBoundary.execute(() -> generateRecoveryCodes.execute(caller));
-        return HttpResponse.ok(Map.of("status", "GENERATED", "codes", plainCodes));
+        MfaService.GenerateRecoveryCodesOutcome outcome = mfaService.generateRecoveryCodes(
+                RequestCaller.email(request),
+                RequestCaller.bearerToken(request));
+        return switch (outcome) {
+            case MfaService.GenerateRecoveryCodesOutcome.Generated generated ->
+                    HttpResponse.ok(Map.of("status", "GENERATED", "codes", generated.codes()));
+            case MfaService.GenerateRecoveryCodesOutcome.StepUpRequired stepUp ->
+                    HttpResponse.<Map<String, Object>>status(HttpStatus.FORBIDDEN)
+                            .body(Map.of("status", "STEP_UP_REQUIRED", "action", stepUp.action()));
+        };
     }
 
     @Get(produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> remaining(HttpRequest<?> request) {
-        return HttpResponse.ok(Map.of("unused", enrolledFactorRepository.unusedRecoveryCodes(caller(request).email())));
-    }
-
-    private static Caller caller(HttpRequest<?> request) {
-        return RequestCaller.of(request);
+        return HttpResponse.ok(Map.of(
+                "unused", mfaService.unusedRecoveryCodes(RequestCaller.email(request))));
     }
 }

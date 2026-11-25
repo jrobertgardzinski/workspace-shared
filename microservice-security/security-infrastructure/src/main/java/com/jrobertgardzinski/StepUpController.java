@@ -1,14 +1,6 @@
 package com.jrobertgardzinski;
 
-import com.jrobertgardzinski.security.domain.vo.StepUpAction;
-
-
-import com.jrobertgardzinski.security.domain.vo.Caller;
-import com.jrobertgardzinski.password.domain.PlaintextPassword;
-import com.jrobertgardzinski.security.domain.vo.IpAddress;
-import com.jrobertgardzinski.security.system.mfa.ContinueStepUp;
-import com.jrobertgardzinski.security.system.mfa.StepUp;
-import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
+import com.jrobertgardzinski.security.application.mfa.StepUpService;
 import io.micronaut.http.HttpRequest;
 import io.micronaut.http.HttpResponse;
 import io.micronaut.http.HttpStatus;
@@ -18,7 +10,6 @@ import io.micronaut.http.annotation.Controller;
 import io.micronaut.http.annotation.Post;
 import io.micronaut.scheduling.TaskExecutors;
 import io.micronaut.scheduling.annotation.ExecuteOn;
-import jakarta.inject.Named;
 
 import java.util.Map;
 
@@ -33,131 +24,80 @@ import java.util.Map;
 @Controller("/account/step-up")
 final class StepUpController {
 
-    private final StepUp stepUp;
-    private final ContinueStepUp continueStepUp;
-    private final SourceThrottle throttle;
-    private final ClientIpResolver clientIpResolver;
+    private final StepUpService stepUpService;
 
-    StepUpController(StepUp stepUp, ContinueStepUp continueStepUp,
-                     @Named("step-up") SourceThrottle throttle,
-                     ClientIpResolver clientIpResolver) {
-        this.stepUp = stepUp;
-        this.continueStepUp = continueStepUp;
-        this.throttle = throttle;
-        this.clientIpResolver = clientIpResolver;
+    StepUpController(StepUpService stepUpService) {
+        this.stepUpService = stepUpService;
     }
 
     @Post(consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
     HttpResponse<Map<String, Object>> start(HttpRequest<?> request, @Body Map<String, String> body) {
-        HttpResponse<Map<String, Object>> throttled = throttled(request);
-        if (throttled != null) {
-            return throttled;
-        }
-        Caller caller = RequestCaller.of(request);
-        String token = StepUpGuard.bearerToken(request);
-        // the action must be one of the catalogue: an unknown name is a client error, not an
-        // elevation minted for something nobody would ever consume
-        java.util.Optional<StepUpAction> action = StepUpAction.fromWire(body.getOrDefault("action", ""));
-        if (action.isEmpty()) {
-            return HttpResponse.badRequest(Map.of("status", "UNKNOWN_ACTION"));
-        }
-        // a BLANK password is no password: it used to reach the value object and answer 500 with
-        // its rule, where an absent one has always answered "wrong password" — one situation, one
-        // answer. Handed over as a candidate, so the use case decides what one that does not
-        // construct means
-        return respond(
-                stepUp.execute(caller, action.get(), token, () -> PlaintextPassword.of(body.get("password"))),
-                request);
-    }
-
-    @Post(value = "/factor", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
-    HttpResponse<Map<String, Object>> factor(HttpRequest<?> request, @Body Map<String, String> body) {
-        HttpResponse<Map<String, Object>> throttled = throttled(request);
-        if (throttled != null) {
-            return throttled;
-        }
-        if (JsonBody.missing(body, "stepUpTicket") || JsonBody.missing(body, "proof")) {
-            return HttpResponse.badRequest(Map.of("status", "BAD_REQUEST"));
-        }
-        return respond(continueStepUp.execute(body.get("stepUpTicket"), body.get("proof")), request);
-    }
-
-    /** A 429 (with Retry-After) when the CALLER has spent their window, otherwise null (proceed). */
-    private HttpResponse<Map<String, Object>> throttled(HttpRequest<?> request) {
-        SourceThrottle.Decision decision = throttle.check(subjectOf(request));
-        if (decision.allowed()) {
-            return null;
-        }
-        return HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
-                .header("Retry-After", String.valueOf(decision.retryAfterSeconds()))
-                .body(Map.of("status", "TOO_MANY_STEP_UP_ATTEMPTS"));
-    }
-
-    /**
-     * Who this window belongs to. Both endpoints are authenticated, so the caller's own identity
-     * is known and is the honest key: on the address, one NAT shares one budget and a colleague's
-     * impatience locks everyone else out. The address is kept as the fallback for the case that
-     * should not happen — no published caller — because a limit that silently stops limiting is
-     * worse than one keyed coarsely.
-     */
-    private String subjectOf(HttpRequest<?> request) {
-        try {
-            return "caller:" + RequestCaller.of(request).email().value();
-        } catch (RuntimeException noPublishedCaller) {
-            return "source:" + clientIpResolver.resolve(request).value();
-        }
-    }
-
-    private HttpResponse<Map<String, Object>> respond(StepUp.Result result, HttpRequest<?> request) {
-        // a caller who has just re-proved themselves is not the volume this throttle defends
-        // against — same rule the brute-force guard follows on a correct password
-        if (result instanceof StepUp.Result.Elevated) {
-            throttle.forgive(subjectOf(request));
-        }
-        return switch (result) {
-            case StepUp.Result.Elevated elevated ->
+        StepUpService.StartOutcome outcome = stepUpService.start(
+                RequestCaller.email(request),
+                RequestCaller.bearerToken(request),
+                body.get("action"),
+                body.get("password"));
+        return switch (outcome) {
+            case StepUpService.StartOutcome.Elevated elevated ->
                     HttpResponse.ok(Map.of("status", "ELEVATED"));
-            case StepUp.Result.FactorRequired next ->
+            case StepUpService.StartOutcome.FactorRequired next ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.ACCEPTED)
-                            .body(MfaBody.stepUp(next.ticket(), next.nextFactor().value(), next.challengeData()));
-            case StepUp.Result.WrongPassword wrong ->
+                            .body(MfaBody.stepUp(next.ticket(), next.nextFactor(), next.challengeData()));
+            case StepUpService.StartOutcome.WrongPassword wrong ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "WRONG_PASSWORD"));
             // the account was deleted while this token still worked: nothing to re-prove for,
             // and the 401 is what makes the UI sign out — the code says it is not a wrong password
-            case StepUp.Result.AccountGone gone ->
+            case StepUpService.StartOutcome.AccountGone gone ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "ACCOUNT_GONE"));
             // 409, not 401: nothing the caller can type would help. They are who they say they
             // are; the account simply carries nothing to re-prove with, and the way out is to
             // enrol a factor — which is a SECOND_FACTORS action and therefore still reachable.
-            case StepUp.Result.NothingToProveWith nothing ->
+            case StepUpService.StartOutcome.NothingToProveWith nothing ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.CONFLICT)
                             .body(Map.of("status", "ENROL_A_FACTOR_FIRST"));
+            // an unknown name is a client error, not an elevation minted for something nobody
+            // would ever consume
+            case StepUpService.StartOutcome.UnknownAction unknown ->
+                    HttpResponse.badRequest(Map.of("status", "UNKNOWN_ACTION"));
+            case StepUpService.StartOutcome.Throttled throttled ->
+                    tooManyAttempts(throttled.retryAfterSeconds());
         };
     }
 
-    private HttpResponse<Map<String, Object>> respond(ContinueStepUp.Result result, HttpRequest<?> request) {
-        // a caller who has just re-proved themselves is not the volume this throttle defends
-        // against — same rule the brute-force guard follows on a correct password
-        if (result instanceof ContinueStepUp.Result.Elevated) {
-            throttle.forgive(subjectOf(request));
-        }
-        return switch (result) {
-            case ContinueStepUp.Result.Elevated elevated ->
+    @Post(value = "/factor", consumes = MediaType.APPLICATION_JSON, produces = MediaType.APPLICATION_JSON)
+    HttpResponse<Map<String, Object>> factor(HttpRequest<?> request, @Body Map<String, String> body) {
+        StepUpService.FactorOutcome outcome = stepUpService.presentFactor(
+                RequestCaller.email(request),
+                JsonBody.text(body, "stepUpTicket"),
+                JsonBody.text(body, "proof"));
+        return switch (outcome) {
+            case StepUpService.FactorOutcome.Elevated elevated ->
                     HttpResponse.ok(Map.of("status", "ELEVATED"));
-            case ContinueStepUp.Result.FactorRequired next ->
+            case StepUpService.FactorOutcome.FactorRequired next ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.ACCEPTED)
-                            .body(MfaBody.stepUp(next.ticket(), next.nextFactor().value(), next.challengeData()));
-            case ContinueStepUp.Result.WrongProof wrong ->
+                            .body(MfaBody.stepUp(next.ticket(), next.nextFactor(), next.challengeData()));
+            case StepUpService.FactorOutcome.WrongProof wrong ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "WRONG_CODE", "attemptsLeft", wrong.attemptsLeft()));
-            case ContinueStepUp.Result.TooManyAttempts tooMany ->
+            case StepUpService.FactorOutcome.TooManyAttempts tooMany ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "TOO_MANY_ATTEMPTS"));
-            case ContinueStepUp.Result.InvalidTicket invalid ->
+            case StepUpService.FactorOutcome.InvalidTicket invalid ->
                     HttpResponse.<Map<String, Object>>status(HttpStatus.UNAUTHORIZED)
                             .body(Map.of("status", "INVALID_TICKET"));
+            case StepUpService.FactorOutcome.MissingTicketOrProof missing ->
+                    HttpResponse.badRequest(Map.of("status", "BAD_REQUEST"));
+            case StepUpService.FactorOutcome.Throttled throttled ->
+                    tooManyAttempts(throttled.retryAfterSeconds());
         };
+    }
+
+    /** A 429 that says when to come back. */
+    private static HttpResponse<Map<String, Object>> tooManyAttempts(long retryAfterSeconds) {
+        return HttpResponse.<Map<String, Object>>status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(retryAfterSeconds))
+                .body(Map.of("status", "TOO_MANY_STEP_UP_ATTEMPTS"));
     }
 }

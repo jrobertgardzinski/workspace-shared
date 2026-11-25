@@ -1111,10 +1111,44 @@ jak w `273f693`.
       źródła) idzie teraz za kontrolerem do serwisu, który ten importuje.
       Drut bez zmian. Zielone: pełne `verify`, 19 + 42 + 123 + 76 + 345, zero pominiętych
       (application 76 = 36 Cucumber + 40 testów sześciu serwisów).
-      ZOSTAŁO: krok 4 (MFA, step-up: `AuthFactor`, `Factors`, `RecoveryCodes`, `AdminFactors`,
-      `StepUp`), krok 5 (admin, kasacja konta, OAuth: `AdminRoles`, `AdminSettings`,
+      KROK 4 ZROBIONY 2026-11-25 (5 kontrolerów, razem 17 z 24 bez importów z domeny i systemu):
+      - `AuthenticationService.presentFactor(ticket, proof, ipAddress)` ← `AuthFactor`. NIE w
+        `MfaService`, jak chciał plan: krok czynnika dzieli z `/authenticate` JEDNO okno throttla
+        i jeden pakiet use case'ów (`system.authentication`), więc serwis logowania ma oba kroki.
+      - `MfaService` (`factors`, `startEnrolment`, `confirmEnrolment`, `removeFactor`,
+        `generateRecoveryCodes`, `unusedRecoveryCodes`) ← `Factors`, `RecoveryCodes`.
+      - `StepUpService` (`start`, `presentFactor`) ← `StepUp`.
+      - `AdminService.resetFactors` ← `AdminFactors`. Serwis założony pod krok 5: każda dźwignia
+        administratora ma te same dwie bramki w tej samej kolejności (rola ADMIN, potem świeży
+        step-up), a to, co żądanie nazywa, jest czytane MIĘDZY nimi.
+      Reguły, które doszły: (4) bramka roli też zeszła do serwisu (`NotAnAdmin` jako wariant;
+      `RequireRole.check` pytany o ADMIN, każda odmowa znaczy „nie admin"); (5) `null` w wyniku
+      use case'u nie przechodzi przez most: `EnrolFactor.Result.Started(display)` rozpada się na
+      `CodeSent()` i `SetupReady(display)`; (6) wspólny dubler `OneShotElevations` w testach
+      application zamiast prywatnej kopii w każdym teście.
+      ZMIANY ZACHOWANIA (drut ten sam, inna kolejność bramek; każda ma test serwisu):
+      - `POST /account/factors/{type}/enroll/start` z typem, którego wdrożenie nie obsługuje,
+        odpowiada `400 UNSUPPORTED_FACTOR` PRZED wydaniem elewacji. Komentarz w kontrolerze
+        obiecywał to od paczki HTTP-10, kod robił to tylko dla pustego typu: literówka („TOTPP")
+        zjadała cały łańcuch step-upu. Skutek uboczny: wywołujący bez elewacji dostaje teraz 400,
+        nie 403 (lista obsługiwanych typów i tak jest w `GET /account/factors`).
+      - `PUT /admin/users/{email}/factors/reset` z adresem nie do zbudowania: nadal
+        `400 BAD_REQUEST`, ale elewacja `admin-reset` zostaje (było: `Email.of` w transakcji, po
+        strażniku).
+      - `/account/step-up` i `/account/step-up/factor` bez opublikowanego wywołującego (przypadek,
+        który „nie powinien się zdarzyć", filtr obejmuje `/account/**`): 401 przed liczeniem okna.
+        Było: okno liczone na adresie IP, a krok czynnika szedł dalej bez wywołującego. Zapasowy
+        klucz `source:` zniknął razem z `ClientIpResolver` w tym kontrolerze.
+      LOGIKA, KTÓRA ZOSTAŁA W SERWISACH (przeniesiona z kontrolerów jeden do jednego, kandydaci
+      na małe use case'y w `system`, nie ruszane bez werdyktu): `MfaService.removeFactor`
+      (podłoga pytana dwa razy, przed step-upem i w transakcji, plus `remove`),
+      `AdminService.resetFactors` (`removeAll`), `MfaService.factors`/`unusedRecoveryCodes`
+      (odczyty repozytorium), `IdentityService.me` z kroku 3.
+      Zielone: pełne `verify`, 19 + 42 + 123 + 105 + 345, zero pominiętych (application 105 =
+      36 Cucumber + 69 testów dziewięciu serwisów).
+      ZOSTAŁO: krok 5 (admin, kasacja konta, OAuth: `AdminRoles`, `AdminSettings`,
       `AdminPasswordPolicy`, `DeleteAccount`, `Oauth`), krok 6 (`AccountDeletionOrchestrator`),
-      krok 8 (porty MFA z systemu do domeny). Po krokach 4–5 `StepUpGuard`, `RoleGuard` i
+      krok 8 (porty MFA z systemu do domeny). Po kroku 5 `StepUpGuard`, `RoleGuard` i
       przejściówki `SecurityController.emailErrors/passwordErrors` znikają.
 - [x] JEDNO REPOZYTORIUM PER ENCJA (2026-11-24; werdykt Roberta: „jedno repo per encja wystarczy.
       Teraz jest jedno repo per usecase i wygląda chujowo", plan zatwierdzony „w 100%"). Było 11

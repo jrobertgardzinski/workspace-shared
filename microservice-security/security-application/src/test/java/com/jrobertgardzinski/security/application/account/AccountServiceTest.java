@@ -7,6 +7,7 @@ import com.jrobertgardzinski.email.policy.AdmitEmail;
 import com.jrobertgardzinski.password.domain.PlaintextPassword;
 import com.jrobertgardzinski.password.policy.CreatePasswordHash;
 import com.jrobertgardzinski.password.policy.PasswordPolicy;
+import com.jrobertgardzinski.security.application.OneShotElevations;
 import com.jrobertgardzinski.security.application.PassThroughTransactionBoundary;
 import com.jrobertgardzinski.security.application.feature.support.FakeHashAlgorithm;
 import com.jrobertgardzinski.security.domain.entity.User;
@@ -18,7 +19,6 @@ import com.jrobertgardzinski.security.domain.vo.StepUpAction;
 import com.jrobertgardzinski.security.system.account.ChangePassword;
 import com.jrobertgardzinski.security.system.account.ConfirmEmailChange;
 import com.jrobertgardzinski.security.system.account.RequestEmailChange;
-import com.jrobertgardzinski.security.system.mfa.SessionElevation;
 import com.jrobertgardzinski.security.system.password.VerifyPassword;
 import com.jrobertgardzinski.security.system.throttle.SourceThrottle;
 import org.junit.jupiter.api.Test;
@@ -27,9 +27,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -53,25 +51,9 @@ class AccountServiceTest {
     private final FakeHashAlgorithm hashAlgorithm = new FakeHashAlgorithm();
     private final List<String> changeLinks = new ArrayList<>();
     private final List<String> alreadyRegisteredNotices = new ArrayList<>();
-    private final Elevations elevations = new Elevations();
+    private final OneShotElevations elevations = new OneShotElevations();
 
     private final AccountService service = service(10);
-
-    /** One-shot elevations, as the real store keeps them. */
-    private static final class Elevations implements SessionElevation {
-
-        private final Set<String> granted = new HashSet<>();
-
-        @Override
-        public void elevate(String accessToken, StepUpAction action) {
-            granted.add(accessToken + "|" + action);
-        }
-
-        @Override
-        public boolean consume(String accessToken, StepUpAction action) {
-            return granted.remove(accessToken + "|" + action);
-        }
-    }
 
     private AccountService service(int maxPerWindow) {
         FakeSessionRepository sessions = new FakeSessionRepository(clock);
