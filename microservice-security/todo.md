@@ -1189,7 +1189,56 @@ jak w `273f693`.
       ZOSTAŁO:
       - krok 6: `AccountDeletionOrchestrator` (saga, pakty, Kafka) i `UnverifiedAccountReaper`,
         jedyne klasy infrastruktury poza adapterami i `BeanFactory`, które wołają use case
-        (`DeleteAccount`). Najwyższe ryzyko w planie, nieruszone.
+        (`DeleteAccount`). Najwyższe ryzyko w planie, NIERUSZONE: wchodzi w `system`/`config`
+        nowymi typami, więc najpierw kształt do werdyktu (niżej), potem budowa.
+
+        PROPOZYCJA KSZTAŁTU KROKU 6 (2026-11-25, czeka na „Koduj"; różni się od §4 planu w jednym:
+        port `ContentPurge` i `StartAccountDeletion` zostają NIETKNIĘTE):
+
+        ```java
+        // security-config
+        public record AccountDeletionConfig(Duration purgeTimeout, boolean awaitPortalPurge) {}
+
+        // security-system/account: dwa porty obok use case'u, który nimi steruje
+        public interface AccountDeletionSagaStore { /* przeniesiony z infra/persistence jak jest */ }
+
+        public interface ClosureAnnouncer {
+            void announce(AccountClosure closure, UUID sagaId, Optional<UserId> userId);
+            void goodbye(Email to);     // ACCOUNT_DELETED
+            void apology(Email to);     // ACCOUNT_DELETION_FAILED
+        }
+
+        // security-system/account: maszyna stanów, bez logów i bez JSON-a
+        public class AccountDeletionSaga {
+            public sealed interface Begun        { Announced, AlreadyUnderWay, DeletedAtOnce }
+            public sealed interface Completion   { Completed, ContentErasedAfterCompensation, NoRunningDeletion }
+            public sealed interface Compensation { Compensated, NoRunningDeletion }
+
+            public Begun begin(AccountClosure closure)
+            public Completion completePurge(UUID sagaId, Email email)
+            public Compensation compensate(UUID sagaId, Email email)
+            public List<Email> compensateOverdue()
+        }
+
+        // security-application/account: Stringi z Kafki i z zegara
+        AccountDeletionService.completePurge(String sagaId, String email)   // → PurgeOutcome
+        AccountDeletionService.compensate(String sagaId, String email)      // → CompensationOutcome
+        AccountDeletionService.compensateOverdue()                          // → List<String>
+        ```
+
+        W infrastrukturze zostają: `OutboxClosureAnnouncer` (tematy i JSON faktu oraz obu maili,
+        bajt w bajt; pilnują pakty), `AccountDeletionOrchestrator` skurczony do adaptera
+        `ContentPurge` (woła `saga.begin`, loguje wynik; zachowuje nazwę, `@Value` z `12m` i ich
+        komentarz, na które powołuje się `SagaTimingContractTest` w portalu), `OffboardingOutcome
+        Listener` i `AccountDeletionTimeouts` (wołają serwis, logują wynik z maskowaniem adresu).
+        CENA: 5 linii logów z `LOG.error`/`warn`/`info` przechodzi z jednej klasy do trzech (logger
+        zmienia nazwę; `AccountDeletionLoggingTest` do przepisania), 8 klas testów budujących lub
+        mockujących orkiestrator do przepięcia. Deduplikacja po id wyniku (`ProcessedOutcomes`)
+        zostaje w listenerze. `UnverifiedAccountReaper` dostaje jedną metodę serwisu
+        (`AccountDeletionService.deleteNeverVerified(String email)`).
+        ALTERNATYWA (wierna §4 planu): saga sama implementuje `ContentPurge`, a port oddaje
+        `Begun`, więc `StartAccountDeletion` dostaje `Result`. Czyściej (żadnego adaptera w
+        infrze), drożej: zmienia sygnaturę portu domeny i use case'u, które dziś są `void`.
       - krok 8: DO PONOWNEJ DECYZJI ROBERTA. Plan chciał porty MFA z `system` do `domain`, a gałąź
         `worktree-domain-ports-move` (inna sesja, 2026-11-24, 3 commity, niescalona, worktree
         w `.claude/worktrees/`) przenosi porty odwrotnie: z `domain.port` do `system`. Scalenie jej
